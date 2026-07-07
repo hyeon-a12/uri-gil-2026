@@ -223,7 +223,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   recordingBorder: {
-    ...StyleSheet.absoluteFill,
+    ...StyleSheet.absoluteFillObject,
     borderWidth: 6,
     borderColor: COLORS.cameraRecordingBorder,
   },
