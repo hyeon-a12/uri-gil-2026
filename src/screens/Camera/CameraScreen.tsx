@@ -19,8 +19,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS } from '@/constants/color';
 import { navigateToLocationConfirm } from '@/navigation/recordingNavigation';
 
-const MAX_CLIP_SECONDS = 10;
-const MAX_CLIPS = 15;
+const MAX_CLIP_SECONDS = 5;
 
 const ZOOM_LEVELS = [
   { label: '3', value: 0.85 },
@@ -45,7 +44,6 @@ export default function CameraScreen() {
 
   const [facing, setFacing] = useState<CameraType>('back');
   const [zoomIndex, setZoomIndex] = useState(2);
-  const [clipCount, setClipCount] = useState(0);
   const [isRecording, setIsRecording] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
@@ -96,7 +94,6 @@ export default function CameraScreen() {
       });
 
       if (video?.uri) {
-        setClipCount((count) => count + 1);
         navigateToLocationConfirm(video.uri);
       }
     } catch (error) {
@@ -147,7 +144,7 @@ export default function CameraScreen() {
     <View style={styles.container}>
       <CameraView
         ref={cameraRef}
-        style={styles.camera}
+        style={StyleSheet.absoluteFillObject}
         facing={facing}
         mode="video"
         zoom={ZOOM_LEVELS[zoomIndex].value}
@@ -157,42 +154,46 @@ export default function CameraScreen() {
       {isRecording ? <View style={styles.recordingBorder} pointerEvents="none" /> : null}
 
       <Pressable
-        style={[styles.closeButton, { top: insets.top + 12, left: insets.left + 16 }]}
+        style={[styles.closeButton, { top: insets.top + 16, left: insets.left + 16 }]}
         onPress={handleClose}
         hitSlop={12}>
         <Text style={styles.closeIcon}>✕</Text>
       </Pressable>
 
       {isRecording ? (
-        <View style={[styles.timerBadge, { top: insets.top + 12 }]}>
+        <View style={[styles.timerBadge, { top: insets.top + 16 }]}>
           <Text style={styles.timerText}>{formatTimer(elapsedSeconds)}</Text>
         </View>
       ) : null}
 
-      <View style={[styles.sidebar, { top: insets.top + 56, bottom: insets.bottom + 24 }]}>
+      <View style={[styles.zoomFloatContainer, { right: 104 }]}>
+        {ZOOM_LEVELS.map((level, index) => {
+          const active = index === zoomIndex;
+          return (
+            <Pressable
+              key={level.label}
+              style={styles.zoomItem}
+              disabled={isRecording}
+              onPress={() => setZoomIndex(index)}>
+              <Text style={[styles.zoomText, active && styles.zoomTextActive]}>
+                {level.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+
+      <View style={styles.rightSidebar}>
         <Pressable
-          style={[styles.iconButton, isRecording && styles.iconButtonDisabled]}
+          style={[styles.flipButton, {marginTop: insets.top + 24}, isRecording && styles.disabledOpacity]}
           onPress={toggleFacing}
           disabled={isRecording}>
-          <Text style={styles.flipIcon}>⟲</Text>
+          <View style={styles.flipIconCircle}>
+            <Text style={styles.flipIcon}>⟲</Text>
+          </View>
         </Pressable>
 
-        <View style={styles.zoomList}>
-          {ZOOM_LEVELS.map((level, index) => {
-            const active = index === zoomIndex;
-            return (
-              <Pressable
-                key={level.label}
-                style={styles.zoomItem}
-                disabled={isRecording}
-                onPress={() => setZoomIndex(index)}>
-                <Text style={[styles.zoomText, active && styles.zoomTextActive]}>{level.label}</Text>
-              </Pressable>
-            );
-          })}
-        </View>
-
-        <View style={styles.recordArea}>
+        <View style={styles.recordButtonContainer}>
           <Pressable onPress={handleRecordPress} style={styles.recordButtonWrap}>
             <View style={[styles.progressRing, { opacity: isRecording ? 1 : 0 }]}>
               <View
@@ -202,12 +203,10 @@ export default function CameraScreen() {
                 ]}
               />
             </View>
-            <View style={[styles.recordButton, isRecording && styles.recordButtonActive]} />
+            <View style={styles.recordButtonOuter}>
+              <View style={[styles.recordButtonInner, isRecording && styles.recordButtonActive]} />
+            </View>
           </Pressable>
-
-          <Text style={styles.clipCounter}>
-            {clipCount}/{MAX_CLIPS}
-          </Text>
         </View>
       </View>
     </View>
@@ -229,145 +228,162 @@ const styles = StyleSheet.create({
   },
   closeButton: {
     position: 'absolute',
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: COLORS.cameraSidebar,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(0,0,0,0.4)',
     alignItems: 'center',
     justifyContent: 'center',
+    zIndex: 10,
   },
   closeIcon: {
-    color: COLORS.white,
-    fontSize: 18,
-    fontWeight: '700',
+    color: '#FFF',
+    fontSize: 20,
+    fontWeight: '400',
   },
   timerBadge: {
     position: 'absolute',
     alignSelf: 'center',
-    backgroundColor: COLORS.cameraRecord,
+    backgroundColor: '#FF3B30',
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 6,
+    zIndex: 10,
   },
   timerText: {
     color: COLORS.white,
     fontSize: 14,
     fontWeight: '700',
   },
-  sidebar: {
+  zoomFloatContainer: {
     position: 'absolute',
-    right: 16,
-    width: 72,
-    backgroundColor: COLORS.cameraSidebar,
-    borderRadius: 20,
+    top: '50%',
+    transform: [{ translateY: -80 }],
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 16,
-  },
-  iconButton: {
-    width: 44,
-    height: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  iconButtonDisabled: {
-    opacity: 0.4,
-  },
-  flipIcon: {
-    color: COLORS.white,
-    fontSize: 26,
-    fontWeight: '700',
-  },
-  zoomList: {
-    alignItems: 'center',
-    gap: 10,
+    gap: 16,
+    zIndex: 10,
   },
   zoomItem: {
-    paddingVertical: 4,
-    paddingHorizontal: 8,
+    paddingVertical: 2,
+    paddingHorizontal: 6,
   },
   zoomText: {
-    color: 'rgba(255,255,255,0.75)',
-    fontSize: 14,
+    color: 'rgba(255,255,255,0.8)',
+    fontSize: 13,
     fontWeight: '600',
+    textShadowColor: 'rgba(0,0,0,0.6)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 2,
   },
   zoomTextActive: {
-    color: COLORS.cameraZoomActive,
-    fontSize: 16,
+    color: '#FFCC00',
+    fontSize: 14,
     fontWeight: '800',
   },
-  recordArea: {
+  rightSidebar: {
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    bottom: 0,
+    width: 88,
+    backgroundColor: 'rgba(0,0,0,0.45)',
     alignItems: 'center',
-    gap: 10,
+    justifyContent: 'space-between',
+    paddingVertical: 9,
   },
-  recordButtonWrap: {
-    width: 72,
-    height: 72,
+  flipButton: {
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  flipIconCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  flipIcon: {
+    color: '#FFF',
+    fontSize: 22,
+  },
+  disabledOpacity: {
+    opacity: 0.3,
+  },
+  recordButtonContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  recordButtonWrap: {
+    width: 76,
+    height: 76,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  recordButtonOuter: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    borderWidth: 3,
+    borderColor: '#FFF',
+  },
+  recordButtonInner: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: '#E53935',
+  },
+  recordButtonActive: {
+    width: 36,
+    height: 36,
+    borderRadius: 6,
   },
   progressRing: {
     position: 'absolute',
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    borderWidth: 4,
-    borderColor: 'rgba(255,255,255,0.25)',
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.3)',
     alignItems: 'center',
     justifyContent: 'flex-start',
   },
   progressArc: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: COLORS.white,
-    marginTop: -2,
-  },
-  recordButton: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: COLORS.cameraRecord,
-  },
-  recordButtonActive: {
-    width: 48,
-    height: 48,
-    borderRadius: 8,
-  },
-  clipCounter: {
-    color: COLORS.white,
-    fontSize: 13,
-    fontWeight: '600',
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#FFF',
+    marginTop: -4,
   },
   centered: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     padding: 24,
-    backgroundColor: COLORS.white,
+    backgroundColor: '#FFF',
     gap: 12,
   },
   permissionTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: COLORS.text,
-    textAlign: 'center',
+    color: '#333',
   },
   permissionBody: {
     fontSize: 14,
-    color: COLORS.textSecondary,
+    color: '#666',
     textAlign: 'center',
     lineHeight: 22,
   },
   permissionButton: {
     marginTop: 8,
-    backgroundColor: COLORS.locationSelect,
+    backgroundColor: '#007AFF',
     borderRadius: 12,
     paddingHorizontal: 20,
     paddingVertical: 14,
   },
   permissionButtonText: {
-    color: COLORS.white,
+    color: '#FFF',
     fontSize: 15,
     fontWeight: '700',
   },

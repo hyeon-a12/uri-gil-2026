@@ -1,6 +1,6 @@
 import { useEvent, useEventListener } from 'expo';
 import { useVideoPlayer, VideoView } from 'expo-video';
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { COLORS } from '@/constants/color';
@@ -18,11 +18,13 @@ function PlayIcon() {
 }
 
 function VideoPlayerContent({ videoUri }: { videoUri: string }) {
+  const hasSeekFirstFrame = useRef(false);
   const player = useVideoPlayer(videoUri, (instance) => {
-    instance.loop = false;
+    instance.loop = true;
   });
 
   const { isPlaying } = useEvent(player, 'playingChange', { isPlaying: player.playing });
+  const { status } = useEvent(player, 'statusChange', {status: player.status});
   const [progress, setProgress] = useState(0);
 
   useEventListener(player, 'timeUpdate', ({ currentTime }) => {
@@ -31,6 +33,11 @@ function VideoPlayerContent({ videoUri }: { videoUri: string }) {
       setProgress(Math.min(currentTime / duration, 1));
     }
   });
+
+  if (status === 'readyToPlay' && !hasSeekFirstFrame.current) {
+    hasSeekFirstFrame.current = true;
+    player.seekBy(0.1);
+  }
 
   const togglePlayback = () => {
     if (isPlaying) {
