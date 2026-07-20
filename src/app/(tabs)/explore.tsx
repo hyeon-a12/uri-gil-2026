@@ -1,21 +1,16 @@
 import { router } from 'expo-router';
-import { Platform, Pressable, ScrollView, StyleSheet } from 'react-native';
+import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { WebBadge } from '@/components/web-badge';
 import { COLORS } from '@/constants/color';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
 import { navigateToCamera, navigateToLocationConfirm } from '@/navigation/recordingNavigation';
-import { useTheme } from '@/hooks/use-theme';
 
 const SAMPLE_VIDEO_URI =
   'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4';
 
 export default function DevPreviewScreen() {
   const safeAreaInsets = useSafeAreaInsets();
-  const theme = useTheme();
   const insets = {
     ...safeAreaInsets,
     bottom: safeAreaInsets.bottom + BottomTabInset + Spacing.three,
@@ -23,45 +18,43 @@ export default function DevPreviewScreen() {
 
   return (
     <ScrollView
-      style={[styles.scrollView, { backgroundColor: theme.background }]}
+      style={styles.scrollView}
       contentInset={insets}
       contentContainerStyle={styles.contentContainer}>
-      <ThemedView style={styles.container}>
-        <ThemedText type="subtitle">우리길 UI 미리보기</ThemedText>
-        <ThemedText style={styles.description} themeColor="textSecondary">
+      <View style={styles.container}>
+        <Text style={styles.title}>우리길 UI 미리보기</Text>
+        <Text style={styles.description}>
           Figma UI를 실제 기기에서 확인할 수 있습니다.{'\n'}
           카메라 촬영 → 장소 확인까지 한 번에 테스트해 보세요.
-        </ThemedText>
+        </Text>
 
         <Pressable
           style={({ pressed }) => [styles.cameraButton, pressed && styles.pressed]}
           onPress={() => navigateToCamera()}>
-          <ThemedText style={styles.previewButtonText}>카메라 촬영 화면 열기</ThemedText>
+          <Text style={styles.previewButtonText}>카메라 촬영 화면 열기</Text>
         </Pressable>
 
         <Pressable
           style={({ pressed }) => [styles.previewButton, pressed && styles.pressed]}
           onPress={() => navigateToLocationConfirm(SAMPLE_VIDEO_URI)}>
-          <ThemedText style={styles.previewButtonText}>장소 확인 화면 (영상 O)</ThemedText>
+          <Text style={styles.previewButtonText}>장소 확인 화면 (영상 O)</Text>
         </Pressable>
 
         <Pressable
           style={({ pressed }) => [styles.previewButtonOutline, pressed && styles.pressed]}
           onPress={() => router.push('/location-confirm')}>
-          <ThemedText style={styles.previewButtonOutlineText}>장소 확인 화면 (영상 X)</ThemedText>
+          <Text style={styles.previewButtonOutlineText}>장소 확인 화면 (영상 X)</Text>
         </Pressable>
 
-        <ThemedView type="backgroundElement" style={styles.noteBox}>
-          <ThemedText type="smallBold">카메라 팀 연동 방법</ThemedText>
-          <ThemedText type="small" themeColor="textSecondary">
-            촬영 완료 후{'\n'}
-            <ThemedText type="code">navigateToLocationConfirm(videoUri)</ThemedText>
-            {'\n'}를 호출하면 촬영 영상이 상단에 표시됩니다.
-          </ThemedText>
-        </ThemedView>
+        <View style={styles.noteBox}>
+          <Text style={styles.noteTitle}>카메라 팀 연동 방법</Text>
+          <Text style={styles.noteText}>
+            촬영 완료 후 {'\n'}navigateToLocationConfirm(videoUri){'\n'}를 호출하면 촬영 영상이 상단에 표시됩니다.
+          </Text>
+        </View>
 
-        {Platform.OS === 'web' && <WebBadge />}
-      </ThemedView>
+        {Platform.OS === 'web' && <Text style={styles.webHint}>웹 미리보기</Text>}
+      </View>
     </ScrollView>
   );
 }
@@ -69,6 +62,7 @@ export default function DevPreviewScreen() {
 const styles = StyleSheet.create({
   scrollView: {
     flex: 1,
+    backgroundColor: COLORS.white,
   },
   contentContainer: {
     flexGrow: 1,
@@ -83,7 +77,15 @@ const styles = StyleSheet.create({
     gap: Spacing.three,
     alignItems: 'stretch',
   },
+  title: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: COLORS.text,
+    textAlign: 'center',
+  },
   description: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
     textAlign: 'center',
     lineHeight: 22,
   },
@@ -121,6 +123,22 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     gap: Spacing.two,
     marginTop: Spacing.two,
+    backgroundColor: COLORS.surface,
+  },
+  noteTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: COLORS.text,
+  },
+  noteText: {
+    fontSize: 13,
+    color: COLORS.textSecondary,
+    lineHeight: 20,
+  },
+  webHint: {
+    fontSize: 12,
+    color: COLORS.textTertiary,
+    textAlign: 'center',
   },
   pressed: {
     opacity: 0.85,
