@@ -1,6 +1,6 @@
 import { useEvent, useEventListener } from 'expo';
 import { useVideoPlayer, VideoView } from 'expo-video';
-import { useRef, useState } from 'react';
+import { useState, useRef } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { COLORS } from '@/constants/color';
@@ -20,7 +20,7 @@ function PlayIcon() {
 function VideoPlayerContent({ videoUri }: { videoUri: string }) {
   const hasSeekFirstFrame = useRef(false);
   const player = useVideoPlayer(videoUri, (instance) => {
-    instance.loop = false;
+    instance.loop = true;
   });
 
   const { isPlaying } = useEvent(player, 'playingChange', { isPlaying: player.playing });
@@ -85,11 +85,7 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   playOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
+    ...StyleSheet.absoluteFill,
     alignItems: 'center',
     justifyContent: 'center',
   },

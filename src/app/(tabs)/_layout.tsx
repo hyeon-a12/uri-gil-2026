@@ -2,13 +2,11 @@ import { router, Tabs } from 'expo-router';
 import { Image } from 'expo-image';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-
-  import HomeIcon from "@/assets/images/tabIcons/home.svg";
-  import RouteIcon from "@/assets/images/tabIcons/route.svg";
-  import UserIcon from "@/assets/images/tabIcons/user.svg";
-  import CameraIcon from "@/assets/images/tabIcons/camera.svg";
-  import ClipIcon from "@/assets/images/tabIcons/clip.svg";
-
+import HomeIcon from "@/assets/images/tabIcons/home.svg";
+import RouteIcon from "@/assets/images/tabIcons/route.svg";
+import UserIcon from "@/assets/images/tabIcons/user.svg";
+import CameraIcon from "@/assets/images/tabIcons/camera.svg";
+import ClipIcon from "@/assets/images/tabIcons/clip.svg";
 
 const ACTIVE = '#f99b30';
 const INACTIVE = '#B7B7B7';
@@ -27,17 +25,29 @@ function TabItem({
   label,
   focused,
 }: {
-  Icon: React.ComponentType<any>;
+  Icon: any;
   label: string;
   focused: boolean;
 }) {
+  const isSvgComponent = typeof Icon === 'function' || typeof Icon === 'object';
+
   return (
     <View style={styles.tabItem}>
-      <Icon
-        width={26}
-        height={26}
-        fill={focused ? ACTIVE : INACTIVE}
-      />
+      {isSvgComponent ? (
+        <Icon
+          width={26}
+          height={26}
+          fill={focused ? ACTIVE : INACTIVE}
+        />
+      ): (
+        <Image
+          source={Icon}
+          style={[
+            styles.icon,
+            { tintColor: focused ? ACTIVE : INACTIVE }
+          ]}
+        />
+      )}
       <Text
         style={[
           styles.tabLabel,
@@ -50,14 +60,23 @@ function TabItem({
 }
 
 function CameraTabButton() {
+  const isSvgComponent = typeof CameraIcon === 'function' || typeof CameraIcon === 'object';
+
   return (
     <Pressable onPress={() => router.push('/camera')} style={styles.cameraButtonWrap}>
       <View style={styles.cameraButton}>
-        <CameraIcon
-          width={30}
-          height={30}
-          fill="#FFFFFF"
-        />
+        {isSvgComponent ? (
+          <CameraIcon
+            width={30}
+            height={30}
+            fill="#FFFFFF"
+          />
+        ): (
+          <Image
+            source={CameraIcon as any}
+            style={[styles.cameraIcon, { tintColor: '#FFFFFF' }]}
+          />
+        )}
       </View>
     </Pressable>
   );
@@ -152,7 +171,7 @@ const styles = StyleSheet.create({
     opacity: 0.45,
   },
   tabLabel: {
-    fontSize: 13,
+    fontSize: 10,
     fontWeight: '500',
   },
   cameraButtonWrap: {

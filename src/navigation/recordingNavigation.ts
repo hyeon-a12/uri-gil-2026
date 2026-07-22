@@ -12,3 +12,8 @@ export function navigateToLocationConfirm(videoUri: string) {
     params: { videoUri },
   });
 }
+
+/** 장소 확인 후 클립 화면으로 이동 */
+export function navigateToClip() {
+  router.push('/(tabs)/clip-manage');
+}
