@@ -33,19 +33,24 @@ function TabItem({
 }) {
   return (
     <View style={styles.tabItem}>
-      <Icon
-        width={26}
-        height={26}
-        fill={focused ? ACTIVE : INACTIVE}
-      />
-      <Text
-        style={[
-          styles.tabLabel,
-          { color: focused ? ACTIVE : INACTIVE },
-        ]}>
-        {label}
-      </Text>
-    </View>
+  <Icon
+    width={26}
+    height={26}
+    fill={focused ? ACTIVE : INACTIVE}
+  />
+
+  <Text
+    numberOfLines={1}
+    ellipsizeMode="clip"
+    allowFontScaling={false}
+    style={[
+      styles.tabLabel,
+      { color: focused ? ACTIVE : INACTIVE },
+    ]}
+  >
+    {label}
+  </Text>
+</View>
   );
 }
 
@@ -151,10 +156,14 @@ const styles = StyleSheet.create({
   iconInactive: {
     opacity: 0.45,
   },
-  tabLabel: {
-    fontSize: 13,
-    fontWeight: '500',
-  },
+ tabLabel: {
+  width: 58,
+  fontSize: 11,
+  lineHeight: 14,
+  fontWeight: '500',
+  textAlign: 'center',
+  includeFontPadding: false,
+},
   cameraButtonWrap: {
     alignItems: 'center',
     justifyContent: 'center',
