@@ -80,25 +80,25 @@ export default function TabLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Home',
+          title: '홈',
           tabBarIcon: ({ focused }) => (
-            <TabItem Icon={icons.home} label="Home" focused={focused} />
+            <TabItem Icon={icons.home} label="홈" focused={focused} />
           ),
         }}
       />
       <Tabs.Screen
         name="my-route"
         options={{
-          title: 'Route',
+          title: '이동경로',
           tabBarIcon: ({ focused }) => (
-            <TabItem Icon={icons.route} label="Route" focused={focused} />
+            <TabItem Icon={icons.route} label="이동경로" focused={focused} />
           ),
         }}
       />
       <Tabs.Screen
         name="explore"
         options={{
-          title: 'Camera',
+          title: '카메라',
           tabBarButton: () => <CameraTabButton />,
         }}
       />
@@ -106,18 +106,18 @@ export default function TabLayout() {
       <Tabs.Screen
         name="clip-manage"
         options={{
-          title: 'Clips',
+          title: '클립',
           tabBarIcon: ({ focused }) => (
-            <TabItem Icon={icons.clip} label="Clips" focused={focused} />
+            <TabItem Icon={icons.clip} label="클립" focused={focused} />
           ),
         }}
       />
       <Tabs.Screen
         name="my-page"
         options={{
-          title: 'My Page',
+          title: '마이페이지',
           tabBarIcon: ({ focused }) => (
-            <TabItem Icon={icons.user} label="Profile" focused={focused} />
+            <TabItem Icon={icons.user} label="마이페이지" focused={focused} />
           ),
         }}
       />
