@@ -16,37 +16,55 @@ export default function HomeScreen({ userName = '뿅뿅이' }: Props) {
   const insets = useSafeAreaInsets();
   const { width, moderateScale: ms } = useResponsive();
 
-  // 화면 너비 비율로 카드 크기를 정하면 화면이 커져도 레이아웃 비율이 그대로 유지된다.
-  const clipWidth = width * 0.24;
-  const placeWidth = width * 0.62;
+  const horizontalPadding = ms(20);
+  const contentWidth = width - horizontalPadding * 2;
+  const clipWidth = Math.min(ms(132), contentWidth * 0.32);
+  const placeWidth = Math.min(ms(300), contentWidth * 0.79);
 
   return (
     <ScrollView
-      style={{ backgroundColor: homeColors.background }}
+      style={styles.screen}
       contentContainerStyle={{
-        paddingTop: insets.top + ms(12),
-        paddingHorizontal: ms(16),
-        paddingBottom: ms(24),
+        paddingTop: insets.top + ms(18),
+        paddingBottom: insets.bottom + ms(110),
       }}
       showsVerticalScrollIndicator={false}
     >
-      <Text style={[styles.greeting, { fontSize: ms(19) }]}>{userName} 님, 오늘도 즐거운 여행!</Text>
+      <View style={{ paddingHorizontal: horizontalPadding }}>
+        <Text style={[styles.greeting, { fontSize: ms(22), lineHeight: ms(30) }]}>
+          {userName} 님, 오늘도 즐거운 여행!
+        </Text>
 
-      <View style={{ marginTop: ms(16) }}>
-        <TripMapCard {...mockTripRoute} />
+        <View style={{ marginTop: ms(20) }}>
+          <TripMapCard {...mockTripRoute} />
+        </View>
+
+        <Text style={[styles.sectionTitle, { fontSize: ms(18), marginTop: ms(30) }]}>최근 촬영한 클립</Text>
       </View>
 
-      <Text style={[styles.sectionTitle, { fontSize: ms(15), marginTop: ms(22) }]}>최근 촬영한 클립</Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: ms(10) }}>
-        {mockRecentClips.map((c) => (
-          <ClipThumbnail key={c.id} item={c} width={clipWidth} />
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={{ paddingLeft: horizontalPadding, paddingRight: ms(8), paddingTop: ms(14) }}
+      >
+        {mockRecentClips.map((clip) => (
+          <ClipThumbnail key={clip.id} item={clip} width={clipWidth} />
         ))}
       </ScrollView>
 
-      <Text style={[styles.sectionTitle, { fontSize: ms(15), marginTop: ms(22) }]}>추천 장소</Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: ms(10) }}>
-        {mockRecommendedPlaces.map((p) => (
-          <PlaceCard key={p.id} item={p} width={placeWidth} />
+      <View style={{ paddingHorizontal: horizontalPadding }}>
+        <Text style={[styles.sectionTitle, { fontSize: ms(18), marginTop: ms(30) }]}>추천 장소</Text>
+      </View>
+
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        snapToInterval={placeWidth + ms(14)}
+        decelerationRate="fast"
+        contentContainerStyle={{ paddingLeft: horizontalPadding, paddingRight: ms(8), paddingTop: ms(14) }}
+      >
+        {mockRecommendedPlaces.map((place) => (
+          <PlaceCard key={place.id} item={place} width={placeWidth} />
         ))}
       </ScrollView>
     </ScrollView>
@@ -54,6 +72,7 @@ export default function HomeScreen({ userName = '뿅뿅이' }: Props) {
 }
 
 const styles = StyleSheet.create({
-  greeting: { fontWeight: '700', color: homeColors.textPrimary },
-  sectionTitle: { fontWeight: '600', color: homeColors.textPrimary },
+  screen: { flex: 1, backgroundColor: homeColors.background },
+  greeting: { fontWeight: '800', color: homeColors.textPrimary, letterSpacing: -0.5 },
+  sectionTitle: { fontWeight: '800', color: homeColors.textPrimary, letterSpacing: -0.3 },
 });

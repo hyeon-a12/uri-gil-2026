@@ -10,38 +10,47 @@ export default function TripMapCard({ title, subtitle, markers = [] }: TripRoute
   const { moderateScale: ms } = useResponsive();
 
   return (
-    <View style={[styles.card, { borderRadius: ms(20), padding: ms(16) }]}>
-      <Text style={[styles.title, { fontSize: ms(17) }]}>{title}</Text>
-      <Text style={[styles.subtitle, { fontSize: ms(12) }]}>{subtitle}</Text>
+    <View style={[styles.card, { borderRadius: ms(24), padding: ms(18) }]}>
+      <Text style={[styles.title, { fontSize: ms(19), lineHeight: ms(25) }]}>{title}</Text>
+      <Text style={[styles.subtitle, { fontSize: ms(13), lineHeight: ms(19) }]}>{subtitle}</Text>
 
       <LinearGradient
         colors={[homeColors.mapWater, homeColors.mapLand]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={[styles.mapArea, { height: ms(140), borderRadius: ms(14), marginTop: ms(10) }]}
+        start={{ x: 0, y: 0.2 }}
+        end={{ x: 1, y: 0.8 }}
+        style={[styles.mapArea, { height: ms(190), borderRadius: ms(18), marginTop: ms(14) }]}
       >
+        <View style={[styles.decorCircle, { width: ms(110), height: ms(110), borderRadius: ms(55), left: -ms(25), bottom: -ms(35) }]} />
+        <View style={[styles.decorCircle, { width: ms(145), height: ms(145), borderRadius: ms(73), right: -ms(50), top: -ms(55) }]} />
+
         <MaterialCommunityIcons
           name="pine-tree"
-          size={ms(18)}
-          color="rgba(255,255,255,0.7)"
-          style={{ position: 'absolute', left: '8%', top: '15%' }}
+          size={ms(24)}
+          color="rgba(255,255,255,0.82)"
+          style={{ position: 'absolute', left: '9%', top: '16%' }}
         />
         <MaterialCommunityIcons
           name="home-variant"
-          size={ms(18)}
-          color="rgba(255,255,255,0.7)"
-          style={{ position: 'absolute', right: '10%', top: '18%' }}
+          size={ms(25)}
+          color="rgba(255,255,255,0.82)"
+          style={{ position: 'absolute', right: '10%', top: '17%' }}
         />
 
-        {markers.map((m) => (
+        {markers.map((marker) => (
           <View
-            key={m.id}
+            key={marker.id}
             style={[
               styles.marker,
-              { width: ms(26), height: ms(26), borderRadius: ms(13), left: m.x as any, top: m.y as any },
+              {
+                width: ms(36),
+                height: ms(36),
+                borderRadius: ms(18),
+                left: marker.x as any,
+                top: marker.y as any,
+              },
             ]}
           >
-            <Text style={[styles.markerText, { fontSize: ms(12) }]}>{m.label}</Text>
+            <Text style={[styles.markerText, { fontSize: ms(14) }]}>{marker.label}</Text>
           </View>
         ))}
       </LinearGradient>
@@ -50,17 +59,32 @@ export default function TripMapCard({ title, subtitle, markers = [] }: TripRoute
 }
 
 const styles = StyleSheet.create({
-  card: { backgroundColor: homeColors.card, borderWidth: 1, borderColor: homeColors.border },
-  title: { fontWeight: '600', color: homeColors.textPrimary },
-  subtitle: { color: homeColors.textSecondary, marginTop: 2 },
+  card: {
+    backgroundColor: homeColors.card,
+    borderWidth: 1,
+    borderColor: homeColors.border,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.07,
+    shadowRadius: 16,
+    elevation: 3,
+  },
+  title: { fontWeight: '800', color: homeColors.textPrimary },
+  subtitle: { color: homeColors.textSecondary, marginTop: 2, fontWeight: '500' },
   mapArea: { overflow: 'hidden' },
+  decorCircle: { position: 'absolute', backgroundColor: 'rgba(255,255,255,0.12)' },
   marker: {
     position: 'absolute',
     backgroundColor: homeColors.accent,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 2,
+    borderWidth: 3,
     borderColor: '#fff',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.14,
+    shadowRadius: 4,
+    elevation: 2,
   },
-  markerText: { color: '#fff', fontWeight: '700' },
+  markerText: { color: '#fff', fontWeight: '800' },
 });

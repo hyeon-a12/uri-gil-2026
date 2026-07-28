@@ -12,18 +12,31 @@ interface Props {
 
 export default function ClipThumbnail({ item, width }: Props) {
   const { moderateScale: ms } = useResponsive();
-  const height = width * 1.3;
+  const height = width * 1.22;
+  const playSize = ms(42);
 
   return (
-    <TouchableOpacity style={{ width, marginRight: ms(10) }} activeOpacity={0.85}>
-      <View style={{ width, height, borderRadius: ms(12), overflow: 'hidden', backgroundColor: '#eee' }}>
-        <Image source={{ uri: item.image }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
-        <View style={[styles.playOverlay, { width: ms(28), height: ms(28), borderRadius: ms(14) }]}>
-          <Ionicons name="play" size={ms(15)} color="#fff" />
+    <TouchableOpacity style={{ width, marginRight: ms(12) }} activeOpacity={0.86}>
+      <View style={[styles.imageWrap, { width, height, borderRadius: ms(16) }]}>
+        <Image source={{ uri: item.image }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
+        <View style={styles.scrim} />
+        <View
+          style={[
+            styles.playOverlay,
+            {
+              width: playSize,
+              height: playSize,
+              borderRadius: playSize / 2,
+              marginLeft: -playSize / 2,
+              marginTop: -playSize / 2,
+            },
+          ]}
+        >
+          <Ionicons name="play" size={ms(20)} color="#fff" style={{ marginLeft: ms(2) }} />
         </View>
-        <Text style={[styles.duration, { fontSize: ms(10) }]}>{item.duration}</Text>
+        <Text style={[styles.duration, { fontSize: ms(11) }]}>{item.duration}</Text>
       </View>
-      <Text style={[styles.location, { fontSize: ms(11) }]} numberOfLines={1}>
+      <Text style={[styles.location, { fontSize: ms(13), lineHeight: ms(18) }]} numberOfLines={1}>
         {item.location}
       </Text>
     </TouchableOpacity>
@@ -31,16 +44,24 @@ export default function ClipThumbnail({ item, width }: Props) {
 }
 
 const styles = StyleSheet.create({
+  imageWrap: { overflow: 'hidden', backgroundColor: '#E9E9E5' },
+  scrim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.06)' },
   playOverlay: {
     position: 'absolute',
     top: '50%',
     left: '50%',
-    marginTop: -14,
-    marginLeft: -14,
-    backgroundColor: 'rgba(0,0,0,0.35)',
+    backgroundColor: 'rgba(25,25,25,0.46)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  duration: { position: 'absolute', right: 6, bottom: 6, color: '#fff', fontWeight: '500' },
-  location: { marginTop: 4, color: homeColors.textSecondary },
+  duration: {
+    position: 'absolute',
+    right: 8,
+    bottom: 7,
+    color: '#fff',
+    fontWeight: '700',
+    textShadowColor: 'rgba(0,0,0,0.35)',
+    textShadowRadius: 3,
+  },
+  location: { marginTop: 7, color: homeColors.textSecondary, fontWeight: '500' },
 });
