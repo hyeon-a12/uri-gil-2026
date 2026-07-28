@@ -1,121 +1,59 @@
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import React from 'react';
+import { View, Text, ScrollView, StyleSheet } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useResponsive } from '../../hooks/use-responsive';
+import { homeColors } from '../../constants/home-theme';
+import TripMapCard from '../../components/TripMapCard';
+import ClipThumbnail from '../../components/ClipThumbnail';
+import PlaceCard from '../../components/PlaceCard';
+import { mockRecentClips, mockRecommendedPlaces, mockTripRoute } from '../../constants/mockHomeData';
 
-import { COLORS } from '@/constants/color';
-import { BottomTabInset, Spacing } from '@/constants/theme';
+interface Props {
+  userName?: string;
+}
 
-const MOCK_CLIPS = [
-  { id: '1', duration: '00:08' },
-  { id: '2', duration: '00:12' },
-  { id: '3', duration: '00:06' },
-];
+export default function HomeScreen({ userName = '뿅뿅이' }: Props) {
+  const insets = useSafeAreaInsets();
+  const { width, moderateScale: ms } = useResponsive();
 
-export default function HomeScreen() {
+  // 화면 너비 비율로 카드 크기를 정하면 화면이 커져도 레이아웃 비율이 그대로 유지된다.
+  const clipWidth = width * 0.24;
+  const placeWidth = width * 0.62;
+
   return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}>
-        <View style={styles.header}>
-          <Text style={styles.greeting}>안녕하세요 여행자님</Text>
-          <Text style={styles.notificationIcon}>N</Text>
-        </View>
+    <ScrollView
+      style={{ backgroundColor: homeColors.background }}
+      contentContainerStyle={{
+        paddingTop: insets.top + ms(12),
+        paddingHorizontal: ms(16),
+        paddingBottom: ms(24),
+      }}
+      showsVerticalScrollIndicator={false}
+    >
+      <Text style={[styles.greeting, { fontSize: ms(19) }]}>{userName} 님, 오늘도 즐거운 여행!</Text>
 
-        <View style={styles.mapContainer}>
-          <Text style={styles.mapTitle}>전주 루트</Text>
-          <View style={styles.mapPlaceholder} />
-          <Text style={styles.mapInfo}>2박 3일 - 영상 6개</Text>
-        </View>
+      <View style={{ marginTop: ms(16) }}>
+        <TripMapCard {...mockTripRoute} />
+      </View>
 
-        <View style={styles.clipsSection}>
-          <Text style={styles.clipsTitle}>최근 촬영한 클립들</Text>
-          <View style={styles.clipRow}>
-            {MOCK_CLIPS.map((item) => (
-              <View key={item.id} style={styles.clipCard}>
-                <View style={styles.clipThumbnail} />
-                <Text style={styles.clipDuration}>{item.duration}</Text>
-              </View>
-            ))}
-          </View>
-        </View>
+      <Text style={[styles.sectionTitle, { fontSize: ms(15), marginTop: ms(22) }]}>최근 촬영한 클립</Text>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: ms(10) }}>
+        {mockRecentClips.map((c) => (
+          <ClipThumbnail key={c.id} item={c} width={clipWidth} />
+        ))}
       </ScrollView>
-    </SafeAreaView>
+
+      <Text style={[styles.sectionTitle, { fontSize: ms(15), marginTop: ms(22) }]}>추천 장소</Text>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: ms(10) }}>
+        {mockRecommendedPlaces.map((p) => (
+          <PlaceCard key={p.id} item={p} width={placeWidth} />
+        ))}
+      </ScrollView>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.white,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingHorizontal: Spacing.four,
-    paddingBottom: BottomTabInset + Spacing.four,
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: Spacing.three,
-    marginBottom: Spacing.five,
-  },
-  greeting: {
-    fontSize: 25,
-    fontWeight: '600',
-    color: COLORS.text,
-  },
-  notificationIcon: {
-    fontSize: 24,
-    color: COLORS.textSecondary,
-  },
-  mapContainer: {
-    marginBottom: Spacing.five,
-  },
-  mapTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: COLORS.text,
-  },
-  mapPlaceholder: {
-    width: '100%',
-    height: 200,
-    marginVertical: Spacing.two,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    backgroundColor: COLORS.surface,
-  },
-  mapInfo: {
-    fontSize: 13,
-    color: COLORS.textSecondary,
-  },
-  clipsSection: {
-    gap: Spacing.two,
-  },
-  clipsTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: COLORS.text,
-  },
-  clipRow: {
-    flexDirection: 'row',
-    gap: Spacing.two,
-  },
-  clipCard: {
-    width: 100,
-  },
-  clipThumbnail: {
-    height: 100,
-    borderRadius: 8,
-    backgroundColor: COLORS.surface,
-  },
-  clipDuration: {
-    marginTop: Spacing.one,
-    fontSize: 12,
-    color: COLORS.textSecondary,
-  },
+  greeting: { fontWeight: '700', color: homeColors.textPrimary },
+  sectionTitle: { fontWeight: '600', color: homeColors.textPrimary },
 });
