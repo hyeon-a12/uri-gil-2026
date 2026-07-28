@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import {
   Alert,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -11,16 +12,12 @@ import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import DraggableFlatList, {
-  RenderItemParams,
-  ScaleDecorator,
-} from 'react-native-draggable-flatlist';
-
 const COLORS = {
   background: '#FAF8F1',
   card: '#FFFFFF',
 
   primary: '#F99B30',
+  primaryPressed: '#ED8A20',
   primarySoft: '#FFF1E4',
 
   textPrimary: '#262621',
@@ -30,9 +27,9 @@ const COLORS = {
   border: '#ECE9E1',
   divider: '#F1EEE8',
 
-  handle: '#999A95',
-  shadow: '#4B4138',
+  unchecked: '#B5B5AF',
   delete: '#E46F61',
+  shadow: '#4B4138',
 };
 
 interface ClipItem {
@@ -79,66 +76,60 @@ function formatDuration(seconds: number) {
   ).padStart(2, '0')}`;
 }
 
-function formatTotalDuration(seconds: number) {
-  if (seconds < 60) {
-    return `${seconds}초`;
-  }
-
-  const minutes = Math.floor(seconds / 60);
-  const remainingSeconds = seconds % 60;
-
-  return remainingSeconds > 0
-    ? `${minutes}분 ${remainingSeconds}초`
-    : `${minutes}분`;
-}
-
-interface ClipCardProps {
-  clip: ClipItem;
-  index: number;
-  editMode: boolean;
-  isActive: boolean;
-  drag: () => void;
-  onDelete: () => void;
+interface SelectionButtonProps {
+  selected: boolean;
   onPress: () => void;
 }
 
-function ClipCard({
-  clip,
-  index,
-  editMode,
-  isActive,
-  drag,
-  onDelete,
+function SelectionButton({
+  selected,
   onPress,
-}: ClipCardProps) {
+}: SelectionButtonProps) {
   return (
-    <View
-      style={[
-        styles.clipRow,
-        isActive && styles.clipRowActive,
+    <Pressable
+      onPress={onPress}
+      hitSlop={10}
+      style={({ pressed }) => [
+        styles.selectionButton,
+        selected && styles.selectionButtonSelected,
+        pressed && styles.selectionButtonPressed,
       ]}
     >
-      <View
-        style={[
-          styles.orderBadge,
-          isActive && styles.orderBadgeActive,
-        ]}
-      >
-        <Text
-          allowFontScaling={false}
-          style={styles.orderBadgeText}
-        >
-          {index + 1}
-        </Text>
-      </View>
+      {selected && (
+        <Ionicons
+          name="checkmark"
+          size={18}
+          color="#FFFFFF"
+        />
+      )}
+    </Pressable>
+  );
+}
+
+interface ClipSelectionCardProps {
+  clip: ClipItem;
+  selected: boolean;
+  onToggle: () => void;
+}
+
+function ClipSelectionCard({
+  clip,
+  selected,
+  onToggle,
+}: ClipSelectionCardProps) {
+  return (
+    <View style={styles.clipRow}>
+      <SelectionButton
+        selected={selected}
+        onPress={onToggle}
+      />
 
       <Pressable
-        disabled={isActive}
-        onPress={onPress}
+        onPress={onToggle}
         style={({ pressed }) => [
           styles.clipCard,
-          isActive && styles.clipCardActive,
-          pressed && !isActive && styles.clipCardPressed,
+          selected && styles.clipCardSelected,
+          pressed && styles.clipCardPressed,
         ]}
       >
         <View style={styles.thumbnailContainer}>
@@ -194,71 +185,78 @@ function ClipCard({
           </View>
         </View>
 
-        {editMode ? (
-          <Pressable
-            hitSlop={12}
-            onPress={(event) => {
-              event.stopPropagation();
-              onDelete();
-            }}
-            style={styles.deleteButton}
-          >
-            <Ionicons
-              name="trash-outline"
-              size={21}
-              color={COLORS.delete}
-            />
-          </Pressable>
-        ) : (
-          <Pressable
-            hitSlop={14}
-            delayLongPress={120}
-            onLongPress={drag}
-            disabled={isActive}
-            style={({ pressed }) => [
-              styles.dragHandle,
-              pressed && styles.dragHandlePressed,
-              isActive && styles.dragHandleActive,
-            ]}
-          >
-            <Ionicons
-              name="reorder-three-outline"
-              size={29}
-              color={
-                isActive
-                  ? COLORS.primary
-                  : COLORS.handle
-              }
-            />
-          </Pressable>
-        )}
+        <Ionicons
+          name="reorder-three-outline"
+          size={28}
+          color={COLORS.textTertiary}
+        />
       </Pressable>
     </View>
   );
 }
 
-export default function ClipManageScreen() {
+export default function ClipSelectScreen() {
   const insets = useSafeAreaInsets();
 
   const [clips, setClips] =
     useState<ClipItem[]>(INITIAL_CLIPS);
 
-  const [editMode, setEditMode] = useState(false);
-
-  const totalDuration = useMemo(
-    () =>
-      clips.reduce(
-        (total, clip) =>
-          total + clip.durationSeconds,
-        0,
-      ),
-    [clips],
+  const [selectedIds, setSelectedIds] = useState<string[]>(
+    ['2', '3'],
   );
 
-  const handleDelete = (clipId: string) => {
+  const selectedCount = selectedIds.length;
+
+  const allSelected =
+    clips.length > 0 && selectedCount === clips.length;
+
+  const selectedClips = useMemo(
+    () =>
+      clips.filter((clip) =>
+        selectedIds.includes(clip.id),
+      ),
+    [clips, selectedIds],
+  );
+
+  const toggleClip = (clipId: string) => {
+    setSelectedIds((currentIds) => {
+      if (currentIds.includes(clipId)) {
+        return currentIds.filter(
+          (selectedId) => selectedId !== clipId,
+        );
+      }
+
+      return [...currentIds, clipId];
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (allSelected) {
+      setSelectedIds([]);
+      return;
+    }
+
+    setSelectedIds(clips.map((clip) => clip.id));
+  };
+
+  const handleCancel = () => {
+    setSelectedIds([]);
+    router.back();
+  };
+
+  const handleDelete = () => {
+    if (selectedCount === 0) {
+      Alert.alert(
+        '선택된 클립이 없습니다',
+        '삭제할 클립을 한 개 이상 선택해주세요.',
+      );
+
+      return;
+    }
+
     Alert.alert(
-      '클립 삭제',
-      '선택한 클립을 목록에서 삭제할까요?',
+      '선택한 클립 삭제',
+      `${selectedCount}개의 클립을 삭제할까요?`,
       [
         {
           text: '취소',
@@ -270,60 +268,59 @@ export default function ClipManageScreen() {
           onPress: () => {
             setClips((currentClips) =>
               currentClips.filter(
-                (clip) => clip.id !== clipId,
+                (clip) =>
+                  !selectedIds.includes(clip.id),
               ),
             );
+
+            setSelectedIds([]);
           },
         },
       ],
     );
   };
 
-  const handleCreateVideo = () => {
-    if (clips.length === 0) {
+  const handleComplete = () => {
+    if (selectedCount === 0) {
       Alert.alert(
-        '클립이 없습니다',
-        '영상을 생성하려면 클립을 한 개 이상 추가해주세요.',
+        '선택된 클립이 없습니다',
+        '영상에 사용할 클립을 한 개 이상 선택해주세요.',
       );
 
       return;
     }
 
     Alert.alert(
-      '영상 만들기',
-      '현재 정렬된 클립 순서대로 영상을 생성합니다.',
-    );
-  };
-
-  const renderClipItem = ({
-    item,
-    drag,
-    isActive,
-    getIndex,
-  }: RenderItemParams<ClipItem>) => {
-    const index = getIndex() ?? 0;
-
-    return (
-      <ScaleDecorator activeScale={1.02}>
-        <ClipCard
-          clip={item}
-          index={index}
-          editMode={editMode}
-          isActive={isActive}
-          drag={drag}
-          onDelete={() => handleDelete(item.id)}
-          onPress={() => {
-            if (isActive) {
-              return;
-            }
+      '클립 선택 완료',
+      `${selectedCount}개의 클립으로 영상을 만들까요?`,
+      [
+        {
+          text: '취소',
+          style: 'cancel',
+        },
+        {
+          text: '영상 만들기',
+          onPress: () => {
+            console.log(
+              '선택된 클립:',
+              selectedClips.map((clip) => clip.id),
+            );
 
             Alert.alert(
-              item.title,
-              '클립 상세 화면으로 연결할 예정입니다.',
+              '영상 만들기',
+              '영상 생성 화면으로 연결할 예정입니다.',
             );
-          }}
-        />
-      </ScaleDecorator>
+
+            // 영상 생성 화면이 있으면 아래처럼 연결
+            // router.push({
+            //   pathname: '/video-create',
+            //   params: {
+            //     clipIds: selectedIds.join(','),
+            //   },
+            // });
+          },
+        },
+      ],
     );
   };
 
@@ -340,7 +337,7 @@ export default function ClipManageScreen() {
         <Pressable
           hitSlop={12}
           onPress={() => router.back()}
-          style={styles.headerButton}
+          style={styles.headerSideButton}
         >
           <Ionicons
             name="chevron-back"
@@ -353,65 +350,59 @@ export default function ClipManageScreen() {
           allowFontScaling={false}
           style={styles.headerTitle}
         >
-          클립 관리
+          클립 선택
         </Text>
 
+        <View style={styles.headerSideButton} />
+      </View>
+
+      <View style={styles.selectionToolbar}>
         <Pressable
-          hitSlop={12}
-          onPress={() => router.push('/clip-select')}
-          style={styles.headerButton}
+          hitSlop={10}
+          onPress={toggleSelectAll}
         >
           <Text
             allowFontScaling={false}
-            style={styles.editButtonText}
+            style={styles.toolbarButtonText}
           >
-            선택
+            {allSelected ? '전체 해제' : '전체 선택'}
+          </Text>
+        </Pressable>
+
+        <Pressable
+          hitSlop={10}
+          onPress={handleCancel}
+        >
+          <Text
+            allowFontScaling={false}
+            style={styles.toolbarButtonText}
+          >
+            취소
           </Text>
         </Pressable>
       </View>
 
-      <DraggableFlatList
-        data={clips}
-        keyExtractor={(item) => item.id}
-        renderItem={renderClipItem}
+      <ScrollView
         showsVerticalScrollIndicator={false}
-        activationDistance={6}
-        autoscrollThreshold={90}
-        autoscrollSpeed={110}
-        dragItemOverflow
-        onDragEnd={({ data }) => {
-          setClips(data);
-        }}
         contentContainerStyle={[
-          styles.listContent,
+          styles.scrollContent,
           {
-            paddingBottom:
-              insets.bottom + 250,
+            paddingBottom: insets.bottom + 120,
           },
         ]}
-        ListHeaderComponent={
-          <View style={styles.introduction}>
-            <Text
-              allowFontScaling={false}
-              style={styles.introductionTitle}
-            >
-              여행 클립을 정리해보세요
-            </Text>
-
-            <Text
-              allowFontScaling={false}
-              style={styles.introductionDescription}
-            >
-              오른쪽 아이콘을 길게 누른 뒤
-              위아래로 움직여 순서를 변경할 수 있어요.
-            </Text>
-          </View>
-        }
-        ListEmptyComponent={
+      >
+        {clips.length > 0 ? (
+          clips.map((clip) => (
+            <ClipSelectionCard
+              key={clip.id}
+              clip={clip}
+              selected={selectedIds.includes(clip.id)}
+              onToggle={() => toggleClip(clip.id)}
+            />
+          ))
+        ) : (
           <View style={styles.emptyContainer}>
-            <View
-              style={styles.emptyIconContainer}
-            >
+            <View style={styles.emptyIconContainer}>
               <Ionicons
                 name="videocam-outline"
                 size={34}
@@ -423,18 +414,18 @@ export default function ClipManageScreen() {
               allowFontScaling={false}
               style={styles.emptyTitle}
             >
-              저장된 클립이 없습니다
+              선택할 클립이 없습니다
             </Text>
 
             <Text
               allowFontScaling={false}
               style={styles.emptyDescription}
             >
-              여행 중 촬영한 클립을 추가해보세요.
+              먼저 여행 클립을 촬영해주세요.
             </Text>
           </View>
-        }
-      />
+        )}
+      </ScrollView>
 
       <View
         style={[
@@ -447,61 +438,71 @@ export default function ClipManageScreen() {
           },
         ]}
       >
-        <View style={styles.summaryContainer}>
-          <View style={styles.summaryRow}>
-            <Text
-              allowFontScaling={false}
-              style={styles.summaryLabel}
-            >
-              클립 개수
-            </Text>
+        <View style={styles.selectedCountBox}>
+          <Text
+            allowFontScaling={false}
+            style={styles.selectedCountLabel}
+          >
+            선택
+          </Text>
 
-            <Text
-              allowFontScaling={false}
-              style={styles.summaryValue}
-            >
-              {clips.length}개
-            </Text>
-          </View>
-
-          <View style={styles.summaryRow}>
-            <Text
-              allowFontScaling={false}
-              style={styles.summaryLabel}
-            >
-              총 영상 길이
-            </Text>
-
-            <Text
-              allowFontScaling={false}
-              style={styles.summaryValue}
-            >
-              {formatTotalDuration(totalDuration)}
-            </Text>
-          </View>
+          <Text
+            allowFontScaling={false}
+            style={styles.selectedCountValue}
+          >
+            {selectedCount}개
+          </Text>
         </View>
 
         <Pressable
-          disabled={clips.length === 0}
-          onPress={handleCreateVideo}
+          disabled={selectedCount === 0}
+          onPress={handleDelete}
           style={({ pressed }) => [
-            styles.createButton,
-            clips.length === 0 &&
-              styles.createButtonDisabled,
+            styles.deleteButton,
+            selectedCount === 0 &&
+              styles.secondaryButtonDisabled,
             pressed &&
-              clips.length > 0 &&
-              styles.createButtonPressed,
+              selectedCount > 0 &&
+              styles.secondaryButtonPressed,
           ]}
         >
           <Ionicons
-            name="sparkles-outline"
-            size={18}
-            color="#FFFFFF"
+            name="trash-outline"
+            size={19}
+            color={
+              selectedCount > 0
+                ? COLORS.delete
+                : COLORS.textTertiary
+            }
           />
 
           <Text
             allowFontScaling={false}
-            style={styles.createButtonText}
+            style={[
+              styles.deleteButtonText,
+              selectedCount === 0 &&
+                styles.disabledButtonText,
+            ]}
+          >
+            삭제
+          </Text>
+        </Pressable>
+
+        <Pressable
+          disabled={selectedCount === 0}
+          onPress={handleComplete}
+          style={({ pressed }) => [
+            styles.completeButton,
+            selectedCount === 0 &&
+              styles.completeButtonDisabled,
+            pressed &&
+              selectedCount > 0 &&
+              styles.completeButtonPressed,
+          ]}
+        >
+          <Text
+            allowFontScaling={false}
+            style={styles.completeButtonText}
           >
             영상 만들기
           </Text>
@@ -529,7 +530,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
   },
 
-  headerButton: {
+  headerSideButton: {
     width: 48,
     height: 42,
 
@@ -549,91 +550,61 @@ const styles = StyleSheet.create({
     letterSpacing: -0.4,
   },
 
-  editButtonText: {
-    color: COLORS.primary,
-
-    fontSize: 14,
-    lineHeight: 19,
-    fontWeight: '700',
-  },
-
-  listContent: {
-    flexGrow: 1,
-
-    paddingHorizontal: 20,
-    paddingTop: 8,
-  },
-
-  introduction: {
-    marginBottom: 22,
-    paddingHorizontal: 4,
-  },
-
-  introductionTitle: {
-    color: COLORS.textPrimary,
-
-    fontSize: 18,
-    lineHeight: 25,
-    fontWeight: '800',
-
-    letterSpacing: -0.4,
-  },
-
-  introductionDescription: {
-    marginTop: 6,
-
-    color: COLORS.textSecondary,
-
-    fontSize: 13,
-    lineHeight: 19,
-    fontWeight: '500',
-  },
-
-  clipRow: {
-    position: 'relative',
+  selectionToolbar: {
+    paddingHorizontal: 22,
+    paddingTop: 4,
+    paddingBottom: 14,
 
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+  },
 
-    paddingLeft: 14,
+  toolbarButtonText: {
+    color: COLORS.primary,
+
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '700',
+  },
+
+  scrollContent: {
+    paddingHorizontal: 20,
+    paddingTop: 4,
+  },
+
+  clipRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+
     marginBottom: 14,
   },
 
-  clipRowActive: {
-    zIndex: 20,
-  },
+  selectionButton: {
+    width: 26,
+    height: 26,
 
-  orderBadge: {
-    position: 'absolute',
-    left: 0,
-    zIndex: 2,
+    marginRight: 12,
 
-    width: 28,
-    height: 28,
-
-    borderRadius: 14,
+    borderRadius: 13,
 
     alignItems: 'center',
     justifyContent: 'center',
 
-    backgroundColor: '#FFB46F',
+    backgroundColor: COLORS.card,
 
-    borderWidth: 3,
-    borderColor: COLORS.background,
+    borderWidth: 1.5,
+    borderColor: COLORS.unchecked,
   },
 
-  orderBadgeActive: {
+  selectionButtonSelected: {
     backgroundColor: COLORS.primary,
-
-    transform: [{ scale: 1.08 }],
+    borderColor: COLORS.primary,
   },
 
-  orderBadgeText: {
-    color: '#FFFFFF',
-
-    fontSize: 12,
-    lineHeight: 15,
-    fontWeight: '800',
+  selectionButtonPressed: {
+    opacity: 0.7,
+    transform: [{ scale: 0.95 }],
   },
 
   clipCard: {
@@ -641,7 +612,6 @@ const styles = StyleSheet.create({
     minHeight: 132,
 
     padding: 12,
-    paddingLeft: 14,
 
     flexDirection: 'row',
     alignItems: 'center',
@@ -657,30 +627,22 @@ const styles = StyleSheet.create({
       width: 0,
       height: 4,
     },
-    shadowOpacity: 0.06,
-    shadowRadius: 10,
+    shadowOpacity: 0.05,
+    shadowRadius: 9,
 
     elevation: 2,
   },
 
-  clipCardPressed: {
-    opacity: 0.85,
-
-    transform: [{ scale: 0.995 }],
-  },
-
-  clipCardActive: {
+  clipCardSelected: {
     borderColor: COLORS.primary,
 
-    shadowColor: COLORS.primary,
-    shadowOffset: {
-      width: 0,
-      height: 8,
-    },
-    shadowOpacity: 0.22,
-    shadowRadius: 16,
+    backgroundColor: '#FFFDFC',
+  },
 
-    elevation: 12,
+  clipCardPressed: {
+    opacity: 0.86,
+
+    transform: [{ scale: 0.995 }],
   },
 
   thumbnailContainer: {
@@ -726,8 +688,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(36,36,32,0.58)',
 
     borderWidth: 1,
-    borderColor:
-      'rgba(255,255,255,0.32)',
+    borderColor: 'rgba(255,255,255,0.32)',
   },
 
   playIcon: {
@@ -738,7 +699,7 @@ const styles = StyleSheet.create({
     flex: 1,
 
     marginLeft: 14,
-    paddingRight: 8,
+    marginRight: 8,
   },
 
   clipTitle: {
@@ -778,34 +739,8 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 
-  dragHandle: {
-    width: 40,
-    height: 52,
-
-    borderRadius: 13,
-
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  dragHandlePressed: {
-    backgroundColor: COLORS.primarySoft,
-  },
-
-  dragHandleActive: {
-    backgroundColor: COLORS.primarySoft,
-  },
-
-  deleteButton: {
-    width: 40,
-    height: 52,
-
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
   emptyContainer: {
-    marginTop: 40,
+    marginTop: 50,
     paddingVertical: 56,
 
     alignItems: 'center',
@@ -853,17 +788,17 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 0,
     right: 0,
+    bottom: 0,
 
-    // 하단 탭바 높이만큼 위에 배치
-    bottom: 78,
+    minHeight: 88,
 
-    minHeight: 108,
-
-    paddingHorizontal: 20,
-    paddingTop: 14,
+    paddingHorizontal: 14,
+    paddingTop: 12,
 
     flexDirection: 'row',
     alignItems: 'center',
+
+    gap: 8,
 
     backgroundColor: COLORS.card,
 
@@ -878,45 +813,14 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 10,
 
-    elevation: 8,
+    elevation: 10,
   },
 
-  summaryContainer: {
-    flex: 1,
+  selectedCountBox: {
+    height: 48,
+    minWidth: 82,
 
-    gap: 7,
-  },
-
-  summaryRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-
-    gap: 12,
-  },
-
-  summaryLabel: {
-    width: 72,
-
-    color: COLORS.textSecondary,
-
-    fontSize: 12,
-    lineHeight: 17,
-    fontWeight: '600',
-  },
-
-  summaryValue: {
-    color: COLORS.textPrimary,
-
-    fontSize: 13,
-    lineHeight: 18,
-    fontWeight: '800',
-  },
-
-  createButton: {
-    minWidth: 132,
-    height: 52,
-
-    paddingHorizontal: 18,
+    paddingHorizontal: 13,
 
     flexDirection: 'row',
     alignItems: 'center',
@@ -924,39 +828,108 @@ const styles = StyleSheet.create({
 
     gap: 7,
 
-    borderRadius: 16,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+
+    backgroundColor: COLORS.card,
+  },
+
+  selectedCountLabel: {
+    color: COLORS.textSecondary,
+
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '600',
+  },
+
+  selectedCountValue: {
+    color: COLORS.textPrimary,
+
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '800',
+  },
+
+  deleteButton: {
+    height: 48,
+    minWidth: 82,
+
+    paddingHorizontal: 13,
+
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+
+    gap: 6,
+
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+
+    backgroundColor: COLORS.card,
+  },
+
+  deleteButtonText: {
+    color: COLORS.delete,
+
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '700',
+  },
+
+  completeButton: {
+    flex: 1,
+    height: 48,
+
+    alignItems: 'center',
+    justifyContent: 'center',
+
+    borderRadius: 14,
 
     backgroundColor: COLORS.primary,
 
     shadowColor: COLORS.primary,
     shadowOffset: {
       width: 0,
-      height: 5,
+      height: 4,
     },
-    shadowOpacity: 0.24,
-    shadowRadius: 9,
+    shadowOpacity: 0.2,
+    shadowRadius: 7,
 
-    elevation: 5,
+    elevation: 4,
   },
 
-  createButtonPressed: {
-    opacity: 0.85,
+  completeButtonPressed: {
+    backgroundColor: COLORS.primaryPressed,
 
-    transform: [{ scale: 0.98 }],
+    transform: [{ scale: 0.985 }],
   },
 
-  createButtonDisabled: {
+  completeButtonDisabled: {
     backgroundColor: '#D8D5CF',
 
     shadowOpacity: 0,
     elevation: 0,
   },
 
-  createButtonText: {
+  completeButtonText: {
     color: '#FFFFFF',
 
     fontSize: 14,
     lineHeight: 19,
     fontWeight: '800',
+  },
+
+  secondaryButtonPressed: {
+    opacity: 0.65,
+  },
+
+  secondaryButtonDisabled: {
+    backgroundColor: '#F7F5F1',
+  },
+
+  disabledButtonText: {
+    color: COLORS.textTertiary,
   },
 });
