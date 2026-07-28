@@ -91,7 +91,7 @@ export default function TabLayout() {
         options={{
           title: '이동경로',
           tabBarIcon: ({ focused }) => (
-            <TabItem Icon={icons.route} label="이동경로" focused={focused} />
+            <TabItem Icon={icons.route} label="경로" focused={focused} />
           ),
         }}
       />
@@ -117,7 +117,7 @@ export default function TabLayout() {
         options={{
           title: '마이페이지',
           tabBarIcon: ({ focused }) => (
-            <TabItem Icon={icons.user} label="마이페이지" focused={focused} />
+            <TabItem Icon={icons.user} label="내정보" focused={focused} />
           ),
         }}
       />
@@ -128,59 +128,94 @@ export default function TabLayout() {
 const styles = StyleSheet.create({
   tabBar: {
     position: 'absolute',
-    left: 20,
-    right: 20,
-    bottom: 10,
-    height: 94,
-    paddingTop: 10,
-    paddingBottom: 12,
-    borderTopWidth: 0,
-    borderRadius: 24,
+    left: 0,
+    right: 0,
+    bottom: 0,
+
+    height: 78,
+    paddingTop: 8,
+    paddingBottom: 10,
+
+    borderTopWidth: 1,
+    borderTopColor: '#EFEDE8',
+
+    borderRadius: 0,
     backgroundColor: BAR_BG,
-    elevation: 0,
+
+    elevation: 8,
+
     shadowColor: '#000000',
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    shadowOffset: {
+      width: 0,
+      height: -2,
+    },
   },
+
   tabItem: {
+    width: 62,
+
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 5,
-    marginTop: 10,
+
+    gap: 3,
+    marginTop: 3,
   },
-  icon: {
-    width: 26,
-    height: 26,
+
+  tabLabel: {
+    width: 62,
+
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: '500',
+
+    textAlign: 'center',
+    includeFontPadding: false,
   },
-  iconInactive: {
-    opacity: 0.45,
-  },
- tabLabel: {
-  width: 58,
-  fontSize: 11,
-  lineHeight: 14,
-  fontWeight: '500',
-  textAlign: 'center',
-  includeFontPadding: false,
-},
+
   cameraButtonWrap: {
     alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: -30,
+    justifyContent: 'flex-start',
+
+    marginTop: -22,
   },
+
   cameraButton: {
-    width: 66,
-    height: 66,
-    borderRadius: 33,
+    width: 58,
+    height: 58,
+
+    borderRadius: 29,
+
     backgroundColor: ACTIVE,
+
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 6,
+
+    borderWidth: 4,
     borderColor: BAR_BG,
+
+    shadowColor: ACTIVE,
+    shadowOpacity: 0.22,
+    shadowRadius: 7,
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+
+    elevation: 8,
   },
-  cameraIcon: {
-    width: 30,
-    height: 30,
+
+  cameraLabel: {
+    marginTop: 1,
+
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: '600',
+
+    color: ACTIVE,
+
+    textAlign: 'center',
+    includeFontPadding: false,
   },
 });
