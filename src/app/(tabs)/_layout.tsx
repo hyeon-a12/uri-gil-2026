@@ -1,3 +1,4 @@
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { router, Tabs } from 'expo-router';
 import { Image } from 'expo-image';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
@@ -70,58 +71,60 @@ function CameraTabButton() {
 
 export default function TabLayout() {
   return (
-    <Tabs
-      screenOptions={{
-        headerShown: false,
-        tabBarShowLabel: false,
-        tabBarStyle: styles.tabBar,
-        tabBarHideOnKeyboard: true,
-      }}>
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: '홈',
-          tabBarIcon: ({ focused }) => (
-            <TabItem Icon={icons.home} label="홈" focused={focused} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="my-route"
-        options={{
-          title: '이동경로',
-          tabBarIcon: ({ focused }) => (
-            <TabItem Icon={icons.route} label="경로" focused={focused} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="explore"
-        options={{
-          title: '카메라',
-          tabBarButton: () => <CameraTabButton />,
-        }}
-      />
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <Tabs
+        screenOptions={{
+          headerShown: false,
+          tabBarShowLabel: false,
+          tabBarStyle: styles.tabBar,
+          tabBarHideOnKeyboard: true,
+        }}>
+        <Tabs.Screen
+          name="index"
+          options={{
+            title: '홈',
+            tabBarIcon: ({ focused }) => (
+              <TabItem Icon={icons.home} label="홈" focused={focused} />
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="my-route"
+          options={{
+            title: '이동경로',
+            tabBarIcon: ({ focused }) => (
+              <TabItem Icon={icons.route} label="경로" focused={focused} />
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="explore"
+          options={{
+            title: '카메라',
+            tabBarButton: () => <CameraTabButton />,
+          }}
+        />
 
-      <Tabs.Screen
-        name="clip-manage"
-        options={{
-          title: '클립',
-          tabBarIcon: ({ focused }) => (
-            <TabItem Icon={icons.clip} label="클립" focused={focused} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="my-page"
-        options={{
-          title: '마이페이지',
-          tabBarIcon: ({ focused }) => (
-            <TabItem Icon={icons.user} label="내정보" focused={focused} />
-          ),
-        }}
-      />
-    </Tabs>
+        <Tabs.Screen
+          name="clip-manage"
+          options={{
+            title: '클립',
+            tabBarIcon: ({ focused }) => (
+              <TabItem Icon={icons.clip} label="클립" focused={focused} />
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="my-page"
+          options={{
+            title: '마이페이지',
+            tabBarIcon: ({ focused }) => (
+              <TabItem Icon={icons.user} label="내정보" focused={focused} />
+            ),
+          }}
+        />
+      </Tabs>
+      </GestureHandlerRootView>
   );
 }
 
