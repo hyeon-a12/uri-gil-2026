@@ -44,7 +44,30 @@ interface ClipItem {
 }
 
 const INITIAL_CLIPS: ClipItem[] = [
-  
+  {
+    id: '1',
+    title: '협재해변의 저녁',
+    recordedAt: '2026.07.23. 16:00',
+    durationSeconds: 6,
+    thumbnail:
+      'https://images.unsplash.com/photo-1500534623283-312aade485b7?w=600',
+  },
+  {
+    id: '2',
+    title: '카페에서 잠시',
+    recordedAt: '2026.07.23. 16:20',
+    durationSeconds: 7,
+    thumbnail:
+      'https://images.unsplash.com/photo-1509042239860-f550ce710b93?w=600',
+  },
+  {
+    id: '3',
+    title: '모슬포항 산책',
+    recordedAt: '2026.07.23. 17:10',
+    durationSeconds: 11,
+    thumbnail:
+      'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=600',
+  },
 ];
 
 function formatDuration(seconds: number) {
