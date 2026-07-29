@@ -44,30 +44,7 @@ interface ClipItem {
 }
 
 const INITIAL_CLIPS: ClipItem[] = [
-  {
-    id: '1',
-    title: '협재해변의 저녁',
-    recordedAt: '2026.07.23. 16:00',
-    durationSeconds: 6,
-    thumbnail:
-      'https://images.unsplash.com/photo-1500534623283-312aade485b7?w=600',
-  },
-  {
-    id: '2',
-    title: '카페에서 잠시',
-    recordedAt: '2026.07.23. 16:20',
-    durationSeconds: 7,
-    thumbnail:
-      'https://images.unsplash.com/photo-1509042239860-f550ce710b93?w=600',
-  },
-  {
-    id: '3',
-    title: '모슬포항 산책',
-    recordedAt: '2026.07.23. 17:10',
-    durationSeconds: 11,
-    thumbnail:
-      'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=600',
-  },
+  
 ];
 
 function formatDuration(seconds: number) {
@@ -357,17 +334,17 @@ export default function ClipManageScreen() {
         </Text>
 
         <Pressable
-          hitSlop={12}
-          onPress={() => router.push('/clip-select')}
-          style={styles.headerButton}
+        hitSlop={12}
+        onPress={() => router.push('/clip-select')}
+        style={styles.headerButton}
+      >
+        <Text
+          allowFontScaling={false}
+          style={styles.editButtonText}
         >
-          <Text
-            allowFontScaling={false}
-            style={styles.editButtonText}
-          >
-            선택
-          </Text>
-        </Pressable>
+          선택
+        </Text>
+      </Pressable>
       </View>
 
       <DraggableFlatList
@@ -408,32 +385,51 @@ export default function ClipManageScreen() {
           </View>
         }
         ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <View
-              style={styles.emptyIconContainer}
-            >
-              <Ionicons
-                name="videocam-outline"
-                size={34}
-                color={COLORS.primary}
-              />
-            </View>
+      <View style={styles.emptyContainer}>
+        <View style={styles.emptyIconContainer}>
+          <Ionicons
+            name="film-outline"
+            size={34}
+            color={COLORS.textPrimary}
+          />
+        </View>
 
-            <Text
-              allowFontScaling={false}
-              style={styles.emptyTitle}
-            >
-              저장된 클립이 없습니다
-            </Text>
+        <Text
+          allowFontScaling={false}
+          style={styles.emptyTitle}
+        >
+          아직 만든 클립이 없어요
+        </Text>
 
-            <Text
-              allowFontScaling={false}
-              style={styles.emptyDescription}
-            >
-              여행 중 촬영한 클립을 추가해보세요.
-            </Text>
-          </View>
-        }
+        <Text
+          allowFontScaling={false}
+          style={styles.emptyDescription}
+        >
+          우리길에서 사진과 영상을 촬영해보세요.
+        </Text>
+
+        <Pressable
+          onPress={() => router.push('/camera')}
+          style={({ pressed }) => [
+            styles.captureButton,
+            pressed && styles.captureButtonPressed,
+          ]}
+        >
+          <Ionicons
+            name="camera-outline"
+            size={18}
+            color="#FFFFFF"
+          />
+
+          <Text
+            allowFontScaling={false}
+            style={styles.captureButtonText}
+          >
+            클립 찍으러 가기
+          </Text>
+        </Pressable>
+      </View>
+    }
       />
 
       <View
@@ -803,51 +799,48 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+emptyContainer: {
+  flex: 1,
 
-  emptyContainer: {
-    marginTop: 40,
-    paddingVertical: 56,
+  minHeight: 480,
 
-    alignItems: 'center',
+  paddingHorizontal: 24,
+  paddingTop: 80,
 
-    backgroundColor: COLORS.card,
+  alignItems: 'center',
+  justifyContent: 'center',
+},
 
-    borderRadius: 22,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
+emptyIconContainer: {
+  width: 72,
+  height: 72,
+  borderRadius: 36,
 
-  emptyIconContainer: {
-    width: 64,
-    height: 64,
+  alignItems: 'center',
+  justifyContent: 'center',
 
-    borderRadius: 32,
+  backgroundColor: '#FFE1C8',
+},
 
-    alignItems: 'center',
-    justifyContent: 'center',
+emptyTitle: {
+  marginTop: 24,
 
-    backgroundColor: COLORS.primarySoft,
-  },
+  fontSize: 20,
+  fontWeight: '800',
 
-  emptyTitle: {
-    marginTop: 18,
+  color: COLORS.textPrimary,
+},
 
-    color: COLORS.textPrimary,
+emptyDescription: {
+  marginTop: 10,
 
-    fontSize: 16,
-    lineHeight: 22,
-    fontWeight: '800',
-  },
+  color: COLORS.textSecondary,
 
-  emptyDescription: {
-    marginTop: 6,
+  fontSize: 14,
+  lineHeight: 22,
 
-    color: COLORS.textSecondary,
-
-    fontSize: 13,
-    lineHeight: 18,
-    fontWeight: '500',
-  },
+  textAlign: 'center',
+},
 
   bottomPanel: {
     position: 'absolute',
@@ -959,4 +952,42 @@ const styles = StyleSheet.create({
     lineHeight: 19,
     fontWeight: '800',
   },
+captureButton: {
+  marginTop: 34,
+
+  width: 170,
+  height: 50,
+
+  borderRadius: 25,
+
+  backgroundColor: COLORS.primary,
+
+  alignItems: 'center',
+  justifyContent: 'center',
+
+  flexDirection: 'row',
+
+  gap: 8,
+
+  shadowColor: COLORS.primary,
+  shadowOpacity: 0.18,
+  shadowRadius: 8,
+  shadowOffset: {
+    width: 0,
+    height: 4,
+  },
+},
+
+captureButtonPressed: {
+  opacity: 0.82,
+  transform: [{ scale: 0.98 }],
+},
+
+captureButtonText: {
+  color: '#FFFFFF',
+  fontSize: 14,
+  lineHeight: 19,
+  fontWeight: '800',
+},
+
 });
