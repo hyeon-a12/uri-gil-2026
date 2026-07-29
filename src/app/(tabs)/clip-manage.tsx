@@ -44,7 +44,7 @@ interface ClipItem {
 }
 
 // true: 클립 0개 화면 / false: 임시 클립 목록 화면
-const SHOW_EMPTY_STATE = true;
+const SHOW_EMPTY_STATE = false;
 
 const MOCK_CLIPS: ClipItem[] = [
   {
