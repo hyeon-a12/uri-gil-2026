@@ -43,7 +43,10 @@ interface ClipItem {
   thumbnail: string;
 }
 
-const INITIAL_CLIPS: ClipItem[] = [
+// true: 클립 0개 화면 / false: 임시 클립 목록 화면
+const SHOW_EMPTY_STATE = true;
+
+const MOCK_CLIPS: ClipItem[] = [
   {
     id: '1',
     title: '협재해변의 저녁',
@@ -69,6 +72,8 @@ const INITIAL_CLIPS: ClipItem[] = [
       'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=600',
   },
 ];
+
+const INITIAL_CLIPS: ClipItem[] = SHOW_EMPTY_STATE ? [] : MOCK_CLIPS;
 
 function formatDuration(seconds: number) {
   const minutes = Math.floor(seconds / 60);
@@ -407,52 +412,47 @@ export default function ClipManageScreen() {
             </Text>
           </View>
         }
-        ListEmptyComponent={
-      <View style={styles.emptyContainer}>
-        <View style={styles.emptyIconContainer}>
-          <Ionicons
-            name="film-outline"
-            size={34}
-            color={COLORS.textPrimary}
-          />
-        </View>
+       ListEmptyComponent={
+  <View style={styles.emptyContainer}>
+    <View style={styles.emptyIconContainer}>
+      <Ionicons
+        name="location-outline"
+        size={34}
+        color={COLORS.textPrimary}
+      />
+    </View>
 
-        <Text
-          allowFontScaling={false}
-          style={styles.emptyTitle}
-        >
-          아직 만든 클립이 없어요
-        </Text>
+    <Text
+      allowFontScaling={false}
+      style={styles.emptyTitle}
+    >
+      아직 기록된 여행이 없어요
+    </Text>
 
-        <Text
-          allowFontScaling={false}
-          style={styles.emptyDescription}
-        >
-          우리길에서 사진과 영상을 촬영해보세요.
-        </Text>
+    <Text
+      allowFontScaling={false}
+      style={styles.emptyDescription}
+    >
+      첫 여행을 만들고 나만의 장소에서{'\n'}
+      특별한 클립을 남겨보세요!
+    </Text>
 
-        <Pressable
-          onPress={() => router.push('/camera')}
-          style={({ pressed }) => [
-            styles.captureButton,
-            pressed && styles.captureButtonPressed,
-          ]}
-        >
-          <Ionicons
-            name="camera-outline"
-            size={18}
-            color="#FFFFFF"
-          />
-
-          <Text
-            allowFontScaling={false}
-            style={styles.captureButtonText}
-          >
-            클립 찍으러 가기
-          </Text>
-        </Pressable>
-      </View>
-    }
+    <Pressable
+      onPress={() => router.push('/my-route')}
+      style={({ pressed }) => [
+        styles.captureButton,
+        pressed && styles.captureButtonPressed,
+      ]}
+    >
+      <Text
+        allowFontScaling={false}
+        style={styles.captureButtonText}
+      >
+        여행 만들기
+      </Text>
+    </Pressable>
+  </View>
+}
       />
 
       <View
