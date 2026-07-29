@@ -4,10 +4,12 @@ import {
   useMicrophonePermissions,
   type CameraType,
 } from 'expo-camera';
+import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Platform,
   Pressable,
   StyleSheet,
@@ -16,66 +18,235 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { COLORS } from '@/constants/color';
 import { navigateToLocationConfirm } from '@/navigation/recordingNavigation';
 
 const MAX_CLIP_SECONDS = 10;
 const MAX_CLIPS = 15;
 
+const COLORS = {
+  background: '#FAF8F1',
+  white: '#FFFFFF',
+  primary: '#F99B30',
+  primaryDark: '#EA861F',
+  primarySoft: '#FFF1E4',
+
+  textPrimary: '#262621',
+  textSecondary: '#8A8A82',
+
+  overlay: 'rgba(18, 18, 16, 0.48)',
+  overlayStrong: 'rgba(18, 18, 16, 0.68)',
+  overlayLight: 'rgba(255, 255, 255, 0.18)',
+
+  recording: '#FF4D4F',
+  recordingSoft: 'rgba(255, 77, 79, 0.22)',
+
+  border: 'rgba(255, 255, 255, 0.42)',
+};
+
 const ZOOM_LEVELS = [
-  { label: '3', value: 0.85 },
-  { label: '2', value: 0.65 },
-  { label: '1x', value: 0 },
-  { label: '.5', value: 0 },
+  {
+    label: '0.5x',
+    value: 0,
+  },
+  {
+    label: '1x',
+    value: 0,
+  },
+  {
+    label: '2x',
+    value: 0.45,
+  },
+  {
+    label: '3x',
+    value: 0.72,
+  },
 ] as const;
 
 function formatTimer(seconds: number) {
-  const mins = Math.floor(seconds / 60);
-  const secs = seconds % 60;
-  return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+
+  return `${String(minutes).padStart(2, '0')}:${String(
+    remainingSeconds,
+  ).padStart(2, '0')}`;
 }
 
-/** 인앱 카메라 — 기기 카메라 미리보기 + 짧은 영상 촬영 */
+interface PermissionScreenProps {
+  loading?: boolean;
+  title?: string;
+  description?: string;
+  buttonLabel?: string;
+  onPress?: () => void;
+  iconName?: React.ComponentProps<typeof Ionicons>['name'];
+}
+
+function PermissionScreen({
+  loading = false,
+  title,
+  description,
+  buttonLabel,
+  onPress,
+  iconName = 'camera-outline',
+}: PermissionScreenProps) {
+  const insets = useSafeAreaInsets();
+
+  return (
+    <View
+      style={[
+        styles.permissionScreen,
+        {
+          paddingTop: insets.top + 24,
+          paddingBottom: insets.bottom + 24,
+        },
+      ]}
+    >
+      {loading ? (
+        <ActivityIndicator
+          size="large"
+          color={COLORS.primary}
+        />
+      ) : (
+        <>
+          <View style={styles.permissionIconContainer}>
+            <Ionicons
+              name={iconName}
+              size={34}
+              color={COLORS.primary}
+            />
+          </View>
+
+          <Text
+            allowFontScaling={false}
+            style={styles.permissionTitle}
+          >
+            {title}
+          </Text>
+
+          <Text
+            allowFontScaling={false}
+            style={styles.permissionDescription}
+          >
+            {description}
+          </Text>
+
+          {buttonLabel && onPress ? (
+            <Pressable
+              onPress={onPress}
+              style={({ pressed }) => [
+                styles.permissionButton,
+                pressed && styles.permissionButtonPressed,
+              ]}
+            >
+              <Text
+                allowFontScaling={false}
+                style={styles.permissionButtonText}
+              >
+                {buttonLabel}
+              </Text>
+            </Pressable>
+          ) : null}
+        </>
+      )}
+    </View>
+  );
+}
+
+/**
+ * 여행 클립 촬영 화면
+ *
+ * - 최대 10초 영상 촬영
+ * - 최대 15개 클립 촬영
+ * - 전·후면 카메라 변경
+ * - 줌 배율 선택
+ * - 촬영 완료 후 장소 확인 화면으로 이동
+ */
 export default function CameraScreen() {
   const insets = useSafeAreaInsets();
   const cameraRef = useRef<CameraView>(null);
 
-  const [cameraPermission, requestCameraPermission] = useCameraPermissions();
-  const [micPermission, requestMicPermission] = useMicrophonePermissions();
+  const [
+    cameraPermission,
+    requestCameraPermission,
+  ] = useCameraPermissions();
 
-  const [facing, setFacing] = useState<CameraType>('back');
-  const [zoomIndex, setZoomIndex] = useState(2);
+  const [
+    microphonePermission,
+    requestMicrophonePermission,
+  ] = useMicrophonePermissions();
+
+  const [facing, setFacing] =
+    useState<CameraType>('back');
+
+  const [zoomIndex, setZoomIndex] = useState(1);
+
   const [clipCount, setClipCount] = useState(0);
-  const [isRecording, setIsRecording] = useState(false);
-  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+
+  const [isRecording, setIsRecording] =
+    useState(false);
+
+  const [elapsedSeconds, setElapsedSeconds] =
+    useState(0);
 
   const permissionsReady =
-    cameraPermission?.granted === true && micPermission?.granted === true;
+    cameraPermission?.granted === true &&
+    microphonePermission?.granted === true;
+
+  const progress = Math.min(
+    elapsedSeconds / MAX_CLIP_SECONDS,
+    1,
+  );
+
+  const canRecord =
+    clipCount < MAX_CLIPS && permissionsReady;
 
   useEffect(() => {
-    if (!isRecording) return;
+    if (!isRecording) {
+      return;
+    }
 
-    const timer = setInterval(() => {
-      setElapsedSeconds((prev) => prev + 1);
+    const interval = setInterval(() => {
+      setElapsedSeconds((currentSeconds) => {
+        if (currentSeconds >= MAX_CLIP_SECONDS) {
+          return MAX_CLIP_SECONDS;
+        }
+
+        return currentSeconds + 1;
+      });
     }, 1000);
 
-    return () => clearInterval(timer);
+    return () => {
+      clearInterval(interval);
+    };
   }, [isRecording]);
 
   const requestPermissions = async () => {
-    await requestCameraPermission();
-    await requestMicPermission();
+    const cameraResult =
+      await requestCameraPermission();
+
+    if (!cameraResult.granted) {
+      return;
+    }
+
+    await requestMicrophonePermission();
   };
 
   const toggleFacing = () => {
-    if (isRecording) return;
-    setFacing((current) => (current === 'back' ? 'front' : 'back'));
+    if (isRecording) {
+      return;
+    }
+
+    setFacing((currentFacing) =>
+      currentFacing === 'back'
+        ? 'front'
+        : 'back',
+    );
   };
 
   const handleClose = () => {
     if (isRecording) {
       cameraRef.current?.stopRecording();
     }
+
     router.back();
   };
 
@@ -85,22 +256,47 @@ export default function CameraScreen() {
       return;
     }
 
-    if (!cameraRef.current) return;
+    if (!cameraRef.current || !canRecord) {
+      if (clipCount >= MAX_CLIPS) {
+        Alert.alert(
+          '촬영 가능한 클립 수를 초과했습니다',
+          `한 여행에서는 최대 ${MAX_CLIPS}개의 클립을 촬영할 수 있어요.`,
+        );
+      }
+
+      return;
+    }
 
     setIsRecording(true);
     setElapsedSeconds(0);
 
     try {
-      const video = await cameraRef.current.recordAsync({
-        maxDuration: MAX_CLIP_SECONDS,
-      });
+      const video =
+        await cameraRef.current.recordAsync({
+          maxDuration: MAX_CLIP_SECONDS,
+        });
 
-      if (video?.uri) {
-        setClipCount((count) => count + 1);
-        navigateToLocationConfirm(video.uri);
+      if (!video?.uri) {
+        throw new Error(
+          '촬영된 영상 경로를 확인할 수 없습니다.',
+        );
       }
+
+      setClipCount((currentCount) =>
+        Math.min(currentCount + 1, MAX_CLIPS),
+      );
+
+      navigateToLocationConfirm(video.uri);
     } catch (error) {
-      console.error('Video recording failed:', error);
+      console.error(
+        'Video recording failed:',
+        error,
+      );
+
+      Alert.alert(
+        '촬영에 실패했습니다',
+        '잠시 후 다시 촬영해주세요.',
+      );
     } finally {
       setIsRecording(false);
       setElapsedSeconds(0);
@@ -109,105 +305,305 @@ export default function CameraScreen() {
 
   if (Platform.OS === 'web') {
     return (
-      <View style={styles.centered}>
-        <Text style={styles.permissionTitle}>카메라는 실제 기기에서만 사용할 수 있습니다.</Text>
-        <Text style={styles.permissionBody}>Expo Go 앱으로 QR 코드를 스캔해 확인해 주세요.</Text>
-        <Pressable style={styles.permissionButton} onPress={() => router.back()}>
-          <Text style={styles.permissionButtonText}>돌아가기</Text>
-        </Pressable>
-      </View>
+      <PermissionScreen
+        iconName="phone-portrait-outline"
+        title="실제 기기에서 카메라를 확인해주세요"
+        description={
+          '웹 브라우저에서는 앱 카메라 기능이 제한될 수 있어요.\nExpo Go에서 QR 코드를 스캔해 확인해주세요.'
+        }
+        buttonLabel="이전 화면으로"
+        onPress={() => router.back()}
+      />
     );
   }
 
-  if (!cameraPermission || !micPermission) {
-    return (
-      <View style={styles.centered}>
-        <ActivityIndicator color={COLORS.primary} />
-      </View>
-    );
+  if (
+    !cameraPermission ||
+    !microphonePermission
+  ) {
+    return <PermissionScreen loading />;
   }
 
   if (!permissionsReady) {
     return (
-      <View style={styles.centered}>
-        <Text style={styles.permissionTitle}>카메라 접근 권한이 필요합니다</Text>
-        <Text style={styles.permissionBody}>
-          여행 영상 촬영과 GPS 장소 매칭을 위해{'\n'}카메라와 마이크 권한을 허용해 주세요.
-        </Text>
-        <Pressable style={styles.permissionButton} onPress={requestPermissions}>
-          <Text style={styles.permissionButtonText}>권한 허용하기</Text>
-        </Pressable>
-      </View>
+      <PermissionScreen
+        title="카메라 권한이 필요해요"
+        description={
+          '여행 클립을 촬영하려면 카메라와 마이크 접근 권한을 허용해주세요.'
+        }
+        buttonLabel="권한 허용하기"
+        onPress={requestPermissions}
+      />
     );
   }
-
-  const progress = Math.min(elapsedSeconds / MAX_CLIP_SECONDS, 1);
 
   return (
     <View style={styles.container}>
       <CameraView
         ref={cameraRef}
-        style={styles.camera}
+        style={StyleSheet.absoluteFill}
         facing={facing}
         mode="video"
         zoom={ZOOM_LEVELS[zoomIndex].value}
         videoQuality="720p"
       />
 
-      {isRecording ? <View style={styles.recordingBorder} pointerEvents="none" /> : null}
-
-      <Pressable
-        style={[styles.closeButton, { top: insets.top + 12, left: insets.left + 16 }]}
-        onPress={handleClose}
-        hitSlop={12}>
-        <Text style={styles.closeIcon}>✕</Text>
-      </Pressable>
+      <View
+        pointerEvents="none"
+        style={styles.cameraDim}
+      />
 
       {isRecording ? (
-        <View style={[styles.timerBadge, { top: insets.top + 12 }]}>
-          <Text style={styles.timerText}>{formatTimer(elapsedSeconds)}</Text>
+        <View
+          pointerEvents="none"
+          style={styles.recordingBorder}
+        />
+      ) : null}
+
+      {/* 상단 영역 */}
+      <View
+        style={[
+          styles.topBar,
+          {
+            top: insets.top + 12,
+            left: insets.left + 16,
+            right: insets.right + 16,
+          },
+        ]}
+      >
+        <Pressable
+          hitSlop={10}
+          onPress={handleClose}
+          style={({ pressed }) => [
+            styles.circleControlButton,
+            pressed &&
+              styles.circleControlButtonPressed,
+          ]}
+        >
+          <Ionicons
+            name="close"
+            size={24}
+            color={COLORS.white}
+          />
+        </Pressable>
+
+        <View style={styles.recordingStatusArea}>
+          {isRecording ? (
+            <View style={styles.recordingBadge}>
+              <View style={styles.recordingDot} />
+
+              <Text
+                allowFontScaling={false}
+                style={styles.recordingBadgeText}
+              >
+                촬영 중
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.readyBadge}>
+              <Ionicons
+                name="videocam-outline"
+                size={16}
+                color={COLORS.white}
+              />
+
+              <Text
+                allowFontScaling={false}
+                style={styles.readyBadgeText}
+              >
+                최대 {MAX_CLIP_SECONDS}초
+              </Text>
+            </View>
+          )}
+        </View>
+
+        <View style={styles.timerContainer}>
+          <Text
+            allowFontScaling={false}
+            style={styles.timerText}
+          >
+            {formatTimer(elapsedSeconds)}
+          </Text>
+        </View>
+      </View>
+
+      {/* 중앙 촬영 가이드 */}
+      {!isRecording ? (
+        <View
+          pointerEvents="none"
+          style={styles.guideArea}
+        >
+          <View style={styles.guideFrame}>
+            <View
+              style={[
+                styles.guideCorner,
+                styles.guideCornerTopLeft,
+              ]}
+            />
+
+            <View
+              style={[
+                styles.guideCorner,
+                styles.guideCornerTopRight,
+              ]}
+            />
+
+            <View
+              style={[
+                styles.guideCorner,
+                styles.guideCornerBottomLeft,
+              ]}
+            />
+
+            <View
+              style={[
+                styles.guideCorner,
+                styles.guideCornerBottomRight,
+              ]}
+            />
+          </View>
+
+          <Text
+            allowFontScaling={false}
+            style={styles.guideText}
+          >
+            여행의 순간을 10초 안에 담아보세요
+          </Text>
         </View>
       ) : null}
 
-      <View style={[styles.sidebar, { top: insets.top + 56, bottom: insets.bottom + 24 }]}>
-        <Pressable
-          style={[styles.iconButton, isRecording && styles.iconButtonDisabled]}
-          onPress={toggleFacing}
-          disabled={isRecording}>
-          <Text style={styles.flipIcon}>⟲</Text>
-        </Pressable>
+      {/* 줌 선택 */}
+      <View
+        style={[
+          styles.zoomContainer,
+          {
+            bottom: insets.bottom + 152,
+          },
+        ]}
+      >
+        {ZOOM_LEVELS.map((level, index) => {
+          const selected = zoomIndex === index;
 
-        <View style={styles.zoomList}>
-          {ZOOM_LEVELS.map((level, index) => {
-            const active = index === zoomIndex;
-            return (
-              <Pressable
-                key={level.label}
-                style={styles.zoomItem}
-                disabled={isRecording}
-                onPress={() => setZoomIndex(index)}>
-                <Text style={[styles.zoomText, active && styles.zoomTextActive]}>{level.label}</Text>
-              </Pressable>
-            );
-          })}
+          return (
+            <Pressable
+              key={`${level.label}-${index}`}
+              disabled={isRecording}
+              onPress={() => setZoomIndex(index)}
+              style={({ pressed }) => [
+                styles.zoomButton,
+                selected && styles.zoomButtonSelected,
+                pressed &&
+                  !isRecording &&
+                  styles.zoomButtonPressed,
+                isRecording &&
+                  styles.zoomButtonDisabled,
+              ]}
+            >
+              <Text
+                allowFontScaling={false}
+                style={[
+                  styles.zoomButtonText,
+                  selected &&
+                    styles.zoomButtonTextSelected,
+                ]}
+              >
+                {level.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+
+      {/* 하단 촬영 컨트롤 */}
+      <View
+        style={[
+          styles.bottomControls,
+          {
+            paddingBottom: Math.max(
+              insets.bottom,
+              16,
+            ),
+          },
+        ]}
+      >
+        <View style={styles.bottomSideArea}>
+          <View style={styles.clipCountBadge}>
+            <Ionicons
+              name="film-outline"
+              size={17}
+              color={COLORS.white}
+            />
+
+            <Text
+              allowFontScaling={false}
+              style={styles.clipCountText}
+            >
+              {clipCount}/{MAX_CLIPS}
+            </Text>
+          </View>
         </View>
 
         <View style={styles.recordArea}>
-          <Pressable onPress={handleRecordPress} style={styles.recordButtonWrap}>
-            <View style={[styles.progressRing, { opacity: isRecording ? 1 : 0 }]}>
+          <Pressable
+            disabled={!canRecord}
+            onPress={handleRecordPress}
+            style={({ pressed }) => [
+              styles.recordButtonOuter,
+              pressed &&
+                styles.recordButtonOuterPressed,
+              !canRecord &&
+                styles.recordButtonDisabled,
+            ]}
+          >
+            <View style={styles.progressTrack}>
               <View
                 style={[
-                  styles.progressArc,
-                  { transform: [{ rotate: `${progress * 360}deg` }] },
+                  styles.progressFill,
+                  {
+                    width: `${progress * 100}%`,
+                  },
                 ]}
               />
             </View>
-            <View style={[styles.recordButton, isRecording && styles.recordButtonActive]} />
+
+            <View
+              style={[
+                styles.recordButtonInner,
+                isRecording &&
+                  styles.recordButtonInnerRecording,
+              ]}
+            />
           </Pressable>
 
-          <Text style={styles.clipCounter}>
-            {clipCount}/{MAX_CLIPS}
+          <Text
+            allowFontScaling={false}
+            style={styles.recordHelpText}
+          >
+            {isRecording
+              ? '눌러서 촬영 종료'
+              : '눌러서 촬영 시작'}
           </Text>
+        </View>
+
+        <View style={styles.bottomSideArea}>
+          <Pressable
+            disabled={isRecording}
+            onPress={toggleFacing}
+            style={({ pressed }) => [
+              styles.flipButton,
+              pressed &&
+                !isRecording &&
+                styles.flipButtonPressed,
+              isRecording &&
+                styles.flipButtonDisabled,
+            ]}
+          >
+            <Ionicons
+              name="camera-reverse-outline"
+              size={26}
+              color={COLORS.white}
+            />
+          </Pressable>
         </View>
       </View>
     </View>
@@ -217,158 +613,544 @@ export default function CameraScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000',
+    backgroundColor: '#000000',
   },
-  camera: {
-    flex: 1,
+
+  cameraDim: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.04)',
   },
+
   recordingBorder: {
     ...StyleSheet.absoluteFillObject,
-    borderWidth: 6,
-    borderColor: COLORS.cameraRecordingBorder,
+
+    borderWidth: 5,
+    borderColor: COLORS.recording,
   },
-  closeButton: {
+
+  topBar: {
     position: 'absolute',
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: COLORS.cameraSidebar,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  closeIcon: {
-    color: COLORS.white,
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  timerBadge: {
-    position: 'absolute',
-    alignSelf: 'center',
-    backgroundColor: COLORS.cameraRecord,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
-  timerText: {
-    color: COLORS.white,
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  sidebar: {
-    position: 'absolute',
-    right: 16,
-    width: 72,
-    backgroundColor: COLORS.cameraSidebar,
-    borderRadius: 20,
+
+    height: 52,
+
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 16,
   },
-  iconButton: {
-    width: 44,
-    height: 44,
+
+  circleControlButton: {
+    width: 46,
+    height: 46,
+
+    borderRadius: 23,
+
+    alignItems: 'center',
+    justifyContent: 'center',
+
+    backgroundColor: COLORS.overlayStrong,
+
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+
+  circleControlButtonPressed: {
+    opacity: 0.75,
+    transform: [{ scale: 0.96 }],
+  },
+
+  recordingStatusArea: {
+    flex: 1,
+
     alignItems: 'center',
     justifyContent: 'center',
   },
-  iconButtonDisabled: {
-    opacity: 0.4,
-  },
-  flipIcon: {
-    color: COLORS.white,
-    fontSize: 26,
-    fontWeight: '700',
-  },
-  zoomList: {
+
+  recordingBadge: {
+    height: 36,
+
+    paddingHorizontal: 13,
+
+    flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    justifyContent: 'center',
+
+    gap: 7,
+
+    borderRadius: 18,
+
+    backgroundColor: COLORS.overlayStrong,
+
+    borderWidth: 1,
+    borderColor: COLORS.recordingSoft,
   },
-  zoomItem: {
-    paddingVertical: 4,
-    paddingHorizontal: 8,
+
+  recordingDot: {
+    width: 8,
+    height: 8,
+
+    borderRadius: 4,
+
+    backgroundColor: COLORS.recording,
   },
-  zoomText: {
-    color: 'rgba(255,255,255,0.75)',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  zoomTextActive: {
-    color: COLORS.cameraZoomActive,
-    fontSize: 16,
+
+  recordingBadgeText: {
+    color: COLORS.white,
+
+    fontSize: 13,
+    lineHeight: 17,
     fontWeight: '800',
   },
-  recordArea: {
+
+  readyBadge: {
+    height: 36,
+
+    paddingHorizontal: 13,
+
+    flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    justifyContent: 'center',
+
+    gap: 6,
+
+    borderRadius: 18,
+
+    backgroundColor: COLORS.overlay,
+
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
-  recordButtonWrap: {
-    width: 72,
-    height: 72,
+
+  readyBadgeText: {
+    color: COLORS.white,
+
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '700',
+  },
+
+  timerContainer: {
+    minWidth: 58,
+    height: 42,
+
+    paddingHorizontal: 9,
+
+    alignItems: 'center',
+    justifyContent: 'center',
+
+    borderRadius: 15,
+
+    backgroundColor: COLORS.overlayStrong,
+
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+
+  timerText: {
+    color: COLORS.white,
+
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '800',
+
+    fontVariant: ['tabular-nums'],
+  },
+
+  guideArea: {
+    ...StyleSheet.absoluteFillObject,
+
     alignItems: 'center',
     justifyContent: 'center',
   },
-  progressRing: {
+
+  guideFrame: {
+    width: '72%',
+    aspectRatio: 0.82,
+
+    position: 'relative',
+  },
+
+  guideCorner: {
     position: 'absolute',
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    borderWidth: 4,
-    borderColor: 'rgba(255,255,255,0.25)',
+
+    width: 28,
+    height: 28,
+
+    borderColor: 'rgba(255,255,255,0.76)',
+  },
+
+  guideCornerTopLeft: {
+    top: 0,
+    left: 0,
+
+    borderTopWidth: 2,
+    borderLeftWidth: 2,
+
+    borderTopLeftRadius: 9,
+  },
+
+  guideCornerTopRight: {
+    top: 0,
+    right: 0,
+
+    borderTopWidth: 2,
+    borderRightWidth: 2,
+
+    borderTopRightRadius: 9,
+  },
+
+  guideCornerBottomLeft: {
+    bottom: 0,
+    left: 0,
+
+    borderBottomWidth: 2,
+    borderLeftWidth: 2,
+
+    borderBottomLeftRadius: 9,
+  },
+
+  guideCornerBottomRight: {
+    right: 0,
+    bottom: 0,
+
+    borderRightWidth: 2,
+    borderBottomWidth: 2,
+
+    borderBottomRightRadius: 9,
+  },
+
+  guideText: {
+    marginTop: 22,
+
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+
+    color: COLORS.white,
+
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '700',
+
+    textAlign: 'center',
+
+    borderRadius: 18,
+
+    backgroundColor: COLORS.overlay,
+  },
+
+  zoomContainer: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+
+    gap: 9,
+  },
+
+  zoomButton: {
+    minWidth: 48,
+    height: 38,
+
+    paddingHorizontal: 10,
+
+    alignItems: 'center',
+    justifyContent: 'center',
+
+    borderRadius: 19,
+
+    backgroundColor: COLORS.overlay,
+
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+
+  zoomButtonSelected: {
+    minWidth: 52,
+    height: 42,
+
+    borderRadius: 21,
+
+    backgroundColor: COLORS.white,
+    borderColor: COLORS.white,
+  },
+
+  zoomButtonPressed: {
+    opacity: 0.72,
+  },
+
+  zoomButtonDisabled: {
+    opacity: 0.45,
+  },
+
+  zoomButtonText: {
+    color: 'rgba(255,255,255,0.86)',
+
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '700',
+  },
+
+  zoomButtonTextSelected: {
+    color: COLORS.textPrimary,
+
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '800',
+  },
+
+  bottomControls: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+
+    minHeight: 138,
+
+    paddingHorizontal: 22,
+    paddingTop: 18,
+
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+
+    backgroundColor:
+      'rgba(12, 12, 10, 0.58)',
+  },
+
+  bottomSideArea: {
+    flex: 1,
+    height: 80,
+
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  clipCountBadge: {
+    minWidth: 64,
+    height: 42,
+
+    paddingHorizontal: 11,
+
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+
+    gap: 6,
+
+    borderRadius: 15,
+
+    backgroundColor: COLORS.overlayLight,
+
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+
+  clipCountText: {
+    color: COLORS.white,
+
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '800',
+
+    fontVariant: ['tabular-nums'],
+  },
+
+  recordArea: {
+    width: 128,
+
     alignItems: 'center',
     justifyContent: 'flex-start',
   },
-  progressArc: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: COLORS.white,
-    marginTop: -2,
-  },
-  recordButton: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: COLORS.cameraRecord,
-  },
-  recordButtonActive: {
-    width: 48,
-    height: 48,
-    borderRadius: 8,
-  },
-  clipCounter: {
-    color: COLORS.white,
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  centered: {
-    flex: 1,
+
+  recordButtonOuter: {
+    width: 78,
+    height: 78,
+
+    borderRadius: 39,
+
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 24,
-    backgroundColor: COLORS.white,
-    gap: 12,
+
+    backgroundColor:
+      'rgba(255,255,255,0.20)',
+
+    borderWidth: 4,
+    borderColor: COLORS.white,
+
+    overflow: 'hidden',
   },
-  permissionTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: COLORS.text,
-    textAlign: 'center',
+
+  recordButtonOuterPressed: {
+    transform: [{ scale: 0.96 }],
   },
-  permissionBody: {
-    fontSize: 14,
-    color: COLORS.textSecondary,
-    textAlign: 'center',
-    lineHeight: 22,
+
+  recordButtonDisabled: {
+    opacity: 0.45,
   },
-  permissionButton: {
+
+  progressTrack: {
+    position: 'absolute',
+    left: 5,
+    right: 5,
+    bottom: 5,
+
+    height: 4,
+
+    borderRadius: 2,
+
+    overflow: 'hidden',
+
+    backgroundColor:
+      'rgba(255,255,255,0.28)',
+  },
+
+  progressFill: {
+    height: '100%',
+
+    borderRadius: 2,
+
+    backgroundColor: COLORS.recording,
+  },
+
+  recordButtonInner: {
+    width: 58,
+    height: 58,
+
+    borderRadius: 29,
+
+    backgroundColor: COLORS.recording,
+  },
+
+  recordButtonInnerRecording: {
+    width: 34,
+    height: 34,
+
+    borderRadius: 8,
+  },
+
+  recordHelpText: {
     marginTop: 8,
-    backgroundColor: COLORS.locationSelect,
-    borderRadius: 12,
-    paddingHorizontal: 20,
-    paddingVertical: 14,
+
+    color: COLORS.white,
+
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: '600',
+
+    textAlign: 'center',
   },
+
+  flipButton: {
+    width: 52,
+    height: 52,
+
+    borderRadius: 26,
+
+    alignItems: 'center',
+    justifyContent: 'center',
+
+    backgroundColor: COLORS.overlayLight,
+
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+
+  flipButtonPressed: {
+    opacity: 0.72,
+    transform: [{ rotate: '20deg' }],
+  },
+
+  flipButtonDisabled: {
+    opacity: 0.4,
+  },
+
+  permissionScreen: {
+    flex: 1,
+
+    paddingHorizontal: 28,
+
+    alignItems: 'center',
+    justifyContent: 'center',
+
+    backgroundColor: COLORS.background,
+  },
+
+  permissionIconContainer: {
+    width: 76,
+    height: 76,
+
+    borderRadius: 38,
+
+    alignItems: 'center',
+    justifyContent: 'center',
+
+    backgroundColor: COLORS.primarySoft,
+  },
+
+  permissionTitle: {
+    marginTop: 24,
+
+    color: COLORS.textPrimary,
+
+    fontSize: 20,
+    lineHeight: 28,
+    fontWeight: '800',
+
+    textAlign: 'center',
+
+    letterSpacing: -0.4,
+  },
+
+  permissionDescription: {
+    marginTop: 10,
+
+    color: COLORS.textSecondary,
+
+    fontSize: 14,
+    lineHeight: 22,
+    fontWeight: '500',
+
+    textAlign: 'center',
+  },
+
+  permissionButton: {
+    minWidth: 168,
+    height: 50,
+
+    marginTop: 30,
+    paddingHorizontal: 20,
+
+    alignItems: 'center',
+    justifyContent: 'center',
+
+    borderRadius: 25,
+
+    backgroundColor: COLORS.primary,
+
+    shadowColor: COLORS.primary,
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+
+    elevation: 4,
+  },
+
+  permissionButtonPressed: {
+    backgroundColor: COLORS.primaryDark,
+
+    transform: [{ scale: 0.98 }],
+  },
+
   permissionButtonText: {
     color: COLORS.white,
-    fontSize: 15,
-    fontWeight: '700',
+
+    fontSize: 14,
+    lineHeight: 19,
+    fontWeight: '800',
   },
 });
