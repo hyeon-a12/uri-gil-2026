@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useCallback } from 'react';
 import {
   Alert,
   Pressable,
@@ -6,11 +6,16 @@ import {
   StyleSheet,
   Text,
   View,
+  TouchableOpacity,
+  FlatList,
+  Image,
 } from 'react-native';
-import { Image } from 'expo-image';
-import { router } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { Ionicons, Feather, MaterialCommunityIcons } from '@expo/vector-icons';
+
+import { navigateToCamera } from '@/navigation/recordingNavigation';
+import { getRecordingsByFolder } from '@/services/recordingService';
 
 const COLORS = {
   background: '#FAF8F1',
@@ -38,34 +43,10 @@ interface ClipItem {
   recordedAt: string;
   durationSeconds: number;
   thumbnail: string;
+  uri: string;
 }
 
-const INITIAL_CLIPS: ClipItem[] = [
-  {
-    id: '1',
-    title: '협재해변의 저녁',
-    recordedAt: '2026.07.23. 16:00',
-    durationSeconds: 6,
-    thumbnail:
-      'https://images.unsplash.com/photo-1500534623283-312aade485b7?w=600',
-  },
-  {
-    id: '2',
-    title: '카페에서 잠시',
-    recordedAt: '2026.07.23. 16:20',
-    durationSeconds: 7,
-    thumbnail:
-      'https://images.unsplash.com/photo-1509042239860-f550ce710b93?w=600',
-  },
-  {
-    id: '3',
-    title: '모슬포항 산책',
-    recordedAt: '2026.07.23. 17:10',
-    durationSeconds: 11,
-    thumbnail:
-      'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=600',
-  },
-];
+const FOOTER_HEIGHT = 88;
 
 function formatDuration(seconds: number) {
   const minutes = Math.floor(seconds / 60);
@@ -134,10 +115,9 @@ function ClipSelectionCard({
       >
         <View style={styles.thumbnailContainer}>
           <Image
-            source={{ uri: clip.thumbnail }}
+            source={{ uri: clip.uri }}
             style={styles.thumbnail}
-            contentFit="cover"
-            transition={150}
+            resizeMode="cover"
           />
 
           <View style={styles.thumbnailDim} />
@@ -197,50 +177,162 @@ function ClipSelectionCard({
 
 export default function ClipSelectScreen() {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
+  const { id: folderId, title: folderTitle } = useLocalSearchParams<{
+    id?: string;
+    title?: string;
+  }>();
 
-  const [clips, setClips] =
-    useState<ClipItem[]>(INITIAL_CLIPS);
+  const [clips, setClips] = useState<ClipItem[]>([]);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
-  const [selectedIds, setSelectedIds] = useState<string[]>(
-    ['2', '3'],
+  const selectedCount = selectedIds.size;
+  const allSelected = clips.length > 0 && selectedCount === clips.length;
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadClips();
+    }, [folderId]),
   );
 
-  const selectedCount = selectedIds.length;
+  const loadClips = async () => {
+    if (!folderId) {
+      setClips([]);
+      return;
+    }
 
-  const allSelected =
-    clips.length > 0 && selectedCount === clips.length;
+    try {
+      const records = await getRecordingsByFolder(folderId);
+      const items: ClipItem[] = records.map((r) => ({
+        id: r.id,
+        title: r.location.placeName ?? "제목 없음",
+        recordedAt: r.recordedAt,
+        durationSeconds: Math.floor((r.durationMs ?? 0) / 1000),
+        thumbnail: r.thumbnail,
+        uri: r.videoUri,
+      }));
+      setClips(items);
+    } catch (error) {
+      console.error('[loadClips] 로딩 실패:', error);
+      setClips([]);
+    }
+  };
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const formatDate = (isoString: string) => {
+    const date = new Date(isoString);
+    const yyyy = date.getFullYear();
+    const mm = String(date.getMonth() + 1).padStart(2, '0');
+    const dd = String(date.getDate()).padStart(2, '0');
+    const hh = String(date.getHours()).padStart(2, '0');
+    const min = String(date.getMinutes()).padStart(2, '0');
+    return `${yyyy}.${mm}.${dd} ${hh}:${min}`;
+  };
+
+  const formatDuration = (msDuration?: number) => {
+    if (!msDuration) return '00:00';
+    const totalSeconds = Math.floor(msDuration / 1000);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+  };
+
+  const sumSeconds = (items: ClipItem[]) =>
+    items.reduce((acc, c) => acc + Math.floor((c.durationSeconds ?? 0) / 1000), 0);
 
   const selectedClips = useMemo(
-    () =>
-      clips.filter((clip) =>
-        selectedIds.includes(clip.id),
-      ),
+    () => clips.filter((c) => selectedIds.has(c.id)),
     [clips, selectedIds],
   );
 
+  const totalCount = clips.length;
+  const totalSeconds = sumSeconds(clips);
+  const selectedSeconds = sumSeconds(selectedClips);
+
+  const renderClipItem = ({ item }: { item: ClipItem }) => {
+    const isSelected = selectedIds.has(item.id);
+    return (
+      <View style={styles.clipItemContainer}>
+        <TouchableOpacity
+          style={[
+            styles.badgeCheck,
+            isSelected ? styles.badgeCheckActive : styles.badgeCheckInactive,
+          ]}
+          onPress={() => toggleSelect(item.id)}>
+          {isSelected ? (
+            <Ionicons name="checkmark" size={16} color="#FFFFFF" />
+          ) : null}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.card}
+            activeOpacity={1}>
+            <View style={styles.thumbnailContainer}>
+              <Image source={{ uri: item.uri }} style={styles.thumbnail} />
+              <View style={styles.playOverlay}>
+                <Ionicons name="play" size={16} color="#FFFFFF" />
+              </View>
+            </View>
+
+            <View style={styles.cardInfo}>
+              <Text style={styles.clipTitle} numberOfLines={1}>
+                {item.title ?? '제목 없음'}
+              </Text>
+              <Text style={styles.clipDate}>{formatDate(item.recordedAt)}</Text>
+              <View style={styles.durationRow}>
+                <MaterialCommunityIcons
+                  name="clock-outline"
+                  size={12}
+                  color={ COLORS?.textSecondary || '#8E8E93' }
+                />
+                <Text style={styles.durationText}>
+                  {formatDuration(item.durationSeconds)}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.dragHandle}>
+              <Feather name="menu" size={20} color="#C7C7CC" />
+            </View>
+            </TouchableOpacity>
+      </View>
+    );
+  };
+
   const toggleClip = (clipId: string) => {
     setSelectedIds((currentIds) => {
-      if (currentIds.includes(clipId)) {
-        return currentIds.filter(
-          (selectedId) => selectedId !== clipId,
-        );
+      const next = new Set(currentIds);
+      if (next.has(clipId)) {
+        next.delete(clipId);
+      } else {
+        next.add(clipId);
       }
-
-      return [...currentIds, clipId];
+      return next;
     });
   };
 
   const toggleSelectAll = () => {
     if (allSelected) {
-      setSelectedIds([]);
+      setSelectedIds(new Set());
       return;
     }
 
-    setSelectedIds(clips.map((clip) => clip.id));
+    setSelectedIds(new Set(clips.map((clip) => clip.id)));
   };
 
   const handleCancel = () => {
-    setSelectedIds([]);
+    setSelectedIds(new Set());
     router.back();
   };
 
@@ -269,11 +361,11 @@ export default function ClipSelectScreen() {
             setClips((currentClips) =>
               currentClips.filter(
                 (clip) =>
-                  !selectedIds.includes(clip.id),
+                  !selectedIds.has(clip.id),
               ),
             );
 
-            setSelectedIds([]);
+            setSelectedIds(new Set());
           },
         },
       ],
@@ -337,7 +429,7 @@ export default function ClipSelectScreen() {
         <Pressable
           hitSlop={12}
           onPress={() => router.back()}
-          style={styles.headerSideButton}
+          style={styles.headerButton}
         >
           <Ionicons
             name="chevron-back"
@@ -353,7 +445,15 @@ export default function ClipSelectScreen() {
           클립 선택
         </Text>
 
-        <View style={styles.headerSideButton} />
+        <Pressable
+          hitSlop={12}
+          onPress={() => router.push('/')}
+          style={styles.headerButton}
+        >
+          <Text allowFontScaling={false} style={styles.editButtonText}>
+            메인
+          </Text>
+        </Pressable>
       </View>
 
       <View style={styles.selectionToolbar}>
@@ -368,145 +468,50 @@ export default function ClipSelectScreen() {
             {allSelected ? '전체 해제' : '전체 선택'}
           </Text>
         </Pressable>
-
-        <Pressable
-          hitSlop={10}
-          onPress={handleCancel}
-        >
-          <Text
-            allowFontScaling={false}
-            style={styles.toolbarButtonText}
-          >
-            취소
-          </Text>
-        </Pressable>
       </View>
 
-      <ScrollView
-        showsVerticalScrollIndicator={false}
+      <FlatList
+        data={clips}
+        keyExtractor={(item) => item.id}
+        renderItem={renderClipItem}
         contentContainerStyle={[
-          styles.scrollContent,
-          {
-            paddingBottom: insets.bottom + 120,
-          },
+          styles.listContent,
+          { paddingBottom: FOOTER_HEIGHT + insets.bottom + 16 },
         ]}
-      >
-        {clips.length > 0 ? (
-          clips.map((clip) => (
-            <ClipSelectionCard
-              key={clip.id}
-              clip={clip}
-              selected={selectedIds.includes(clip.id)}
-              onToggle={() => toggleClip(clip.id)}
-            />
-          ))
-        ) : (
+        ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <View style={styles.emptyIconContainer}>
-              <Ionicons
-                name="videocam-outline"
-                size={34}
-                color={COLORS.primary}
-              />
-            </View>
-
-            <Text
-              allowFontScaling={false}
-              style={styles.emptyTitle}
-            >
-              선택할 클립이 없습니다
-            </Text>
-
-            <Text
-              allowFontScaling={false}
-              style={styles.emptyDescription}
-            >
-              먼저 여행 클립을 촬영해주세요.
+            <Text style={styles.emptyText}>추가된 영상이 없습니다.</Text>
+            <Text style={styles.emptySubText}>
+              '+ 클립 추가하기'를 눌러 영상을 등록해보세요.
             </Text>
           </View>
-        )}
-      </ScrollView>
+        }
+      />
 
-      <View
-        style={[
-          styles.bottomPanel,
-          {
-            paddingBottom: Math.max(
-              insets.bottom,
-              12,
-            ),
-          },
-        ]}
-      >
-        <View style={styles.selectedCountBox}>
-          <Text
-            allowFontScaling={false}
-            style={styles.selectedCountLabel}
-          >
-            선택
-          </Text>
-
-          <Text
-            allowFontScaling={false}
-            style={styles.selectedCountValue}
-          >
-            {selectedCount}개
-          </Text>
+      <View style={[styles.footer, { bottom: insets.bottom }]}>
+        <View style={styles.footerInfo}>
+          <View style={styles.footerRow}>
+            <Text style={styles.footerLabel}>클립 개수</Text>
+            <Text style={styles.footerValue}>
+              {selectedCount} / {totalCount} 개
+            </Text>
+          </View>
+          <View style={styles.footerRow}>
+            <Text style={styles.footerLabel}>총 영상 길이</Text>
+            <Text style={styles.footerValue}>
+              {selectedSeconds} / {totalSeconds} 초
+            </Text>
+          </View>
         </View>
 
-        <Pressable
-          disabled={selectedCount === 0}
-          onPress={handleDelete}
-          style={({ pressed }) => [
-            styles.deleteButton,
-            selectedCount === 0 &&
-              styles.secondaryButtonDisabled,
-            pressed &&
-              selectedCount > 0 &&
-              styles.secondaryButtonPressed,
+        <TouchableOpacity
+          style={[
+            styles.createButton,
+            selectedCount === 0 && styles.createButtonDisabled,
           ]}
-        >
-          <Ionicons
-            name="trash-outline"
-            size={19}
-            color={
-              selectedCount > 0
-                ? COLORS.delete
-                : COLORS.textTertiary
-            }
-          />
-
-          <Text
-            allowFontScaling={false}
-            style={[
-              styles.deleteButtonText,
-              selectedCount === 0 &&
-                styles.disabledButtonText,
-            ]}
-          >
-            삭제
-          </Text>
-        </Pressable>
-
-        <Pressable
-          disabled={selectedCount === 0}
-          onPress={handleComplete}
-          style={({ pressed }) => [
-            styles.completeButton,
-            selectedCount === 0 &&
-              styles.completeButtonDisabled,
-            pressed &&
-              selectedCount > 0 &&
-              styles.completeButtonPressed,
-          ]}
-        >
-          <Text
-            allowFontScaling={false}
-            style={styles.completeButtonText}
-          >
-            영상 만들기
-          </Text>
-        </Pressable>
+          disabled={selectedCount === 0}>
+            <Text style={styles.createButtonText}>영상 생성</Text>
+          </TouchableOpacity>
       </View>
     </View>
   );
@@ -529,15 +534,12 @@ const styles = StyleSheet.create({
 
     backgroundColor: COLORS.background,
   },
-
-  headerSideButton: {
+    headerButton: {
     width: 48,
     height: 42,
-
     alignItems: 'center',
     justifyContent: 'center',
   },
-
   headerTitle: {
     paddingBottom: 10,
 
@@ -548,6 +550,12 @@ const styles = StyleSheet.create({
     fontWeight: '800',
 
     letterSpacing: -0.4,
+  },
+    editButtonText: {
+    color: COLORS.primary,
+    fontSize: 14,
+    lineHeight: 19,
+    fontWeight: '700',
   },
 
   selectionToolbar: {
@@ -645,24 +653,6 @@ const styles = StyleSheet.create({
     transform: [{ scale: 0.995 }],
   },
 
-  thumbnailContainer: {
-    position: 'relative',
-
-    width: 82,
-    height: 106,
-
-    borderRadius: 14,
-
-    overflow: 'hidden',
-
-    backgroundColor: '#E8E5DF',
-  },
-
-  thumbnail: {
-    width: '100%',
-    height: '100%',
-  },
-
   thumbnailDim: {
     ...StyleSheet.absoluteFillObject,
 
@@ -702,16 +692,6 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
 
-  clipTitle: {
-    color: COLORS.textPrimary,
-
-    fontSize: 15,
-    lineHeight: 21,
-    fontWeight: '800',
-
-    letterSpacing: -0.3,
-  },
-
   recordedAt: {
     marginTop: 8,
 
@@ -720,36 +700,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 17,
     fontWeight: '500',
-  },
-
-  durationRow: {
-    marginTop: 6,
-
-    flexDirection: 'row',
-    alignItems: 'center',
-
-    gap: 4,
-  },
-
-  durationText: {
-    color: COLORS.textSecondary,
-
-    fontSize: 12,
-    lineHeight: 17,
-    fontWeight: '600',
-  },
-
-  emptyContainer: {
-    marginTop: 50,
-    paddingVertical: 56,
-
-    alignItems: 'center',
-
-    backgroundColor: COLORS.card,
-
-    borderRadius: 22,
-    borderWidth: 1,
-    borderColor: COLORS.border,
   },
 
   emptyIconContainer: {
@@ -931,5 +881,176 @@ const styles = StyleSheet.create({
 
   disabledButtonText: {
     color: COLORS.textTertiary,
+  },
+  editText: {
+    fontSize: 15,
+    color: COLORS.primary,
+    fontWeight: '600',
+  },
+  subHeader: {
+    paddingVertical: 16,
+    alignItems: 'center',
+    gap: 8,
+  },
+  description: {
+    fontSize: 13,
+    color: '#8E8E93',
+  },
+  addVideoButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: COLORS.primaryPressed,
+  },
+  addVideoText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: COLORS.primary,
+  },
+  listContent: {
+    paddingHorizontal: 16,
+  },
+  clipItemContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  badgeCheck: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+    borderWidth: 1.5,
+  },
+  badgeCheckActive: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  badgeCheckInactive: {
+    backgroundColor: '#FFFFFF',
+    borderColor: '#D1D1D6',
+  },
+  card: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1},
+    shadowOpacity: 0.03,
+    shadowRadius: 3,
+    elevation: 1,
+  },
+  thumbnailContainer: {
+    position: 'relative',
+    width: 60,
+    height: 60,
+    borderRadius: 8,
+    overflow: 'hidden',
+    backgroundColor: '#E5E5EA',
+  },
+  thumbnail: {
+    width: '100%',
+    height: '100%',
+  },
+  playOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.25)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  cardInfo: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  clipTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#1C1C1E',
+    marginBottom: 2,
+  },
+  clipDate: {
+    fontSize: 12,
+    color: '#AEAEB2',
+    marginBottom: 4,
+  },
+  durationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+  },
+  durationText: {
+    fontSize: 11,
+    color: '#8E8E93',
+  },
+  dragHandle: {
+    padding: 8,
+  },
+  emptyContainer: {
+    paddingVertical: 60,
+    alignItems: 'center',
+  },
+  emptyText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#8E8E93',
+  },
+  emptySubText: {
+    fontSize: 13,
+    color: '#C7C7CC',
+    marginTop: 4,
+  },
+  footer: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    height: FOOTER_HEIGHT,
+    backgroundColor: '#FFFFFF',
+    borderTopWidth: 1,
+    borderTopColor: '#F2F2F7',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+  },
+  footerInfo: {
+    flex: 1,
+    gap: 4,
+  },
+  footerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  footerLabel: {
+    fontSize: 13,
+    color: '#8E8E93',
+    width: 72,
+  },
+  footerValue: {
+    fontSize: 13,
+    color: '#1C1C1E',
+    fontWeight: '600',
+  },
+  createButton: {
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+    borderRadius: 12,
+  },
+  createButtonDisabled: {
+    backgroundColor: '#FFB8A4',
+  },
+  createButtonText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
   },
 });

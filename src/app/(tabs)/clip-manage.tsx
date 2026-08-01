@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import {
+  Alert,
   Pressable,
   StyleSheet,
   Text,
@@ -13,7 +14,7 @@ import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { setActiveFolder } from '@/services/activeFolderService';
+import { setActiveFolder, clearActiveFolder } from '@/services/activeFolderService';
 
 const COLORS = {
   background: '#FAF8F1',
@@ -110,6 +111,38 @@ export default function ClipManageScreen() {
     }
   };
 
+  const handleDeleteFolder = () => {
+    if (!selectedFolderForMenu) return;
+
+    const folder = selectedFolderForMenu;
+    setSelectedFolderForMenu(null);
+
+    Alert.alert(
+      `폴더 삭제`,
+      `'${folder.title}' 폴더를 삭제할까요?\n폴더 안의 모든 클립도 함께 삭제됩니다.`,
+      [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '삭제',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              if (activeFolderId === folder.id) {
+                setActiveFolderId(null);
+                await clearActiveFolder();
+              }
+
+              setFolders((prev) => prev.filter((f) => f.id !== folder.id));
+            } catch (error) {
+              console.error('[handleDeleteFolder] 삭제 실패', error);
+              Alert.alert('삭제 실패', '폴더를 삭제하는 중 문제가 발생했습니다.');
+            }
+          },
+        },
+      ],
+    );
+  };
+
   const renderFolderItem = ({ item }: { item: FolderItem }) => {
     const isActive = item.id === activeFolderId;
 
@@ -157,16 +190,7 @@ export default function ClipManageScreen() {
         <Text allowFontScaling={false} style={styles.headerTitle}>
           클립 관리
         </Text>
-
-        <Pressable
-          hitSlop={12}
-          onPress={() => router.push('/')}
-          style={styles.headerButton}
-        >
-          <Text allowFontScaling={false} style={styles.editButtonText}>
-            메인
-          </Text>
-        </Pressable>
+        <View style={styles.headerButton} />
       </View>
 
       <View style={styles.tabContainer}>
@@ -261,6 +285,23 @@ export default function ClipManageScreen() {
                     color={COLORS.textPrimary}
                   />
                   <Text style={styles.menuText}>카메라 연결하기</Text>
+                </TouchableOpacity>
+
+                <View style={styles.menuDivider} />
+
+                <TouchableOpacity
+                  style={styles.menuItem}
+                  activeOpacity={0.7}
+                  onPress={handleDeleteFolder}
+                >
+                  <Ionicons
+                    name='trash-outline'
+                    size={20}
+                    color={COLORS.delete}
+                  />
+                  <Text style={[styles.menuText, styles.menuTextDelete]}>
+                    삭제하기
+                  </Text>
                 </TouchableOpacity>
               </View>
             </TouchableWithoutFeedback>
@@ -447,9 +488,18 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     gap: 10,
   },
+  menuDivider: {
+    height: 1,
+    backgroundColor: COLORS.divider,
+    marginHorizontal: 8,
+    marginVertical: 4,
+  },
   menuText: {
     fontSize: 15,
     fontWeight: '600',
     color: COLORS.textPrimary,
+  },
+  menuTextDelete: {
+    color: COLORS.delete,
   },
 });
