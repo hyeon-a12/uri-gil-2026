@@ -3,10 +3,13 @@ import {
   router,
   useLocalSearchParams,
 } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import {
   Alert,
+  Animated,
+  Dimensions,
   KeyboardAvoidingView,
+  PanResponder,
   Platform,
   Pressable,
   ScrollView,
@@ -41,6 +44,13 @@ const COLORS = {
 
   shadow: '#4A4035',
 };
+
+const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+
+// 시트 높이 범위 (화면 높이 기준)
+const MIN_SHEET_HEIGHT = SCREEN_HEIGHT * 0.42;
+const MAX_SHEET_HEIGHT = SCREEN_HEIGHT * 0.88;
+const DEFAULT_SHEET_HEIGHT = SCREEN_HEIGHT * 0.56;
 
 type ConfirmStep =
   | 'location'
@@ -144,14 +154,52 @@ export default function LocationConfirmScreen() {
   const [selectedTripId, setSelectedTripId] =
     useState<string | null>(null);
 
-  const [manualInputVisible, setManualInputVisible] =
+  const [manualInputFocused, setManualInputFocused] =
     useState(false);
 
   const [manualLocation, setManualLocation] =
     useState('');
 
+  // ─── 드래그 가능한 시트 ────────────────────────
+  const sheetHeight = useRef(
+    new Animated.Value(DEFAULT_SHEET_HEIGHT),
+  ).current;
+  const lastHeightRef = useRef(DEFAULT_SHEET_HEIGHT);
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gestureState) =>
+        Math.abs(gestureState.dy) > 2,
+      onPanResponderMove: (_, gestureState) => {
+        // 위로 드래그(dy < 0) → 시트 높이 증가
+        const newHeight =
+          lastHeightRef.current - gestureState.dy;
+        const clamped = Math.max(
+          MIN_SHEET_HEIGHT,
+          Math.min(MAX_SHEET_HEIGHT, newHeight),
+        );
+        sheetHeight.setValue(clamped);
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        const newHeight =
+          lastHeightRef.current - gestureState.dy;
+        lastHeightRef.current = Math.max(
+          MIN_SHEET_HEIGHT,
+          Math.min(MAX_SHEET_HEIGHT, newHeight),
+        );
+      },
+    }),
+  ).current;
+  // ─────────────────────────────────────────────
+
+  const hasManualLocation =
+    manualLocation.trim().length > 0;
+  const isManualActive =
+    manualInputFocused || hasManualLocation;
+
   const selectedLocation = useMemo(() => {
-    if (manualInputVisible && manualLocation.trim()) {
+    if (hasManualLocation) {
       return {
         id: 'manual',
         name: manualLocation.trim(),
@@ -163,7 +211,7 @@ export default function LocationConfirmScreen() {
         location.id === selectedLocationId,
     );
   }, [
-    manualInputVisible,
+    hasManualLocation,
     manualLocation,
     selectedLocationId,
   ]);
@@ -177,15 +225,10 @@ export default function LocationConfirmScreen() {
   );
 
   const hasLocationSelection =
-    selectedLocationId !== null ||
-    manualLocation.trim().length > 0;
+    selectedLocationId !== null || hasManualLocation;
 
   const hasTripSelection =
     selectedTripId !== null;
-
-  const handleRetake = () => {
-    router.back();
-  };
 
   const handleBackStep = () => {
     if (step === 'trip') {
@@ -199,14 +242,9 @@ export default function LocationConfirmScreen() {
   const handleLocationSelect = (
     locationId: string,
   ) => {
-    setManualInputVisible(false);
     setManualLocation('');
+    setManualInputFocused(false);
     setSelectedLocationId(locationId);
-  };
-
-  const handleManualInputOpen = () => {
-    setSelectedLocationId(null);
-    setManualInputVisible(true);
   };
 
   const handleNext = () => {
@@ -295,8 +333,20 @@ export default function LocationConfirmScreen() {
             </View>
           </View>
 
-          <View style={styles.sheet}>
-            <View style={styles.dragHandle} />
+          {/* 드래그로 높이 조절 가능한 시트 */}
+          <Animated.View
+            style={[
+              styles.sheet,
+              { height: sheetHeight },
+            ]}
+          >
+            {/* 드래그 핸들 영역 (터치 영역 확장) */}
+            <View
+              style={styles.dragHandleArea}
+              {...panResponder.panHandlers}
+            >
+              <View style={styles.dragHandle} />
+            </View>
 
             {step === 'location' ? (
               <>
@@ -316,10 +366,40 @@ export default function LocationConfirmScreen() {
 
                     <Text
                       allowFontScaling={false}
+                      numberOfLines={1}
                       style={styles.sheetTitle}
                     >
                       여기가 맞나요?
                     </Text>
+
+                    {/* 인라인 "다음" 버튼 - 제목 오른쪽 */}
+                    <Pressable
+                      onPress={handleNext}
+                      disabled={!hasLocationSelection}
+                      style={({ pressed }) => [
+                        styles.inlineNextButton,
+                        !hasLocationSelection &&
+                          styles.inlineNextButtonDisabled,
+                        pressed &&
+                          hasLocationSelection &&
+                          styles.inlineNextButtonPressed,
+                      ]}
+                    >
+                      <Text
+                        allowFontScaling={false}
+                        style={
+                          styles.inlineNextButtonText
+                        }
+                      >
+                        다음
+                      </Text>
+
+                      <Ionicons
+                        name="arrow-forward"
+                        size={15}
+                        color="#FFFFFF"
+                      />
+                    </Pressable>
                   </View>
 
                   <Text
@@ -339,6 +419,68 @@ export default function LocationConfirmScreen() {
                   keyboardShouldPersistTaps="handled"
                   showsVerticalScrollIndicator={false}
                 >
+                  {/* 직접 입력 필드 - 항상 최상단 */}
+                  <View
+                    style={[
+                      styles.manualInputField,
+                      isManualActive &&
+                        styles.manualInputFieldActive,
+                    ]}
+                  >
+                    <Ionicons
+                      name="create-outline"
+                      size={19}
+                      color={
+                        isManualActive
+                          ? COLORS.primary
+                          : COLORS.textSecondary
+                      }
+                    />
+
+                    <TextInput
+                      value={manualLocation}
+                      onChangeText={(text) => {
+                        setSelectedLocationId(null);
+                        setManualLocation(text);
+                      }}
+                      onFocus={() => {
+                        setSelectedLocationId(null);
+                        setManualInputFocused(true);
+                      }}
+                      onBlur={() => {
+                        setManualInputFocused(false);
+                      }}
+                      placeholder="직접 입력하기"
+                      placeholderTextColor={
+                        COLORS.textSecondary
+                      }
+                      returnKeyType="done"
+                      allowFontScaling={false}
+                      style={[
+                        styles.manualInputInline,
+                        isManualActive &&
+                          styles.manualInputInlineActive,
+                      ]}
+                    />
+
+                    {manualLocation.length > 0 ? (
+                      <Pressable
+                        hitSlop={10}
+                        onPress={() =>
+                          setManualLocation('')
+                        }
+                      >
+                        <Ionicons
+                          name="close-circle"
+                          size={20}
+                          color={
+                            COLORS.textTertiary
+                          }
+                        />
+                      </Pressable>
+                    ) : null}
+                  </View>
+
                   {MOCK_LOCATION_SUGGESTIONS.map(
                     (location) => (
                       <LocationOptionCard
@@ -356,110 +498,7 @@ export default function LocationConfirmScreen() {
                       />
                     ),
                   )}
-
-                  <Pressable
-                    onPress={handleManualInputOpen}
-                    style={({ pressed }) => [
-                      styles.manualInputButton,
-                      manualInputVisible &&
-                        styles.manualInputButtonSelected,
-                      pressed &&
-                        styles.cardPressed,
-                    ]}
-                  >
-                    <Ionicons
-                      name="create-outline"
-                      size={19}
-                      color={
-                        manualInputVisible
-                          ? COLORS.primary
-                          : COLORS.textSecondary
-                      }
-                    />
-
-                    <Text
-                      allowFontScaling={false}
-                      style={[
-                        styles.manualInputButtonText,
-                        manualInputVisible &&
-                          styles.manualInputButtonTextSelected,
-                      ]}
-                    >
-                      직접 입력하기
-                    </Text>
-
-                    <Ionicons
-                      name="chevron-forward"
-                      size={18}
-                      color={COLORS.textTertiary}
-                    />
-                  </Pressable>
-
-                  {manualInputVisible ? (
-                    <View
-                      style={
-                        styles.manualInputContainer
-                      }
-                    >
-                      <TextInput
-                        value={manualLocation}
-                        onChangeText={
-                          setManualLocation
-                        }
-                        placeholder="장소 이름을 입력해주세요"
-                        placeholderTextColor={
-                          COLORS.textTertiary
-                        }
-                        autoFocus
-                        returnKeyType="done"
-                        style={styles.manualInput}
-                      />
-
-                      {manualLocation.length > 0 ? (
-                        <Pressable
-                          hitSlop={10}
-                          onPress={() =>
-                            setManualLocation('')
-                          }
-                        >
-                          <Ionicons
-                            name="close-circle"
-                            size={20}
-                            color={
-                              COLORS.textTertiary
-                            }
-                          />
-                        </Pressable>
-                      ) : null}
-                    </View>
-                  ) : null}
                 </ScrollView>
-
-                <Pressable
-                  onPress={handleNext}
-                  disabled={!hasLocationSelection}
-                  style={({ pressed }) => [
-                    styles.primaryButton,
-                    !hasLocationSelection &&
-                      styles.primaryButtonDisabled,
-                    pressed &&
-                      hasLocationSelection &&
-                      styles.primaryButtonPressed,
-                  ]}
-                >
-                  <Text
-                    allowFontScaling={false}
-                    style={styles.primaryButtonText}
-                  >
-                    다음
-                  </Text>
-
-                  <Ionicons
-                    name="arrow-forward"
-                    size={19}
-                    color="#FFFFFF"
-                  />
-                </Pressable>
               </>
             ) : (
               <>
@@ -533,7 +572,8 @@ export default function LocationConfirmScreen() {
                           styles.selectedLocationName
                         }
                       >
-                       {selectedLocation?.name ?? '선택한 장소'}
+                        {selectedLocation?.name ??
+                          '선택한 장소'}
                       </Text>
                     </View>
 
@@ -655,7 +695,7 @@ export default function LocationConfirmScreen() {
                 </Pressable>
               </>
             )}
-          </View>
+          </Animated.View>
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -677,8 +717,9 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
   },
 
+  // 시트 높이가 애니메이션되면서 이 영역이 자동으로 늘어남/줄어듦
   topSection: {
-    flex: 0.44,
+    flex: 1,
 
     paddingHorizontal: 18,
     paddingBottom: 12,
@@ -707,7 +748,7 @@ const styles = StyleSheet.create({
 
   videoContainer: {
     flex: 1,
-    minHeight: 190,
+    minHeight: 100,
 
     overflow: 'hidden',
 
@@ -726,11 +767,9 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
 
+  // flex 제거: Animated로 height를 직접 제어
   sheet: {
-    flex: 0.56,
-
     paddingHorizontal: 20,
-    paddingTop: 10,
     paddingBottom: 18,
 
     backgroundColor: COLORS.sheet,
@@ -752,13 +791,20 @@ const styles = StyleSheet.create({
     elevation: 12,
   },
 
+  // 드래그 핸들 터치 영역 (넉넉하게 확보해서 잡기 쉽게)
+  dragHandleArea: {
+    width: '100%',
+
+    paddingTop: 12,
+    paddingBottom: 14,
+
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
   dragHandle: {
     width: 42,
     height: 5,
-
-    marginBottom: 17,
-
-    alignSelf: 'center',
 
     borderRadius: 3,
 
@@ -800,6 +846,53 @@ const styles = StyleSheet.create({
     letterSpacing: -0.5,
   },
 
+  // 인라인 "다음" 버튼 스타일
+  inlineNextButton: {
+    height: 38,
+
+    paddingHorizontal: 14,
+
+    flexDirection: 'row',
+    alignItems: 'center',
+
+    gap: 4,
+
+    borderRadius: 12,
+
+    backgroundColor: COLORS.primary,
+
+    shadowColor: COLORS.primary,
+    shadowOffset: {
+      width: 0,
+      height: 3,
+    },
+    shadowOpacity: 0.22,
+    shadowRadius: 6,
+
+    elevation: 3,
+  },
+
+  inlineNextButtonPressed: {
+    backgroundColor: COLORS.primaryDark,
+
+    transform: [{ scale: 0.97 }],
+  },
+
+  inlineNextButtonDisabled: {
+    backgroundColor: COLORS.disabled,
+
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+
+  inlineNextButtonText: {
+    color: '#FFFFFF',
+
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '800',
+  },
+
   sheetDescription: {
     marginTop: 8,
     marginLeft: 48,
@@ -825,7 +918,8 @@ const styles = StyleSheet.create({
     transform: [{ scale: 0.995 }],
   },
 
-  manualInputButton: {
+  // 직접 입력 필드 (버튼 모양이면서 그 자체가 TextInput)
+  manualInputField: {
     minHeight: 58,
 
     paddingHorizontal: 16,
@@ -843,49 +937,25 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
   },
 
-  manualInputButtonSelected: {
+  manualInputFieldActive: {
     borderColor: COLORS.primary,
     backgroundColor: '#FFFDFC',
   },
 
-  manualInputButtonText: {
+  manualInputInline: {
     flex: 1,
 
     color: COLORS.textSecondary,
 
     fontSize: 14,
-    lineHeight: 19,
     fontWeight: '600',
+
+    padding: 0,
   },
 
-  manualInputButtonTextSelected: {
-    color: COLORS.primary,
-    fontWeight: '700',
-  },
-
-  manualInputContainer: {
-    minHeight: 54,
-
-    paddingHorizontal: 15,
-
-    flexDirection: 'row',
-    alignItems: 'center',
-
-    borderRadius: 15,
-
-    backgroundColor: COLORS.card,
-
-    borderWidth: 1,
-    borderColor: COLORS.primary,
-  },
-
-  manualInput: {
-    flex: 1,
-
+  manualInputInlineActive: {
     color: COLORS.textPrimary,
-
-    fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '700',
   },
 
   primaryButton: {
