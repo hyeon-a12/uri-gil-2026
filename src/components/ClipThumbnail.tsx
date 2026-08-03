@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, Image, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Image, TouchableOpacity, StyleSheet } from 'react-native';
+import { AppText as Text } from '@/components/AppText';
 import { Ionicons } from '@expo/vector-icons';
 import { useResponsive } from '../hooks/use-responsive';
 import { homeColors } from '../constants/home-theme';

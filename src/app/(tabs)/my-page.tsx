@@ -2,14 +2,16 @@ import React from 'react';
 // 화면 구성에 필요한 React Native 기본 컴포넌트들을 불러옵니다.
 // SafeAreaView: 아이폰 노치 등 화면이 잘리지 않는 안전 영역을 확보해 줍니다.
 // ScrollView: 화면이 길어질 때 위아래로 스크롤할 수 있게 해줍니다.
-import { StyleSheet, Text, View, ScrollView, Pressable, SafeAreaView } from 'react-native';
+import { StyleSheet, View, ScrollView, Pressable, SafeAreaView } from 'react-native';
 // 아이콘 사용을 위해 Expo에서 기본 제공하는 Feather 아이콘셋을 불러옵니다.
 import { Feather } from '@expo/vector-icons';
+// 앱 전체 공통 폰트(SpoqaHanSansNeo)가 자동 적용되는 Text 컴포넌트입니다.
+import { AppText as Text } from '@/components/AppText';
 
 // 🎨 앱 전체에서 공통으로 사용할 색상 팔레트입니다.
 const COLORS = {
-  background: '#FAF8F1', // 앱의 기본 배경색 (연한 아이보리)
-  card: '#FFFFFF',       // 카드나 박스의 배경색 (흰색)
+  background: '#FAF8F1', // 앱의 기본 배경색 (다른 화면(내 루트 등)과 동일한 아이보리)
+  card: '#FFFFFF',       // 카드나 박스의 배경색 
 
   primary: '#FF8F32',    // 메인 브랜드 컬러 (오렌지)
   primaryDark: '#E97B1F',// 눌렸을 때나 강조할 때 쓸 어두운 오렌지
@@ -20,7 +22,6 @@ const COLORS = {
   textTertiary: '#B2B0AA', // 부가적인 텍스트 (날짜, 힌트 등)
 
   border: '#ECE8DF',       // 얇은 테두리 선 색상
-  divider: '#F0ECE4',      // 구역을 나누는 굵은 선 색상
 
   shadow: '#443A31',       // 그림자 색상
 };
@@ -49,14 +50,16 @@ export default function MyPageScreen() {
           <Feather name="bell" size={24} color={COLORS.textPrimary} style={styles.icon} />
         </View>
 
-        {/* 2️⃣ 인사말 구역: 유저의 닉네임을 크게 보여줍니다. */}
+        {/* 2️⃣ 인사말 구역: 프로필 사진(동그라미) + 유저의 닉네임을 보여줍니다. */}
         <View style={styles.greetingSection}>
+          <View style={styles.profileCircle}>
+            <Feather name="user" size={24} color={COLORS.textTertiary} />
+          </View>
           <Text style={styles.greetingText}>안녕하세요{'\n'}텅굴이님</Text>
         </View>
 
         {/* 3️⃣ 나의 여행 구역: 여행 내역을 박스(Card) 형태로 강조 */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>나의 여행</Text>
           
           <View style={styles.orderCard}>
             <View style={styles.orderCardHeader}>
@@ -77,53 +80,62 @@ export default function MyPageScreen() {
           </View>
         </View>
 
-        {/* 구역과 구역 사이를 명확하게 분리하는 두꺼운 회색 선. */}
-        <View style={styles.thickDivider} />
-
-        {/* 4️⃣ 나의 활동 구역 */}
+        {/* 4️⃣ 나의 활동 구역: '나의 여행'과 동일한 하얀 카드 스타일로 3개 항목을 보여줍니다. */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>나의 활동</Text>
-          <MenuItem title="내 루트" />
-          <MenuItem title="촬영한 클립" />
-          <MenuItem title="방문한 장소" />
-        </View>
 
-        <View style={styles.thickDivider} />
-
-        {/* 5️⃣ 나의 정보 구역 설정 메뉴 */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>나의 정보</Text>
-          <MenuItem title="나의 정보 관리" />
-          <MenuItem title="알림 설정" />
-          <MenuItem title="위치 정보 및 개인정보 처리방침" />
-        </View>
-
-        <View style={styles.thickDivider} />
-
-        {/* 6️⃣ 고객센터 구역: Q&A, 공지사항 등 */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionTitle}>고객센터</Text>
-            {/* 고객센터 타이틀 우측에 작게 들어가는 '바로가기' 텍스트 버튼입니다. */}
-            <Pressable style={styles.shortcutBtn}>
-              <Text style={styles.shortcutText}>바로가기</Text>
-              <Feather name="chevron-right" size={14} color={COLORS.textTertiary} />
-            </Pressable>
+          {/* 1행 3열: 카드 3개를 가로로 나란히 배치합니다. */}
+          <View style={styles.activityCardList}>
+            {[
+              { title: '내 루트', icon: 'map' as const },
+              { title: '촬영한 클립', icon: 'film' as const },
+              { title: '방문한 장소', icon: 'map-pin' as const },
+            ].map((item) => (
+              <Pressable key={item.title} style={styles.activityCard}>
+                <Feather name={item.icon} size={22} color={COLORS.primary} />
+                <Text style={styles.activityCardTitle}>{item.title}</Text>
+              </Pressable>
+            ))}
           </View>
-          <MenuItem title=" Q&A 리스트" />
-          <MenuItem title="1:1 문의하기" />
-          <MenuItem title="공지사항" />
         </View>
 
-        <View style={styles.thickDivider} />
+        <View style={styles.thinDivider} />
 
-        {/* 7️⃣ 프로그램 정보 구역: 앱 버전 등 표시 */}
+        {/* 5️⃣ 나의 정보 구역 설정 메뉴: 제목까지 흰색 카드 안에 함께 넣습니다. */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>프로그램 정보</Text>
-          {/* 마지막 항목은 밑줄을 없애기 위해 배열 스타일을 사용해 borderBottomWidth를 0으로 덮어씌웠습니다. */}
-          <View style={[styles.menuItem, { borderBottomWidth: 0 }]}>
-            <Text style={styles.menuItemText}>현재 버전</Text>
-            <Text style={styles.versionText}>Version 3.5.1</Text>
+          <View style={styles.menuCard}>
+            <Text style={styles.sectionTitle}>나의 정보</Text>
+            <MenuItem title="나의 정보 관리" />
+            <MenuItem title="알림 설정" />
+            <MenuItem title="위치 정보 및 개인정보 처리방침" />
+          </View>
+        </View>
+
+        <View style={styles.thinDivider} />
+
+        {/* 6️⃣ 고객센터 구역: Q&A, 공지사항 등. 제목까지 흰색 카드 안에 함께 넣습니다. */}
+        <View style={styles.section}>
+          <View style={styles.menuCard}>
+            <View style={styles.sectionHeaderRow}>
+              <Text style={styles.sectionTitle}>고객센터</Text>
+            </View>
+            <MenuItem title=" Q&A 리스트" />
+            <MenuItem title="1:1 문의하기" />
+            <MenuItem title="공지사항" />
+          </View>
+        </View>
+
+        <View style={styles.thinDivider} />
+
+        {/* 7️⃣ 프로그램 정보 구역: 앱 버전 등 표시. 제목까지 흰색 카드 안에 함께 넣습니다. */}
+        <View style={styles.section}>
+          <View style={styles.menuCard}>
+            <Text style={styles.sectionTitle}>프로그램 정보</Text>
+            {/* 마지막(유일한) 항목은 밑줄을 없애기 위해 배열 스타일을 사용해 borderBottomWidth를 0으로 덮어씌웠습니다. */}
+            <View style={[styles.menuItem, { borderBottomWidth: 0 }]}>
+              <Text style={styles.menuItemText}>현재 버전</Text>
+              <Text style={styles.versionText}>Version 3.5.1</Text>
+            </View>
           </View>
         </View>
 
@@ -137,7 +149,7 @@ export default function MyPageScreen() {
           
           {/* 약관 및 링크들을 가로로 나열하되, 자리가 없으면 다음 줄로 넘어가도록(flexWrap: 'wrap') 설정했습니다. */}
           <View style={styles.footerLinks}>
-            {['로그아웃', '매장안내', '고객센터', '멤버십 안내', '입점문의', '사업자 정보 확인', '이용약관'].map((link, idx) => (
+            {['로그아웃', '고객센터', '이용약관'].map((link, idx) => (
               <Text key={idx} style={styles.footerLinkText}>{link}</Text>
             ))}
             {/* 개인정보처리방침은 법적으로 강조해야 하므로 폰트를 굵게 처리했습니다. */}
@@ -174,31 +186,44 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
   greetingSection: {
+    flexDirection: 'row', // 프로필 동그라미와 인사말 텍스트를 가로로 나란히 배치합니다.
+    alignItems: 'center',
+    gap: 14,
     paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 40,
+    paddingTop: 12,
+    paddingBottom: 24, // 기존 40에서 줄여서 인사말 영역의 높이를 낮췄습니다.
+  },
+  profileCircle: {
+    width: 52,
+    height: 52,
+    borderRadius: 26, // width/height의 절반이라 정확한 원이 됩니다.
+    backgroundColor: COLORS.card,
+    borderWidth: 1,
+    borderColor: COLORS.border, // 배경과 카드 색이 비슷해서 테두리로 동그라미 형태를 구분해 줍니다.
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   greetingText: {
     fontSize: 26,
     fontWeight: 'bold',
     color: COLORS.textPrimary,
-    lineHeight: 34, // 줄 간격을 넓혀서 글씨가 덜 답답해 보이게 합니다.
+    lineHeight: 32, // 인사말 높이를 낮추기 위해 34에서 살짝 줄였습니다.
   },
   section: {
     paddingHorizontal: 20,
-    paddingVertical: 24,
+    paddingVertical: 7, // 섹션(카드) 간의 간격
   },
   sectionTitle: {
-    fontSize: 14,
-    color: COLORS.textTertiary,
+    fontSize: 19,
+    color: COLORS.textPrimary,
     marginBottom: 16,
-    fontWeight: '600',
+    fontWeight: 'bold',
   },
   sectionHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 17,
   },
   shortcutBtn: {
     flexDirection: 'row',
@@ -211,10 +236,8 @@ const styles = StyleSheet.create({
   },
   orderCard: {
     backgroundColor: COLORS.card,
-    borderRadius: 12, // 모서리 둥글게
+    borderRadius: 23, // 모서리를 더 둥글게
     padding: 20,
-    borderWidth: 1,
-    borderColor: COLORS.border,
     // 아래 4줄은 아이폰 그림자 설정입니다.
     shadowColor: COLORS.shadow,
     shadowOffset: { width: 0, height: 2 },
@@ -257,6 +280,45 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: COLORS.textSecondary,
   },
+  activityCardList: {
+    flexDirection: 'row', // 3개의 카드를 가로 한 줄로 나열합니다.
+    gap: 8, // 카드 사이의 간격을 12에서 줄여 더 가깝게 했습니다.
+  },
+  activityCard: {
+    flex: 1, // 3개 카드가 동일한 너비로 균등하게 나눠 갖습니다.
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.card,
+    borderRadius: 23, // 위 '나의 여행' 카드(orderCard)와 동일한 둥근 정도
+    paddingVertical: 20,
+    paddingHorizontal: 8,
+    gap: 10,
+    // 아래 4줄은 orderCard와 동일한 그림자 설정입니다.
+    shadowColor: COLORS.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  activityCardTitle: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: COLORS.textPrimary,
+    textAlign: 'center',
+  },
+  menuCard: {
+    backgroundColor: COLORS.card,
+    borderRadius: 23, // 위 '나의 여행' 카드(orderCard)와 동일한 둥근 정도
+    paddingHorizontal: 20,
+    paddingTop: 20, // 카드 안에 함께 들어온 제목 위쪽 여백입니다.
+    paddingBottom: 4, // 마지막 메뉴 항목 아래쪽 여백입니다.
+    // 아래 4줄은 orderCard와 동일한 그림자 설정입니다.
+    shadowColor: COLORS.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
   menuItem: {
     flexDirection: 'row',
     justifyContent: 'space-between', // 왼쪽 텍스트와 오른쪽 화살표를 양끝으로 찢어줍니다.
@@ -277,16 +339,12 @@ const styles = StyleSheet.create({
     color: COLORS.textTertiary,
     marginRight: 8,
   },
-  thickDivider: {
-    height: 8, // 구역을 나누는 굵은 선의 두께입니다.
-    backgroundColor: COLORS.divider,
-  },
   versionText: {
     fontSize: 14,
     color: COLORS.textTertiary,
   },
   footer: {
-    backgroundColor: COLORS.card,
+    backgroundColor: COLORS.background, // 페이지 배경색과 동일하게 맞췄습니다.
     padding: 20,
     paddingBottom: 40,
     borderTopWidth: 1,
@@ -296,7 +354,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: COLORS.background, // 푸터 안의 카드 배경색을 살짝 다르게 줍니다.
+    backgroundColor: COLORS.card, // 푸터 배경이 페이지 배경과 같아졌으므로, 흰 카드색으로 대비를 줍니다.
     padding: 16,
     borderRadius: 8,
     marginBottom: 20,
@@ -324,5 +382,9 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: COLORS.textSecondary,
     marginBottom: 8,
+  },
+  thinDivider: {
+    height: 3,
+    backgroundColor: '#FAF8F1', // 기존에 쓰던 배경색(아이보리)을 그대로 얇은 구분선 색으로 사용합니다.
   },
 });
