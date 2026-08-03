@@ -5,6 +5,8 @@ import React from 'react';
 import { StyleSheet, View, ScrollView, Pressable, SafeAreaView } from 'react-native';
 // 아이콘 사용을 위해 Expo에서 기본 제공하는 Feather 아이콘셋을 불러옵니다.
 import { Feather } from '@expo/vector-icons';
+// 메뉴 카드를 눌렀을 때 해당 화면으로 이동시키기 위해 사용합니다.
+import { router } from 'expo-router';
 // 앱 전체 공통 폰트(SpoqaHanSansNeo)가 자동 적용되는 Text 컴포넌트입니다.
 import { AppText as Text } from '@/components/AppText';
 
@@ -87,11 +89,15 @@ export default function MyPageScreen() {
           {/* 1행 3열: 카드 3개를 가로로 나란히 배치합니다. */}
           <View style={styles.activityCardList}>
             {[
-              { title: '내 루트', icon: 'map' as const },
-              { title: '촬영한 클립', icon: 'film' as const },
-              { title: '방문한 장소', icon: 'map-pin' as const },
+              { title: '내 루트', icon: 'map' as const, route: '/my-routes' as const },
+              { title: '촬영한 클립', icon: 'film' as const, route: null }, // TODO: 화면 코드 전달받으면 연결
+              { title: '방문한 장소', icon: 'map-pin' as const, route: null }, // TODO: 화면 코드 전달받으면 연결
             ].map((item) => (
-              <Pressable key={item.title} style={styles.activityCard}>
+              <Pressable
+                key={item.title}
+                style={styles.activityCard}
+                onPress={item.route ? () => router.push(item.route) : undefined}
+              >
                 <Feather name={item.icon} size={22} color={COLORS.primary} />
                 <Text style={styles.activityCardTitle}>{item.title}</Text>
               </Pressable>
