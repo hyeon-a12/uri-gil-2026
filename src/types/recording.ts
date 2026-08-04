@@ -14,3 +14,22 @@ export type LocationSuggestion = {
 export type LocationConfirmParams = {
   videoUri?: string;
 };
+
+/**
+ * 로컬 저장/DB에 보관되는 최종 클립 데이터.
+ * 위치 확정 화면에서 saveRecording() 호출 시 이 형태로 저장됨.
+ */
+export type RecordingData = {
+  id: string;
+  recordedAt: string;
+  videoUri: string;
+  durationMs?: number;
+  thumbnail: string;
+  folderId: string;
+  userId: string;
+  location: {
+    latitude: number;
+    longitude: number;
+    placeName?: string;
+  };
+};
