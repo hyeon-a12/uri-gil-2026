@@ -2,9 +2,13 @@ import React from 'react';
 // 화면 구성에 필요한 React Native 기본 컴포넌트들을 불러옵니다.
 // SafeAreaView: 아이폰 노치 등 화면이 잘리지 않는 안전 영역을 확보해 줍니다.
 // ScrollView: 화면이 길어질 때 위아래로 스크롤할 수 있게 해줍니다.
-import { StyleSheet, View, ScrollView, Pressable, SafeAreaView } from 'react-native';
+import { StyleSheet, View, ScrollView, Pressable } from 'react-native';
+// SafeAreaView: react-native 내장 버전은 폐기 예정이라, react-native-safe-area-context 것을 사용합니다.
+import { SafeAreaView } from 'react-native-safe-area-context';
 // 아이콘 사용을 위해 Expo에서 기본 제공하는 Feather 아이콘셋을 불러옵니다.
 import { Feather } from '@expo/vector-icons';
+// 메뉴 카드를 눌렀을 때 해당 화면으로 이동시키기 위해 사용합니다.
+import { router } from 'expo-router';
 // 앱 전체 공통 폰트(SpoqaHanSansNeo)가 자동 적용되는 Text 컴포넌트입니다.
 import { AppText as Text } from '@/components/AppText';
 
@@ -28,9 +32,17 @@ const COLORS = {
 
 // ♻️ 반복되는 리스트 메뉴를 위한 공통 컴포넌트입니다.
 // '나의 정보 관리', '공지사항' 처럼 텍스트 + 우측 화살표(>) 모양의 메뉴를 찍어냅니다.
-const MenuItem = ({ title, rightText = '' }: { title: string; rightText?: string }) => (
+const MenuItem = ({
+  title,
+  rightText = '',
+  onPress,
+}: {
+  title: string;
+  rightText?: string;
+  onPress?: () => void;
+}) => (
   // Pressable: 터치 가능한 영역을 만들어주는 컴포넌트입니다. (버튼 역할)
-  <Pressable style={styles.menuItem}>
+  <Pressable style={styles.menuItem} onPress={onPress}>
     <Text style={styles.menuItemText}>{title}</Text>
     <View style={styles.menuItemRight}>
       {/* 우측에 텍스트(예: 버전 정보)가 있다면 보여주고, 없다면 생략합니다. */}
@@ -87,11 +99,15 @@ export default function MyPageScreen() {
           {/* 1행 3열: 카드 3개를 가로로 나란히 배치합니다. */}
           <View style={styles.activityCardList}>
             {[
-              { title: '내 루트', icon: 'map' as const },
-              { title: '촬영한 클립', icon: 'film' as const },
-              { title: '방문한 장소', icon: 'map-pin' as const },
+              { title: '내 루트', icon: 'map' as const, route: '/my-routes' as const },
+              { title: '촬영한 클립', icon: 'film' as const, route: '/my-clips' as const },
+              { title: '방문한 장소', icon: 'map-pin' as const, route: '/visited-places' as const },
             ].map((item) => (
-              <Pressable key={item.title} style={styles.activityCard}>
+              <Pressable
+                key={item.title}
+                style={styles.activityCard}
+                onPress={item.route ? () => router.push(item.route) : undefined}
+              >
                 <Feather name={item.icon} size={22} color={COLORS.primary} />
                 <Text style={styles.activityCardTitle}>{item.title}</Text>
               </Pressable>
@@ -105,9 +121,9 @@ export default function MyPageScreen() {
         <View style={styles.section}>
           <View style={styles.menuCard}>
             <Text style={styles.sectionTitle}>나의 정보</Text>
-            <MenuItem title="나의 정보 관리" />
-            <MenuItem title="알림 설정" />
-            <MenuItem title="위치 정보 및 개인정보 처리방침" />
+            <MenuItem title="나의 정보 관리" onPress={() => router.push('/profile-edit')} />
+            <MenuItem title="알림 설정" onPress={() => router.push('/notification-settings')} />
+            <MenuItem title="위치 정보 및 개인정보 처리방침" onPress={() => router.push('/privacy-policy')} />
           </View>
         </View>
 
@@ -119,9 +135,9 @@ export default function MyPageScreen() {
             <View style={styles.sectionHeaderRow}>
               <Text style={styles.sectionTitle}>고객센터</Text>
             </View>
-            <MenuItem title=" Q&A 리스트" />
-            <MenuItem title="1:1 문의하기" />
-            <MenuItem title="공지사항" />
+            <MenuItem title=" Q&A 리스트" onPress={() => router.push('/faq')} />
+            <MenuItem title="1:1 문의하기" onPress={() => router.push('/inquiry')} />
+            <MenuItem title="공지사항" onPress={() => router.push('/notice')} />
           </View>
         </View>
 
