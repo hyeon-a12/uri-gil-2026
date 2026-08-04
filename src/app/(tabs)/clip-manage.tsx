@@ -15,6 +15,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { setActiveFolder, clearActiveFolder } from '@/services/activeFolderService';
+import NewTripModal from '@/components/NewTripModal';
 
 const COLORS = {
   background: '#FAF8F1',
@@ -88,6 +89,7 @@ export default function ClipManageScreen() {
   const [activeFolderId, setActiveFolderId] = useState<string | null>('1');
   const [selectedFolderForMenu, setSelectedFolderForMenu] =
     useState<FolderItem | null>(null);
+  const [newTripModalVisible, setNewTripModalVisible] = useState(false);
 
   const handleFolderPress = (folder: FolderItem) => {
     router.push({
@@ -100,7 +102,26 @@ export default function ClipManageScreen() {
   };
 
   const handleCreateFolder = () => {
-    router.push('/clip-select');
+    setNewTripModalVisible(true);
+  };
+
+  const handleTripCreated: React.ComponentProps<typeof NewTripModal>['onCreated'] = (
+    trip,
+  ) => {
+    const newFolder: FolderItem = {
+      id: `${Date.now()}`,
+      title: trip.name || `${trip.region ?? ''} 여행`,
+      dateRange: `${trip.startDate!.getFullYear()}.${String(
+        trip.startDate!.getMonth() + 1,
+      ).padStart(2, '0')}.${String(trip.startDate!.getDate()).padStart(2, '0')}. ~ ${trip.endDate.getFullYear()}.${String(
+        trip.endDate.getMonth() + 1,
+      ).padStart(2, '0')}.${String(trip.endDate.getDate()).padStart(2, '0')}.`,
+      clipCount: 0,
+      thumbnail:
+        'https://images.unsplash.com/photo-1500534623283-312aade485b7?w=600',
+    };
+
+    setFolders((prev) => [newFolder, ...prev]);
   };
 
   const handleConnectCamera = async () => {
@@ -237,13 +258,14 @@ export default function ClipManageScreen() {
         ListHeaderComponent={
           <>
             {activeTab === 'editing' && (
-              <View style={styles.createBanner}>
-                <TouchableOpacity
-                  style={styles.addButton}
-                  onPress={handleCreateFolder}
-                >
+              <TouchableOpacity
+                style={styles.createBanner}
+                activeOpacity={0.8}
+                onPress={handleCreateFolder}
+              >
+                <View style={styles.addButton}>
                   <Ionicons name="add" size={24} color={COLORS.card} />
-                </TouchableOpacity>
+                </View>
                 <View style={styles.bannerTextContainer}>
                   <Text style={styles.bannerTitle}>
                     {locationName
@@ -254,7 +276,7 @@ export default function ClipManageScreen() {
                     새로운 여행을 떠나보세요.
                   </Text>
                 </View>
-              </View>
+              </TouchableOpacity>
             )}
 
             <Text style={styles.sectionTitle}>
@@ -308,6 +330,12 @@ export default function ClipManageScreen() {
           </View>
         </TouchableWithoutFeedback>
       </Modal>
+
+      <NewTripModal
+        visible={newTripModalVisible}
+        onClose={() => setNewTripModalVisible(false)}
+        onCreated={handleTripCreated}
+      />
     </View>
   );
 }

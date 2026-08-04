@@ -4,6 +4,7 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  Text,
   View,
   TouchableOpacity,
   FlatList,
