@@ -13,6 +13,9 @@ import { AppText as Text } from '@/components/AppText';
 
 
 const ACTIVE = '#f99b30';
+// 탭을 선택했을 때(눌렀을 때) 아이콘·글자 색은 검정으로 표시합니다.
+// (가운데 카메라 버튼의 배경색은 계속 ACTIVE(오렌지)를 씁니다 — 탭 선택 표시가 아니라 항상 강조되는 액션 버튼이라 그대로 둡니다.)
+const SELECTED = '#000000';
 const INACTIVE = '#B7B7B7';
 const BAR_BG = '#FFFFFF';
 
@@ -36,9 +39,9 @@ function TabItem({
   return (
     <View style={styles.tabItem}>
   <Icon
-    width={26}
-    height={26}
-    fill={focused ? ACTIVE : INACTIVE}
+    width={23.4}
+    height={23.4}
+    fill={focused ? SELECTED : INACTIVE}
   />
 
   <Text
@@ -47,7 +50,7 @@ function TabItem({
     allowFontScaling={false}
     style={[
       styles.tabLabel,
-      { color: focused ? ACTIVE : INACTIVE },
+      { color: focused ? SELECTED : INACTIVE },
     ]}
   >
     {label}
@@ -61,8 +64,8 @@ function CameraTabButton() {
     <Pressable onPress={() => router.push('/camera')} style={styles.cameraButtonWrap}>
       <View style={styles.cameraButton}>
         <CameraIcon
-          width={30}
-          height={30}
+          width={27}
+          height={27}
           fill="#FFFFFF"
         />
       </View>
@@ -163,14 +166,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
 
-    gap: 3,
+    gap: 4.5, // 아이콘-글자 간격을 기존 3의 1.5배로 늘렸습니다.
     marginTop: 3,
   },
 
   tabLabel: {
     width: 62,
 
-    fontSize: 11,
+    fontSize: 7.7, // 기존 11의 0.7배로 줄였습니다.
     lineHeight: 14,
     fontWeight: '500',
 

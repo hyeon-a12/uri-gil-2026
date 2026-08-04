@@ -1,8 +1,9 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, Image, Pressable, ScrollView, StyleSheet, Dimensions } from 'react-native';
+import { View, Image, Pressable, ScrollView, StyleSheet, Dimensions } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import { AppText as Text } from '@/components/AppText';
 import { colors } from '@/constants/menu-theme';
-import { SectionLabel } from '@/components/common';
+import { SectionLabel, ScreenHeader } from '@/components/common';
 
 interface Clip {
   id: string;
@@ -51,30 +52,34 @@ export default function MyClipsScreen() {
 
   return (
     <View style={styles.screen}>
-      <View style={styles.tabs}>
-        <FilterChip label="전체" active={selectedTripId === null} onPress={() => setSelectedTripId(null)} />
-        {TRIPS.map((trip) => (
-          <FilterChip
-            key={trip.id}
-            label={trip.label}
-            active={selectedTripId === trip.id}
-            onPress={() => setSelectedTripId(trip.id)}
-          />
-        ))}
-      </View>
+      <ScreenHeader title="촬영한 클립" />
 
-      <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
-        {grouped.map(([tripTitle, clips]) => (
-          <View key={tripTitle} style={{ marginBottom: 4 }}>
-            <SectionLabel text={tripTitle} />
-            <View style={styles.grid}>
-              {clips.map((clip) => (
-                <ClipThumbnail key={clip.id} clip={clip} />
-              ))}
+      <View style={styles.body}>
+        <View style={styles.tabs}>
+          <FilterChip label="전체" active={selectedTripId === null} onPress={() => setSelectedTripId(null)} />
+          {TRIPS.map((trip) => (
+            <FilterChip
+              key={trip.id}
+              label={trip.label}
+              active={selectedTripId === trip.id}
+              onPress={() => setSelectedTripId(trip.id)}
+            />
+          ))}
+        </View>
+
+        <ScrollView contentContainerStyle={styles.listContent}>
+          {grouped.map(([tripTitle, clips]) => (
+            <View key={tripTitle} style={styles.tripGroup}>
+              <SectionLabel text={tripTitle} />
+              <View style={styles.grid}>
+                {clips.map((clip) => (
+                  <ClipThumbnail key={clip.id} clip={clip} />
+                ))}
+              </View>
             </View>
-          </View>
-        ))}
-      </ScrollView>
+          ))}
+        </ScrollView>
+      </View>
     </View>
   );
 }
@@ -109,7 +114,10 @@ function ClipThumbnail({ clip }: { clip: Clip }) {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bg, padding: 16 },
+  screen: { flex: 1, backgroundColor: colors.bg },
+  body: { flex: 1, padding: 16 },
+  listContent: { paddingBottom: 40 },
+  tripGroup: { marginBottom: 4 },
   tabs: { flexDirection: 'row', gap: 8, marginBottom: 14, flexWrap: 'wrap' },
   chip: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, backgroundColor: colors.card },
   chipActive: { backgroundColor: colors.text },

@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, ScrollView, StyleSheet } from 'react-native';
+import { View, Image, ScrollView, StyleSheet } from 'react-native';
+import { Feather } from '@expo/vector-icons';
 import { AppText as Text } from '@/components/AppText';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useResponsive } from '../../hooks/use-responsive';
@@ -32,6 +33,15 @@ export default function HomeScreen({ userName = '뿅뿅이' }: Props) {
       showsVerticalScrollIndicator={false}
     >
       <View style={{ paddingHorizontal: horizontalPadding }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: ms(24) }}>
+          <Image
+            source={require('@/assets/images/urigil-logo.png')}
+            style={{ width: ms(39), height: ms(36.075) }}
+            resizeMode="contain"
+          />
+          <Feather name="bell" size={ms(24)} color={homeColors.textPrimary} />
+        </View>
+
         <Text style={[styles.greeting, { fontSize: ms(22), lineHeight: ms(30) }]}>
           {userName} 님, 오늘도 즐거운 여행!
         </Text>

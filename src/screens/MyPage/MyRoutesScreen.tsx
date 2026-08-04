@@ -1,8 +1,10 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, FlatList, Pressable, StyleSheet, Platform } from 'react-native';
+import { View, FlatList, Pressable, StyleSheet, Platform } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import { router } from 'expo-router';
+import { AppText as Text } from '@/components/AppText';
 import { colors } from '@/constants/menu-theme';
-import { Card, ListRow, Badge } from '@/components/common';
+import { Card, ListRow, Badge, ScreenHeader } from '@/components/common';
 
 // 주의: BadgeVariant는 공용 컴포넌트 라이브러리에 없을 수 있어서
 // 이 화면 안에서만 쓰는 로컬 타입으로 정의함 (Badge.tsx의 variant prop과 이름만 맞으면 됨)
@@ -76,13 +78,7 @@ const MOCK_TRIPS: Trip[] = [
 
 type FilterTab = 'all' | 'ing' | 'done';
 
-export default function MyRoutesScreen({
-  onCreateTrip,
-  onPressTrip,
-}: {
-  onCreateTrip: () => void;
-  onPressTrip: (tripId: string) => void;
-}) {
+export default function MyRoutesScreen() {
   const [tab, setTab] = useState<FilterTab>('all');
 
   // 화면 열릴 때마다 한 번씩만 계산하면 되니 useMemo로 감쌈.
@@ -93,32 +89,43 @@ export default function MyRoutesScreen({
     );
   }, [tab]);
 
+  // TODO: 아직 별도의 '코스 만들기' 화면이 없어서, 임시로 내 루트 탭(경로 계획 시작점)으로 이동시킵니다.
+  const handleCreateTrip = () => router.push('/(tabs)/my-route');
+
+  const handlePressTrip = (tripId: string) => {
+    router.push({ pathname: '/trip-detail/[tripId]', params: { tripId } });
+  };
+
   return (
     <View style={styles.screen}>
-      <View style={styles.tabs}>
-        <FilterChip label="전체" active={tab === 'all'} onPress={() => setTab('all')} />
-        <FilterChip label="여행중" active={tab === 'ing'} onPress={() => setTab('ing')} />
-        <FilterChip label="여행완료" active={tab === 'done'} onPress={() => setTab('done')} />
+      <ScreenHeader title="내 루트" />
+
+      <View style={styles.body}>
+        <View style={styles.tabs}>
+          <FilterChip label="전체" active={tab === 'all'} onPress={() => setTab('all')} />
+          <FilterChip label="여행중" active={tab === 'ing'} onPress={() => setTab('ing')} />
+          <FilterChip label="여행완료" active={tab === 'done'} onPress={() => setTab('done')} />
+        </View>
+
+        <FlatList
+          data={filteredTrips}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.listContent}
+          renderItem={({ item }) => (
+            <Card style={styles.tripCard}>
+              <ListRow
+                isLast
+                title={item.title}
+                subtitle={`${formatDate(item.startDate)} - ${formatDate(item.endDate)} · 방문 ${item.visitedCount}곳 · 클립 ${item.clipCount}개`}
+                onPress={() => handlePressTrip(item.id)}
+                right={<Badge variant={item.status} label={statusLabel[item.status]} />}
+              />
+            </Card>
+          )}
+        />
       </View>
 
-      <FlatList
-        data={filteredTrips}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={{ paddingBottom: 100 }}
-        renderItem={({ item }) => (
-          <Card style={{ marginBottom: 10 }}>
-            <ListRow
-              isLast
-              title={item.title}
-              subtitle={`${formatDate(item.startDate)} - ${formatDate(item.endDate)} · 방문 ${item.visitedCount}곳 · 클립 ${item.clipCount}개`}
-              onPress={() => onPressTrip(item.id)}
-              right={<Badge variant={item.status} label={statusLabel[item.status]} />}
-            />
-          </Card>
-        )}
-      />
-
-      <Pressable style={styles.fab} onPress={onCreateTrip}>
+      <Pressable style={styles.fab} onPress={handleCreateTrip}>
         <Feather name="plus" size={22} color="#fff" />
       </Pressable>
     </View>
@@ -138,7 +145,10 @@ function formatDate(date: Date): string {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bg, padding: 16 },
+  screen: { flex: 1, backgroundColor: colors.bg },
+  body: { flex: 1, paddingHorizontal: 16 },
+  listContent: { paddingBottom: 100 },
+  tripCard: { marginBottom: 10 },
   tabs: { flexDirection: 'row', gap: 8, marginBottom: 14 },
   chip: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, backgroundColor: colors.card },
   chipActive: { backgroundColor: colors.text },
