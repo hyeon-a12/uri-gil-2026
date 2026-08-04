@@ -23,6 +23,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LocationOptionCard } from '@/components/location-confirm/LocationOptionCard';
 import { VideoPreview } from '@/components/location-confirm/VideoPreview';
 import { MOCK_LOCATION_SUGGESTIONS } from '@/constants/mockLocations';
+import { saveRecording } from '@/services/recordingService';
+import { getActiveFolder } from '@/services/activeFolderService';
 
 const COLORS = {
   background: '#FAF8F1',
@@ -259,7 +261,7 @@ export default function LocationConfirmScreen() {
     router.push('/my-route');
   };
 
-  const handleComplete = () => {
+  const handleComplete = async () => {
     if (
       !hasLocationSelection ||
       !hasTripSelection
@@ -267,24 +269,61 @@ export default function LocationConfirmScreen() {
       return;
     }
 
-    console.log({
-      videoUri,
-      location: selectedLocation,
-      trip: selectedTrip,
-    });
+    if (!videoUri) {
+      Alert.alert(
+        '영상을 찾을 수 없습니다',
+        '다시 촬영해주세요.',
+      );
+      return;
+    }
 
-    Alert.alert(
-      '클립이 저장되었습니다',
-      `${selectedTrip?.title ?? '선택한 여행'}에 클립을 추가했어요.`,
-      [
-        {
-          text: '확인',
-          onPress: () => {
-            router.replace('/clip-manage');
-          },
+    // 클립 관리 화면에서 "카메라 연결하기"로 미리 지정해둔 여행(폴더)에 저장합니다.
+    const folderId = await getActiveFolder();
+
+    if (!folderId) {
+      Alert.alert(
+        '연결된 여행이 없습니다',
+        '클립 관리 화면에서 여행의 "카메라 연결하기"를 먼저 눌러주세요.',
+      );
+      return;
+    }
+
+    try {
+      await saveRecording({
+        recordedAt: new Date().toISOString(),
+        videoUri,
+        // TODO: expo-video-thumbnails 등으로 실제 썸네일을 만들기 전까지는 영상 자체를 썸네일로 재사용합니다.
+        thumbnail: videoUri,
+        folderId,
+        // TODO: 로그인 연동 전까지 쓰는 임시 사용자 ID입니다.
+        userId: 'guest',
+        location: {
+          // TODO: expo-location 연동 전까지 쓰는 임시 좌표입니다.
+          latitude: 0,
+          longitude: 0,
+          placeName: selectedLocation?.name,
         },
-      ],
-    );
+      });
+
+      Alert.alert(
+        '클립이 저장되었습니다',
+        `${selectedTrip?.title ?? '선택한 여행'}에 클립을 추가했어요.`,
+        [
+          {
+            text: '확인',
+            onPress: () => {
+              router.replace('/clip-manage');
+            },
+          },
+        ],
+      );
+    } catch (error) {
+      console.error('[handleComplete] 클립 저장 실패:', error);
+      Alert.alert(
+        '저장에 실패했습니다',
+        '잠시 후 다시 시도해주세요.',
+      );
+    }
   };
 
   return (
