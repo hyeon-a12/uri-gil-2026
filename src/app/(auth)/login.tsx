@@ -1,5 +1,6 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
+import { Image } from 'react-native';
 import {
   Alert,
   KeyboardAvoidingView,
@@ -61,10 +62,11 @@ export default function LoginScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <View style={styles.logoBox}>
-            <Text style={styles.logoText}>TRIP</Text>
-          </View>
-
+          <Image
+  source={require('@/assets/images/urigil-logo.png')}
+  style={styles.logo}
+  resizeMode="contain"
+/>
           <Text style={styles.title}>다시 만나서 반가워요!</Text>
 
           <Text style={styles.description}>
@@ -168,21 +170,12 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
 
-  logoBox: {
-    width: 64,
-    height: 64,
-    borderRadius: 20,
-    backgroundColor: '#FF922E',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 32,
-  },
-
-  logoText: {
-    fontFamily: 'SpoqaHanSansNeo-Bold',
-    color: '#FFFFFF',
-    fontSize: 17,
-  },
+  logo: {
+  width: 90,
+  height: 90,
+  alignSelf: 'center',
+  marginBottom: 30,
+},
 
   title: {
     fontFamily: 'SpoqaHanSansNeo-Bold',
