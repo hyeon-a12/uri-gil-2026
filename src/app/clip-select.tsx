@@ -447,7 +447,7 @@ export default function ClipSelectScreen() {
 
         <Pressable
           hitSlop={12}
-          onPress={() => router.push('/')}
+          onPress={() => router.push('/(tabs)/home')}
           style={styles.headerButton}
         >
           <Text allowFontScaling={false} style={styles.editButtonText}>

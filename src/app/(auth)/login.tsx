@@ -48,7 +48,7 @@ export default function LoginScreen() {
       password,
     });
 
-    router.replace('/(tabs)');
+    router.replace('/(tabs)/home');
   };
 
   return (

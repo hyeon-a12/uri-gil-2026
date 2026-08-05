@@ -77,6 +77,7 @@ export default function TabLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <Tabs
+        initialRouteName="home"
         screenOptions={{
           headerShown: false,
           tabBarShowLabel: false,
@@ -84,7 +85,7 @@ export default function TabLayout() {
           tabBarHideOnKeyboard: true,
         }}>
         <Tabs.Screen
-          name="index"
+          name="home"
           options={{
             title: '홈',
             tabBarIcon: ({ focused }) => (
