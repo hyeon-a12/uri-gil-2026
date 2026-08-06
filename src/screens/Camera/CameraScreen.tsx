@@ -24,14 +24,14 @@ const MAX_CLIP_SECONDS = 10;
 const MAX_CLIPS = 15;
 
 const COLORS = {
-  background: '#FAF8F1',
+  background: '#FFFFFF',
   white: '#FFFFFF',
-  primary: '#F99B30',
+  primary: '#FFB134',
   primaryDark: '#EA861F',
-  primarySoft: '#FFF1E4',
+  primarySoft: '#FFF3DF',
 
-  textPrimary: '#262621',
-  textSecondary: '#8A8A82',
+  textPrimary: '#222222',
+  textSecondary: '#8A8A8A',
 
   overlay: 'rgba(18, 18, 16, 0.48)',
   overlayStrong: 'rgba(18, 18, 16, 0.68)',

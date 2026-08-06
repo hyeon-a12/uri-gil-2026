@@ -49,7 +49,7 @@ export default function OnboardingScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8F6EF',
+    backgroundColor: '#FFFFFF',
   },
 
   pressArea: {

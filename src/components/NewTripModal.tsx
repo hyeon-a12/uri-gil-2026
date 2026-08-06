@@ -16,22 +16,22 @@ import { Ionicons } from '@expo/vector-icons';
  * ─────────────────────────────────────────────────────────────
  * ⚠️ 색상 관련 참고
  * ─────────────────────────────────────────────────────────────
- * 단색 #FF7F5C 버튼으로 통일하고 싶으시면
+ * 단색 #FFB134 버튼으로 통일하고 싶으시면
  * GRADIENT 배열을 안 쓰고 backgroundColor: COLORS.accent 하나로 바꾸시면 됩니다
  * (아래 PrimaryButton 컴포넌트 안에 분기 처리해뒀어요).
  */
 const COLORS = {
-  accent: '#FF7F5C',
+  accent: '#FFB134',
   accentDark: '#E8663F',
   dark: '#1E2128',
-  black: '#1A1A1A',
-  gray500: '#6B7280',
-  gray400: '#9AA0A6',
-  gray200: '#EDEDED',
+  black: '#222222',
+  gray500: '#8A8A8A',
+  gray400: '#8A8A8A',
+  gray200: '#DDDDDD',
   gray100: '#F5F5F5',
   white: '#FFFFFF',
 };
-const GRADIENT: [string, string] = ['#FF9D6C', '#D9884B'];
+const GRADIENT: [string, string] = ['#FFC364', '#FFB134'];
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -394,7 +394,6 @@ export default function NewTripModal({ visible, onClose, onCreated }: Props) {
         <View style={styles.card}>
           {step !== 'success' && (
             <>
-              <View style={styles.dragHandle} />
               <View style={styles.headerRow}>
                 <Text style={styles.headerTitle}>새 여행 만들기</Text>
                 <TouchableOpacity onPress={handleClose} hitSlop={10}>
@@ -868,15 +867,7 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 24,
     paddingHorizontal: CARD_HORIZONTAL_PADDING,
     paddingTop: 10,
-    maxHeight: SCREEN_HEIGHT * 0.88,
-  },
-  dragHandle: {
-    alignSelf: 'center',
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: COLORS.gray200,
-    marginBottom: 14,
+    maxHeight: SCREEN_HEIGHT * 0.88 * 1.3, // 기존 높이(0.88)의 1.3배
   },
   headerRow: {
     flexDirection: 'row',

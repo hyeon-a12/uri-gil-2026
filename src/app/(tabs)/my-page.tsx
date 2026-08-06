@@ -14,18 +14,18 @@ import { AppText as Text } from '@/components/AppText';
 
 // 🎨 앱 전체에서 공통으로 사용할 색상 팔레트입니다.
 const COLORS = {
-  background: '#FAF8F1', // 앱의 기본 배경색 (다른 화면(내 루트 등)과 동일한 아이보리)
-  card: '#FFFFFF',       // 카드나 박스의 배경색 
+  background: '#FFFFFF', // 앱의 기본 배경색
+  card: '#FFFFFF',       // 카드나 박스의 배경색
 
-  primary: '#FF8F32',    // 메인 브랜드 컬러 (오렌지)
+  primary: '#FFB134',    // 메인 브랜드 컬러 (오렌지)
   primaryDark: '#E97B1F',// 눌렸을 때나 강조할 때 쓸 어두운 오렌지
-  primarySoft: '#FFF0E1',// 아주 연한 오렌지 배경
+  primarySoft: '#FFF3DF',// 아주 연한 오렌지 배경
 
-  textPrimary: '#282722',  // 가장 진하고 중요한 텍스트 (제목 등)
-  textSecondary: '#8B8A83',// 중간 중요도의 텍스트 (본문 등)
-  textTertiary: '#B2B0AA', // 부가적인 텍스트 (날짜, 힌트 등)
+  textPrimary: '#222222',  // 가장 진하고 중요한 텍스트 (제목 등)
+  textSecondary: '#8A8A8A',// 중간 중요도의 텍스트 (본문 등)
+  textTertiary: '#8A8A8A', // 부가적인 텍스트 (날짜, 힌트 등)
 
-  border: '#ECE8DF',       // 얇은 테두리 선 색상
+  border: '#DDDDDD',       // 얇은 테두리 선 색상
 
   shadow: '#443A31',       // 그림자 색상
 };
@@ -115,9 +115,7 @@ export default function MyPageScreen() {
           </View>
         </View>
 
-        <View style={styles.thinDivider} />
-
-        {/* 5️⃣ 나의 정보 구역 설정 메뉴: 제목까지 흰색 카드 안에 함께 넣습니다. */}
+{/* 5️⃣ 나의 정보 구역 설정 메뉴: 제목까지 흰색 카드 안에 함께 넣습니다. */}
         <View style={styles.section}>
           <View style={styles.menuCard}>
             <Text style={styles.sectionTitle}>나의 정보</Text>
@@ -127,9 +125,7 @@ export default function MyPageScreen() {
           </View>
         </View>
 
-        <View style={styles.thinDivider} />
-
-        {/* 6️⃣ 고객센터 구역: Q&A, 공지사항 등. 제목까지 흰색 카드 안에 함께 넣습니다. */}
+{/* 6️⃣ 고객센터 구역: Q&A, 공지사항 등. 제목까지 흰색 카드 안에 함께 넣습니다. */}
         <View style={styles.section}>
           <View style={styles.menuCard}>
             <View style={styles.sectionHeaderRow}>
@@ -141,9 +137,7 @@ export default function MyPageScreen() {
           </View>
         </View>
 
-        <View style={styles.thinDivider} />
-
-        {/* 7️⃣ 프로그램 정보 구역: 앱 버전 등 표시. 제목까지 흰색 카드 안에 함께 넣습니다. */}
+{/* 7️⃣ 프로그램 정보 구역: 앱 버전 등 표시. 제목까지 흰색 카드 안에 함께 넣습니다. */}
         <View style={styles.section}>
           <View style={styles.menuCard}>
             <Text style={styles.sectionTitle}>프로그램 정보</Text>
@@ -363,8 +357,6 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background, // 페이지 배경색과 동일하게 맞췄습니다.
     padding: 20,
     paddingBottom: 40,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.border,
   },
   footerCsBox: {
     flexDirection: 'row',
@@ -398,9 +390,5 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: COLORS.textSecondary,
     marginBottom: 8,
-  },
-  thinDivider: {
-    height: 3,
-    backgroundColor: '#FAF8F1', // 기존에 쓰던 배경색(아이보리)을 그대로 얇은 구분선 색으로 사용합니다.
   },
 });

@@ -18,20 +18,20 @@ import { setActiveFolder, clearActiveFolder } from '@/services/activeFolderServi
 import NewTripModal from '@/components/NewTripModal';
 
 const COLORS = {
-  background: '#FAF8F1',
+  background: '#FFFFFF',
   card: '#FFFFFF',
 
-  primary: '#F99B30',
-  primarySoft: '#FFF1E4',
+  primary: '#FFB134',
+  primarySoft: '#FFF3DF',
 
   accent: '#3182F6',
 
-  textPrimary: '#262621',
-  textSecondary: '#8A8A82',
-  textTertiary: '#AAA9A2',
+  textPrimary: '#222222',
+  textSecondary: '#8A8A8A',
+  textTertiary: '#8A8A8A',
 
-  border: '#ECE9E1',
-  divider: '#F1EEE8',
+  border: '#DDDDDD',
+  divider: '#DDDDDD',
 
   handle: '#999A95',
   shadow: '#4B4138',

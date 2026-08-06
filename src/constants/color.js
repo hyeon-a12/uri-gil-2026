@@ -8,27 +8,28 @@
 
 export const COLORS = {
   // 포인트 컬러 (이 색 하나만 강조색으로 사용)
-  primary: '#FF7F5C',
+  primary: '#FFB134',
+  primaryTint: '#FFF3DF',   // 프로모션 배지, 태그 배경 등 연한 포인트 컬러
 
   // 배경
   white: '#FFFFFF',
-  surface: '#F7F7F7',      // 카드나 섹션 배경에 쓰는 연한 회색
+  surface: '#F5F5F5',      // 카드나 섹션 배경에 쓰는 연한 회색
 
   // 텍스트
-  text: '#1A1A1A',          // 제목, 중요한 텍스트
-  textSecondary: '#888888',  // 부가 설명, 덜 중요한 텍스트
-  textTertiary: '#BBBBBB',   // placeholder, 비활성 텍스트
+  text: '#222222',          // 제목, 중요한 텍스트
+  textSecondary: '#8A8A8A',  // 부가 설명, 덜 중요한 텍스트
+  textTertiary: '#8A8A8A',   // placeholder, 비활성 텍스트
 
   // 선, 구분선
-  border: '#EEEEEE',
+  border: '#DDDDDD',
 
   // 네비게이션 바
   navBar: '#1A1A1A',
   navInactive: '#666666',
 
   // 핑 상태
-  pinVisited: '#FF7F5C',           // 방문 완료 (포인트 컬러 그대로)
-  pinUnvisited: '#FF7F5C35',       // 미방문 (같은 색인데 투명도 20%)
+  pinVisited: '#FFB134',           // 방문 완료 (포인트 컬러 그대로)
+  pinUnvisited: '#FFB13435',       // 미방문 (같은 색인데 투명도 20%)
   // 뒤에 35는 16진수 투명도예요. 00=완전투명, FF=불투명, 35≒20%
 
   // 기능 색상

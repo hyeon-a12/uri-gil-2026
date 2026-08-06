@@ -131,7 +131,7 @@ export default function JoinScreen() {
               value={nickname}
               onChangeText={setNickname}
               placeholder="2~10자로 입력해주세요"
-              placeholderTextColor="#AAA59D"
+              placeholderTextColor="#8A8A8A"
               maxLength={10}
               autoCorrect={false}
               returnKeyType="next"
@@ -148,7 +148,7 @@ export default function JoinScreen() {
               value={email}
               onChangeText={setEmail}
               placeholder="example@email.com"
-              placeholderTextColor="#AAA59D"
+              placeholderTextColor="#8A8A8A"
               keyboardType="email-address"
               autoCapitalize="none"
               autoCorrect={false}
@@ -163,7 +163,7 @@ export default function JoinScreen() {
                 value={password}
                 onChangeText={setPassword}
                 placeholder="8자 이상 입력해주세요"
-                placeholderTextColor="#AAA59D"
+                placeholderTextColor="#8A8A8A"
                 secureTextEntry={!showPassword}
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -188,7 +188,7 @@ export default function JoinScreen() {
                 value={passwordConfirm}
                 onChangeText={setPasswordConfirm}
                 placeholder="비밀번호를 다시 입력해주세요"
-                placeholderTextColor="#AAA59D"
+                placeholderTextColor="#8A8A8A"
                 secureTextEntry={!showPasswordConfirm}
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -254,7 +254,7 @@ export default function JoinScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#F8F6EF',
+    backgroundColor: '#FFFFFF',
   },
 
   keyboardView: {
@@ -276,21 +276,21 @@ const styles = StyleSheet.create({
   },
 
   backButtonText: {
-    color: '#292724',
+    color: '#222222',
     fontSize: 40,
     lineHeight: 42,
     fontFamily: 'SpoqaHanSansNeo-Regular',
   },
 
   title: {
-    color: '#292724',
+    color: '#222222',
     fontSize: 28,
     lineHeight: 39,
     fontFamily: 'SpoqaHanSansNeo-Bold',
   },
 
   description: {
-    color: '#8F8A82',
+    color: '#8A8A8A',
     fontSize: 15,
     lineHeight: 23,
     fontFamily: 'SpoqaHanSansNeo-Regular',
@@ -302,7 +302,7 @@ const styles = StyleSheet.create({
   },
 
   label: {
-    color: '#292724',
+    color: '#222222',
     fontSize: 14,
     fontFamily: 'SpoqaHanSansNeo-Medium',
     marginBottom: 9,
@@ -312,17 +312,17 @@ const styles = StyleSheet.create({
     height: 56,
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#E6E2DA',
+    borderColor: '#DDDDDD',
     borderRadius: 16,
     paddingHorizontal: 17,
-    color: '#292724',
+    color: '#222222',
     fontSize: 15,
     fontFamily: 'SpoqaHanSansNeo-Regular',
     marginBottom: 20,
   },
 
   helperText: {
-    color: '#9C978F',
+    color: '#8A8A8A',
     fontSize: 12,
     fontFamily: 'SpoqaHanSansNeo-Regular',
     marginTop: -12,
@@ -336,7 +336,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#E6E2DA',
+    borderColor: '#DDDDDD',
     borderRadius: 16,
     marginBottom: 20,
   },
@@ -346,7 +346,7 @@ const styles = StyleSheet.create({
     height: '100%',
     paddingLeft: 17,
     paddingRight: 8,
-    color: '#292724',
+    color: '#222222',
     fontSize: 15,
     fontFamily: 'SpoqaHanSansNeo-Regular',
   },
@@ -358,7 +358,7 @@ const styles = StyleSheet.create({
   },
 
   passwordToggleText: {
-    color: '#FF922E',
+    color: '#FFB134',
     fontSize: 13,
     fontFamily: 'SpoqaHanSansNeo-Medium',
   },
@@ -375,7 +375,7 @@ const styles = StyleSheet.create({
     height: 22,
     borderRadius: 6,
     borderWidth: 1,
-    borderColor: '#D6D1C9',
+    borderColor: '#DDDDDD',
     backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
@@ -383,8 +383,8 @@ const styles = StyleSheet.create({
   },
 
   checkboxChecked: {
-    borderColor: '#FF922E',
-    backgroundColor: '#FF922E',
+    borderColor: '#FFB134',
+    backgroundColor: '#FFB134',
   },
 
   checkText: {
@@ -395,7 +395,7 @@ const styles = StyleSheet.create({
 
   agreementText: {
     flex: 1,
-    color: '#6F6B65',
+    color: '#8A8A8A',
     fontSize: 13,
     lineHeight: 19,
     fontFamily: 'SpoqaHanSansNeo-Regular',
@@ -404,7 +404,7 @@ const styles = StyleSheet.create({
   joinButton: {
     height: 56,
     borderRadius: 16,
-    backgroundColor: '#FF922E',
+    backgroundColor: '#FFB134',
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 22,
@@ -424,13 +424,13 @@ const styles = StyleSheet.create({
   },
 
   loginDescription: {
-    color: '#96928B',
+    color: '#8A8A8A',
     fontSize: 14,
     fontFamily: 'SpoqaHanSansNeo-Regular',
   },
 
   loginText: {
-    color: '#FF922E',
+    color: '#FFB134',
     fontSize: 14,
     fontFamily: 'SpoqaHanSansNeo-Bold',
     marginLeft: 8,

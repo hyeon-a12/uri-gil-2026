@@ -18,19 +18,19 @@ import { navigateToCamera } from '@/navigation/recordingNavigation';
 import { getRecordingsByFolder } from '@/services/recordingService';
 
 const COLORS = {
-  background: '#FAF8F1',
+  background: '#FFFFFF',
   card: '#FFFFFF',
 
-  primary: '#F99B30',
+  primary: '#FFB134',
   primaryPressed: '#ED8A20',
-  primarySoft: '#FFF1E4',
+  primarySoft: '#FFF3DF',
 
-  textPrimary: '#262621',
-  textSecondary: '#8A8A82',
-  textTertiary: '#AAA9A2',
+  textPrimary: '#222222',
+  textSecondary: '#8A8A8A',
+  textTertiary: '#8A8A8A',
 
-  border: '#ECE9E1',
-  divider: '#F1EEE8',
+  border: '#DDDDDD',
+  divider: '#DDDDDD',
 
   unchecked: '#B5B5AF',
   delete: '#E46F61',

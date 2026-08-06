@@ -27,19 +27,19 @@ import { saveRecording } from '@/services/recordingService';
 import { getActiveFolder } from '@/services/activeFolderService';
 
 const COLORS = {
-  background: '#FAF8F1',
+  background: '#FFFFFF',
   card: '#FFFFFF',
 
-  primary: '#F99B30',
+  primary: '#FFB134',
   primaryDark: '#E9851D',
-  primarySoft: '#FFF1E4',
+  primarySoft: '#FFF3DF',
 
-  textPrimary: '#262621',
-  textSecondary: '#85857E',
-  textTertiary: '#AAA9A2',
+  textPrimary: '#222222',
+  textSecondary: '#8A8A8A',
+  textTertiary: '#8A8A8A',
 
-  border: '#ECE9E1',
-  divider: '#F1EEE8',
+  border: '#DDDDDD',
+  divider: '#DDDDDD',
 
   sheet: '#FFF9F3',
   disabled: '#DDDAD4',

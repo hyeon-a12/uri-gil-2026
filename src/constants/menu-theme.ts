@@ -1,18 +1,18 @@
 // 마이페이지에서 진입하는 메뉴 화면들(내 루트, 촬영한 클립, 나의 정보 관리 ...)이
 // 공통으로 쓰는 색상 팔레트입니다. my-page.tsx의 오렌지 팔레트와 통일했습니다.
 export const colors = {
-  bg: '#FAF8F1',
+  bg: '#FFFFFF',
   card: '#FFFFFF',
 
-  accent: '#FF8F32',
+  accent: '#FFB134',
   accentDark: '#E97B1F',
-  accentSoft: '#FFF0E1',
+  accentSoft: '#FFF3DF',
 
-  text: '#282722',
-  textSub: '#8B8A83',
-  textTertiary: '#B2B0AA',
+  text: '#222222',
+  textSub: '#8A8A8A',
+  textTertiary: '#8A8A8A',
 
-  border: '#ECE8DF',
+  border: '#DDDDDD',
   shadow: '#443A31',
 };
 

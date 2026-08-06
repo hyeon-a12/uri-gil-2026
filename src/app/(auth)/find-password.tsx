@@ -25,7 +25,7 @@ export default function FindPasswordScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#F8F6EF',
+    backgroundColor: '#FFFFFF',
   },
 
   backButton: {
@@ -37,7 +37,7 @@ const styles = StyleSheet.create({
   },
 
   backButtonText: {
-    color: '#292724',
+    color: '#222222',
     fontSize: 40,
     lineHeight: 42,
     fontFamily: 'SpoqaHanSansNeo-Regular',
@@ -52,14 +52,14 @@ const styles = StyleSheet.create({
 
   title: {
     fontFamily: 'SpoqaHanSansNeo-Bold',
-    color: '#292724',
+    color: '#222222',
     fontSize: 22,
     marginBottom: 10,
   },
 
   description: {
     fontFamily: 'SpoqaHanSansNeo-Regular',
-    color: '#8F8A82',
+    color: '#8A8A8A',
     fontSize: 15,
     lineHeight: 23,
     textAlign: 'center',

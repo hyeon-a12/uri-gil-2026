@@ -81,7 +81,7 @@ export default function LoginScreen() {
               value={email}
               onChangeText={setEmail}
               placeholder="example@email.com"
-              placeholderTextColor="#AAA59D"
+              placeholderTextColor="#8A8A8A"
               keyboardType="email-address"
               autoCapitalize="none"
               autoCorrect={false}
@@ -96,7 +96,7 @@ export default function LoginScreen() {
                 value={password}
                 onChangeText={setPassword}
                 placeholder="비밀번호를 입력해주세요"
-                placeholderTextColor="#AAA59D"
+                placeholderTextColor="#8A8A8A"
                 secureTextEntry={!showPassword}
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -155,7 +155,7 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#F8F6EF',
+    backgroundColor: '#FFFFFF',
   },
 
   keyboardView: {
@@ -179,14 +179,14 @@ const styles = StyleSheet.create({
 
   title: {
     fontFamily: 'SpoqaHanSansNeo-Bold',
-    color: '#292724',
+    color: '#222222',
     fontSize: 28,
     lineHeight: 38,
   },
 
   description: {
     fontFamily: 'SpoqaHanSansNeo-Regular',
-    color: '#8F8A82',
+    color: '#8A8A8A',
     fontSize: 15,
     lineHeight: 23,
     marginTop: 10,
@@ -198,7 +198,7 @@ const styles = StyleSheet.create({
 
   label: {
     fontFamily: 'SpoqaHanSansNeo-Medium',
-    color: '#292724',
+    color: '#222222',
     fontSize: 14,
     marginBottom: 9,
   },
@@ -207,10 +207,10 @@ const styles = StyleSheet.create({
     height: 56,
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#E6E2DA',
+    borderColor: '#DDDDDD',
     borderRadius: 16,
     paddingHorizontal: 17,
-    color: '#292724',
+    color: '#222222',
     fontFamily: 'SpoqaHanSansNeo-Regular',
     fontSize: 15,
     marginBottom: 20,
@@ -222,7 +222,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#E6E2DA',
+    borderColor: '#DDDDDD',
     borderRadius: 16,
     marginBottom: 8,
   },
@@ -232,7 +232,7 @@ const styles = StyleSheet.create({
     height: '100%',
     paddingLeft: 17,
     paddingRight: 8,
-    color: '#292724',
+    color: '#222222',
     fontFamily: 'SpoqaHanSansNeo-Regular',
     fontSize: 15,
   },
@@ -245,7 +245,7 @@ const styles = StyleSheet.create({
 
   passwordToggleText: {
     fontFamily: 'SpoqaHanSansNeo-Medium',
-    color: '#FF922E',
+    color: '#FFB134',
     fontSize: 13,
   },
 
@@ -256,14 +256,14 @@ const styles = StyleSheet.create({
 
   findPasswordText: {
     fontFamily: 'SpoqaHanSansNeo-Regular',
-    color: '#8F8A82',
+    color: '#8A8A8A',
     fontSize: 13,
   },
 
   loginButton: {
     height: 56,
     borderRadius: 16,
-    backgroundColor: '#FF922E',
+    backgroundColor: '#FFB134',
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 14,
@@ -284,13 +284,13 @@ const styles = StyleSheet.create({
 
   joinDescription: {
     fontFamily: 'SpoqaHanSansNeo-Regular',
-    color: '#96928B',
+    color: '#8A8A8A',
     fontSize: 14,
   },
 
   joinText: {
     fontFamily: 'SpoqaHanSansNeo-Bold',
-    color: '#FF922E',
+    color: '#FFB134',
     fontSize: 14,
     marginLeft: 8,
   },

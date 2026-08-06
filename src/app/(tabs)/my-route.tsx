@@ -18,19 +18,19 @@ import Svg, {
 } from 'react-native-svg';
 
 const COLORS = {
-  background: '#FAF8F1',
+  background: '#FFFFFF',
   card: '#FFFFFF',
 
-  primary: '#FF8F32',
+  primary: '#FFB134',
   primaryDark: '#E97B1F',
-  primarySoft: '#FFF0E1',
+  primarySoft: '#FFF3DF',
 
-  textPrimary: '#282722',
-  textSecondary: '#8B8A83',
-  textTertiary: '#B2B0AA',
+  textPrimary: '#222222',
+  textSecondary: '#8A8A8A',
+  textTertiary: '#8A8A8A',
 
-  border: '#ECE8DF',
-  divider: '#F0ECE4',
+  border: '#DDDDDD',
+  divider: '#DDDDDD',
 
   route: '#F6784D',
   routeSoft: '#FFD2C2',
@@ -816,7 +816,11 @@ export default function MyRouteScreen() {
 
       <View style={styles.content}>
         {selectedMode === 'map' ? (
-          <View style={styles.mapScreen}>
+          <ScrollView
+            style={styles.mapScreen}
+            contentContainerStyle={styles.mapScreenContent}
+            showsVerticalScrollIndicator={false}
+          >
             <View
               style={[
                 styles.mapFrame,
@@ -836,7 +840,7 @@ export default function MyRouteScreen() {
             <View style={styles.selectedCardWrapper}>
               <SelectedStopCard stop={selectedStop} />
             </View>
-          </View>
+          </ScrollView>
         ) : selectedMode === 'info' ? (
           <RouteInformationView />
         ) : (
@@ -937,6 +941,10 @@ const styles = StyleSheet.create({
 
   mapScreen: {
     flex: 1,
+  },
+
+  mapScreenContent: {
+    paddingBottom: 190,
   },
 
   mapFrame: {
@@ -1247,10 +1255,8 @@ const styles = StyleSheet.create({
   },
 
   selectedCardWrapper: {
-    position: 'absolute',
-    left: 22,
-    right: 22,
-    bottom: 112,
+    marginHorizontal: 22,
+    marginTop: -56, // 지도 프레임 아래쪽에 살짝 겹쳐 떠 보이도록 음수 여백을 줍니다.
     zIndex: 30,
   },
 
