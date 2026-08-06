@@ -12,19 +12,11 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import Svg, { Path } from 'react-native-svg';
-
-/**
- * ─────────────────────────────────────────────────────────────
- * 이 화면에서 "진짜 지도"는 아직 없습니다
- * ─────────────────────────────────────────────────────────────
- * 카카오맵 연동은 나중으로 미뤄뒀으니(메모리에 있던 결정), 여기 지도는
- * 실제 좌표/타일이 아니라 스크린샷과 같은 느낌만 내는 "가짜 지도"입니다
- * — 배경색 + 흐릿한 장소 라벨 + 점선 경로 + 핀 마커로만 구성했어요.
- * 나중에 KakaoMap(보통 WebView + JS SDK 방식)으로 교체할 때는 이
- * MockMap 컴포넌트 통째로 갈아끼우면 되고, 그 위에 떠 있는 검색바/
- * 진행 카드/바텀시트는 실제 지도가 들어와도 구조가 그대로 재사용됩니다.
- */
+import * as Location from 'expo-location';
+import KakaoMapView, {
+  KakaoMapPin,
+  KakaoMapCurrentLocation,
+} from '@/components/KakaoMapView';
 
 const COLORS = {
   accent: '#FFB134', // Point/Accent — 메인 CTA, 강조 액션
@@ -37,7 +29,7 @@ const COLORS = {
   record: '#E14D3F',
 };
 
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 // 지도 영역이 화면에서 차지하는 높이. 검색바는 이 위에 떠 있고,
 // 진행 카드는 이 경계에 걸쳐서 떠 있습니다.
@@ -48,126 +40,15 @@ const MAP_HEIGHT = SCREEN_HEIGHT * 0.58;
 const SHEET_PEEK_HEIGHT = SCREEN_HEIGHT * 0.46;
 const SHEET_EXPANDED_TOP_OFFSET = 90;
 
-// ── 지도 위에 표시할 배경 장소 라벨(사용자의 경로와 무관한, 지도에 원래
-// 있는 지명들) ────────────────────────────────────────────────
-// RN의 ViewStyle은 top/left에 '%' 문자열을 받을 때 아무 string이나
-// 허용하지 않고 `${number}%` 형태의 템플릿 리터럴 타입만 허용해요.
-// 그냥 `string`으로 선언하면 "이 값이 진짜 '숫자%' 형태라는 보장이 없다"고
-// 보고 에러를 냅니다(정확히 지금 만난 TS2769 오류의 원인이에요).
-type PercentString = `${number}%`;
-
-const BACKGROUND_POIS: {
-  name: string;
-  icon: keyof typeof Ionicons.glyphMap;
-  top: PercentString;
-  left: PercentString;
-}[] = [
-  { name: '전동성당', icon: 'business-outline', top: '18%', left: '10%' },
-  { name: '경기전', icon: 'business-outline', top: '20%', left: '38%' },
-  { name: '오목대', icon: 'triangle-outline', top: '52%', left: '52%' },
-  { name: '남부시장', icon: 'storefront-outline', top: '78%', left: '82%' },
-];
-
 // ── 사용자의 실제 여행 경로(핀) ─────────────────────────────
-// order대로 점선으로 이어집니다. icon은 그 장소에서 뭘 했는지를
-// 나타내요(집=출발지, 카메라=촬영 스팟, 배터리=충전소, 깃발=도착지).
-type RoutePin = {
-  id: string;
-  label: string;
-  icon: keyof typeof Ionicons.glyphMap;
-  top: number; // MAP_HEIGHT 대비 %
-  left: number; // 지도 너비 대비 %
-  isCurrent?: boolean; // 현재 위치면 pulse 링을 보여줌
-};
-
-const ROUTE_PINS: RoutePin[] = [
-  { id: 'start', label: '출발', icon: 'home', top: 66, left: 20, isCurrent: true },
-  { id: 'photo', label: '촬영', icon: 'camera', top: 38, left: 48 },
-  { id: 'charge', label: '충전', icon: 'flash', top: 60, left: 68 },
-  { id: 'end', label: '도착', icon: 'flag', top: 14, left: 80 },
+// order대로 점선으로 이어집니다. 좌표는 전주 한옥마을 일대의 대략적인
+// 값이라, 실제 서비스에 쓰기 전에 정확한 GPS/지오코딩 값으로 교체하세요.
+const ROUTE_PINS: KakaoMapPin[] = [
+  { id: 'start', label: '1', lat: 35.8127, lng: 127.1518 },
+  { id: 'photo', label: '2', lat: 35.8153, lng: 127.1528 },
+  { id: 'charge', label: '3', lat: 35.8172, lng: 127.1559 },
+  { id: 'end', label: '4', lat: 35.8168, lng: 127.158 },
 ];
-
-/** ROUTE_PINS 좌표들을 부드러운 곡선으로 이어붙인 SVG path 문자열을 만듭니다. */
-function buildRoutePath(pins: RoutePin[], width: number, height: number) {
-  const points = pins.map((p) => ({
-    x: (p.left / 100) * width,
-    y: (p.top / 100) * height,
-  }));
-
-  if (points.length < 2) return '';
-
-  let d = `M ${points[0].x} ${points[0].y}`;
-  for (let i = 1; i < points.length; i++) {
-    const prev = points[i - 1];
-    const curr = points[i];
-    // 두 점의 중간 지점을 제어점으로 써서 완만한 곡선을 만듭니다.
-    const midX = (prev.x + curr.x) / 2;
-    const midY = (prev.y + curr.y) / 2;
-    d += ` Q ${midX} ${prev.y}, ${midX} ${midY}`;
-    d += ` T ${curr.x} ${curr.y}`;
-  }
-  return d;
-}
-
-function MockMap() {
-  const mapWidth = SCREEN_WIDTH;
-  const pathD = buildRoutePath(ROUTE_PINS, mapWidth, MAP_HEIGHT);
-
-  return (
-    <View style={styles.map}>
-      {/* 배경 장소 라벨: 실제 경로랑 상관없이 지도 위에 그냥 존재하는 지명들 */}
-      {BACKGROUND_POIS.map((poi) => (
-        <View
-          key={poi.name}
-          style={[styles.poiLabel, { top: poi.top, left: poi.left }]}
-        >
-          <Ionicons name={poi.icon} size={14} color={COLORS.textSecondary} />
-          <Text style={styles.poiLabelText}>{poi.name}</Text>
-        </View>
-      ))}
-
-      {/* 점선 경로 */}
-      <Svg
-        width={mapWidth}
-        height={MAP_HEIGHT}
-        style={StyleSheet.absoluteFillObject}
-      >
-        <Path
-          d={pathD}
-          stroke={COLORS.accent}
-          strokeWidth={2.5}
-          strokeDasharray="7, 7"
-          fill="none"
-          strokeLinecap="round"
-        />
-      </Svg>
-
-      {/* 경로 핀 마커 */}
-      {ROUTE_PINS.map((pin) => (
-        <View
-          key={pin.id}
-          style={[
-            styles.pinWrapper,
-            {
-              // pin.top/left는 number라서 `${pin.top}%`로 문자열을 만들면
-              // TS는 이걸 그냥 넓은 string으로 취급해요(리터럴 타입이 아니라서).
-              // 위 BACKGROUND_POIS 때와 똑같은 이유로, PercentString으로
-              // 명시적으로 캐스팅해줘야 ViewStyle의 top/left 타입과 맞습니다.
-              top: `${pin.top}%` as PercentString,
-              left: `${pin.left}%` as PercentString,
-            },
-          ]}
-        >
-          {/* 현재 위치 핀만 바깥에 옅은 pulse 링을 하나 더 둡니다 */}
-          {pin.isCurrent && <View style={styles.pinPulseRing} />}
-          <View style={styles.pinCircle}>
-            <Ionicons name={pin.icon} size={16} color={COLORS.white} />
-          </View>
-        </View>
-      ))}
-    </View>
-  );
-}
 
 function SearchBar() {
   const insets = useSafeAreaInsets();
@@ -441,6 +322,32 @@ function clamp(value: number, min: number, max: number) {
 
 export default function TripHomeScreen() {
   const [elapsedSeconds] = useState(204); // 00:03:24 예시 값. 실제로는 타이머 state로 관리.
+  const [currentLocation, setCurrentLocation] =
+    useState<KakaoMapCurrentLocation | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    (async () => {
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== 'granted') return;
+
+        const { coords } = await Location.getCurrentPositionAsync({});
+        if (isMounted) {
+          setCurrentLocation({ lat: coords.latitude, lng: coords.longitude });
+        }
+      } catch (error) {
+        // 위치는 지도를 보정하는 용도라, 실패해도 화면 자체는 그대로 동작해야 해서
+        // 조용히 무시합니다(경로 핀 기준으로 지도가 뜹니다).
+        console.warn('현재 위치를 가져오지 못했습니다:', error);
+      }
+    })();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const elapsedLabel = (() => {
     const h = Math.floor(elapsedSeconds / 3600);
@@ -456,7 +363,14 @@ export default function TripHomeScreen() {
     <View style={styles.screen}>
       {/* 지도는 네모 박스 안에 갇히지 않고 화면 전체 폭을 그대로 채웁니다.
           검색바/진행 카드/시트는 전부 그 위에 떠 있는 오버레이예요. */}
-      <MockMap />
+      <View style={styles.map}>
+        <KakaoMapView
+          pins={ROUTE_PINS}
+          currentLocation={currentLocation}
+          height={MAP_HEIGHT}
+          pathColor={COLORS.accent}
+        />
+      </View>
 
       <SearchBar />
 
@@ -490,43 +404,6 @@ const styles = StyleSheet.create({
     height: MAP_HEIGHT,
     backgroundColor: COLORS.surface,
     overflow: 'hidden',
-  },
-  poiLabel: {
-    position: 'absolute',
-    alignItems: 'center',
-    gap: 2,
-  },
-  poiLabelText: {
-    fontSize: 10,
-    color: COLORS.textSecondary,
-    fontWeight: '600',
-  },
-  pinWrapper: {
-    position: 'absolute',
-    alignItems: 'center',
-    justifyContent: 'center',
-    // 마커의 "끝"이 실제 좌표를 가리키도록 자기 크기의 절반만큼 당겨줍니다.
-    marginLeft: -18,
-    marginTop: -18,
-    width: 36,
-    height: 36,
-  },
-  pinPulseRing: {
-    position: 'absolute',
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255,177,52,0.25)',
-  },
-  pinCircle: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: COLORS.accent,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: COLORS.white,
   },
 
   // 검색바

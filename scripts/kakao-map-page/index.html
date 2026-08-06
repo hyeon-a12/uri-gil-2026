@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>우리길 카카오맵</title>
+  <style>
+    html, body, #map { width: 100%; height: 100%; margin: 0; padding: 0; }
+    #debug {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 999;
+      background: rgba(0, 0, 0, 0.85);
+      color: #fff;
+      font-family: monospace;
+      font-size: 12px;
+      padding: 10px;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <div id="debug"></div>
+  <script>
+    // ─────────────────────────────────────────────────────────────
+    // 이 파일은 GitHub Pages 같은 "진짜 도메인"에 그대로 올려두는 정적
+    // 페이지입니다. 앱은 이 페이지를 WebView의 source={{ uri }}로(진짜
+    // 네트워크 요청으로) 불러오기 때문에, source={{ html }} 방식과 달리
+    // 브라우저가 정상적인 Referer 헤더를 붙여줍니다 — 그래서 카카오
+    // 디벨로퍼스의 "등록된 도메인" 검사를 통과할 수 있어요.
+    //
+    // 지도에 표시할 내용(핀, 내 위치, 확대 레벨 등)은 앱이 매번 다시
+    // 배포할 필요 없이 URL 쿼리 파라미터로 넘겨줍니다.
+    //   ?appkey=...&pins=[JSON]&currentLocation=[JSON|생략]&level=4&pathColor=%23FFB134
+    function notifyReactNative(payload) {
+      if (window.ReactNativeWebView) {
+        window.ReactNativeWebView.postMessage(JSON.stringify(payload));
+      }
+      // 앱(WebView) 없이 순수 브라우저(Safari)에서 열었을 때도 원인이
+      // 보이도록, 화면 하단에 그대로 텍스트로 찍어둡니다.
+      var debugEl = document.getElementById('debug');
+      if (debugEl && payload.message) {
+        debugEl.textContent += payload.message + '\n';
+      }
+    }
+
+    window.onerror = function (message) {
+      notifyReactNative({ type: 'error', message: '지도 스크립트 오류: ' + message });
+    };
+
+    function getParam(name, fallback) {
+      var value = new URLSearchParams(window.location.search).get(name);
+      return value === null ? fallback : value;
+    }
+
+    function getJsonParam(name, fallback) {
+      var raw = getParam(name, null);
+      if (!raw) return fallback;
+      try {
+        return JSON.parse(raw);
+      } catch (e) {
+        return fallback;
+      }
+    }
+
+    var appkey = getParam('appkey', '');
+    var pins = getJsonParam('pins', []);
+    var currentLocation = getJsonParam('currentLocation', null);
+    var level = Number(getParam('level', '4'));
+    var pathColor = getParam('pathColor', '#FFB134');
+
+    var DEFAULT_ACCENT = '#FFB134';
+    var CURRENT_LOCATION_COLOR = '#4285F4';
+    var FALLBACK_CENTER = { lat: 35.815, lng: 127.153 };
+    var center = currentLocation || pins[0] || FALLBACK_CENTER;
+
+    var SDK_URL = 'https://dapi.kakao.com/v2/maps/sdk.js?appkey=' + appkey + '&autoload=false';
+
+    console.log('[trace] 페이지 스크립트 시작. appkey 앞 8자리=' + appkey.slice(0, 8) + ', SDK_URL=' + SDK_URL);
+
+    var sdkScript = document.createElement('script');
+    sdkScript.src = SDK_URL;
+    sdkScript.onerror = function () {
+      console.log('[trace] sdkScript.onerror 콜백 진입');
+      // <script> onerror는 "진짜 네트워크 실패"와 "서버가 403 같은 에러
+      // 상태코드로 응답한 것"을 구분해주지 않습니다. no-cors fetch는
+      // HTTP 에러 상태코드가 와도 reject 하지 않고(응답을 읽을 순 없지만
+      // "요청 자체는 갔다 왔다"는 걸 알 수 있음), 진짜 네트워크/TLS
+      // 실패일 때만 reject 하기 때문에 이걸로 원인을 구분합니다.
+      fetch(SDK_URL, { mode: 'no-cors' })
+        .then(function () {
+          notifyReactNative({
+            type: 'error',
+            message: 'no-cors fetch는 성공(서버가 응답은 함) — 즉 카카오 서버가 요청을 받고 거부한 것(도메인/키 문제)으로 보입니다.',
+          });
+        })
+        .catch(function (err) {
+          notifyReactNative({
+            type: 'error',
+            message: '진짜 네트워크 실패로 확인됨: ' + err.message,
+          });
+        });
+    };
+    sdkScript.onload = function () {
+      console.log('[trace] sdkScript.onload 콜백 진입. kakao defined=' + (typeof kakao !== 'undefined'));
+      if (typeof kakao === 'undefined') {
+        notifyReactNative({
+          type: 'error',
+          message: '스크립트는 응답을 받았지만 kakao 객체가 정의되지 않았습니다 — 등록되지 않은 도메인이거나 키가 유효하지 않을 가능성이 높습니다.',
+        });
+        return;
+      }
+
+      kakao.maps.load(function () {
+        console.log('[trace] kakao.maps.load 콜백 진입 — 여기까지 왔으면 SDK는 정상 로드된 것');
+        var container = document.getElementById('map');
+        var map = new kakao.maps.Map(container, {
+          center: new kakao.maps.LatLng(center.lat, center.lng),
+          level: level,
+        });
+
+        if (pins.length >= 2) {
+          var linePath = pins.map(function (p) {
+            return new kakao.maps.LatLng(p.lat, p.lng);
+          });
+          var polyline = new kakao.maps.Polyline({
+            path: linePath,
+            strokeWeight: 3,
+            strokeColor: pathColor,
+            strokeOpacity: 0.9,
+            strokeStyle: 'shortdash',
+          });
+          polyline.setMap(map);
+        }
+
+        var bounds = new kakao.maps.LatLngBounds();
+
+        pins.forEach(function (pin) {
+          var position = new kakao.maps.LatLng(pin.lat, pin.lng);
+          bounds.extend(position);
+
+          var color = pin.color || DEFAULT_ACCENT;
+          var content =
+            '<div style="width:24px;height:24px;border-radius:12px;background:' + color + ';border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,0.25);display:flex;align-items:center;justify-content:center;font-size:10px;color:#fff;font-weight:700;">' +
+            (pin.label || '') +
+            '</div>';
+
+          new kakao.maps.CustomOverlay({
+            map: map,
+            position: position,
+            content: content,
+            yAnchor: 0.5,
+            xAnchor: 0.5,
+          });
+        });
+
+        if (currentLocation) {
+          var myPosition = new kakao.maps.LatLng(currentLocation.lat, currentLocation.lng);
+          bounds.extend(myPosition);
+
+          var myContent =
+            '<div style="position:relative;width:18px;height:18px;">' +
+            '<div style="position:absolute;top:-9px;left:-9px;width:36px;height:36px;border-radius:18px;background:' + CURRENT_LOCATION_COLOR + '33;"></div>' +
+            '<div style="width:18px;height:18px;border-radius:9px;background:' + CURRENT_LOCATION_COLOR + ';border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,0.3);"></div>' +
+            '</div>';
+
+          new kakao.maps.CustomOverlay({
+            map: map,
+            position: myPosition,
+            content: myContent,
+            yAnchor: 0.5,
+            xAnchor: 0.5,
+          });
+        }
+
+        if (pins.length >= 2 || (pins.length >= 1 && currentLocation)) {
+          map.setBounds(bounds, 60);
+        }
+
+        notifyReactNative({ type: 'ready' });
+      });
+    };
+
+    console.log('[trace] sdkScript를 head에 append 직전');
+    document.head.appendChild(sdkScript);
+    console.log('[trace] sdkScript append 완료 (아직 로드 중일 수 있음)');
+  </script>
+</body>
+</html>

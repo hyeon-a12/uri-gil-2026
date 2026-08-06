@@ -1,0 +1,208 @@
+import React, { useMemo, useState } from 'react';
+import { StyleSheet, View, ActivityIndicator, Text } from 'react-native';
+import { WebView, WebViewMessageEvent } from 'react-native-webview';
+
+/**
+ * ─────────────────────────────────────────────────────────────
+ * 왜 WebView + 실제로 호스팅된 페이지인가
+ * ─────────────────────────────────────────────────────────────
+ * @react-native-kakao/map 같은 네이티브 SDK는 development build가
+ * 필요해서 Expo Go에서 바로 못 씁니다. 카카오맵 JavaScript SDK를
+ * WebView에 로드하는 방식은 react-native-webview(이미 설치돼 있음)만
+ * 으로 Expo Go에서도 동작해서 이 방식을 씁니다.
+ *
+ * 처음에는 `source={{ html, baseUrl }}`로 페이지를 즉석에서 만들어
+ * 넘겼는데, iOS의 WKWebView는 이 방식(loadHTMLString)일 때 하위
+ * 리소스 요청(카카오 SDK <script>)에 baseUrl을 Referer로 제대로
+ * 안 실어줍니다(Android의 loadDataWithBaseURL은 문제없음). 그래서
+ * 카카오 디벨로퍼스의 "등록된 도메인" 검사를 iOS에서만 통과하지
+ * 못했어요.
+ *
+ * 그래서 지도 페이지를 GitHub Pages에 실제로 올려두고, WebView가
+ * `source={{ uri }}`로 "진짜 네트워크 요청"을 하도록 바꿨습니다.
+ * 진짜 페이지 로드는 두 플랫폼 다 정상적인 Referer를 보내기 때문에
+ * 문제가 없습니다. 지도에 표시할 핀/위치 등은 매번 이 페이지를 다시
+ * 배포할 필요 없이 URL 쿼리 파라미터로 넘겨줍니다.
+ * (호스팅된 페이지 소스: scripts/kakao-map-page/index.html)
+ *
+ * 카카오 디벨로퍼스 콘솔 > 플랫폼 > Web에는 아래 MAP_PAGE_ORIGIN을
+ * 등록해야 합니다.
+ */
+
+const MAP_PAGE_ORIGIN = 'https://hyeon-a12.github.io';
+const MAP_PAGE_URL = `${MAP_PAGE_ORIGIN}/urigil-kakao-map/`;
+
+export type KakaoMapPin = {
+  id: string;
+  lat: number;
+  lng: number;
+  /** 핀 안에 넣을 텍스트 한 글자~두 글자 (예: 이니셜). 비우면 점만 표시 */
+  label?: string;
+  /** 핀 색상. 기본값은 앱 포인트 컬러 */
+  color?: string;
+};
+
+export type KakaoMapCurrentLocation = {
+  lat: number;
+  lng: number;
+};
+
+type KakaoMapViewProps = {
+  pins: KakaoMapPin[];
+  height: number;
+  /** expo-location으로 가져온 사용자 실제 GPS 위치. 있으면 지도 중심으로 쓰고
+   * 파란 점(pulse) 마커로 따로 표시합니다. 아직 못 가져왔으면 null. */
+  currentLocation?: KakaoMapCurrentLocation | null;
+  /** 숫자가 작을수록 확대. 카카오맵 레벨 기본 범위는 1~14 */
+  level?: number;
+  /** 방문 경로 점선 색상 */
+  pathColor?: string;
+  onError?: (message: string) => void;
+};
+
+const DEFAULT_ACCENT = '#FFB134';
+
+function buildMapUrl(
+  pins: KakaoMapPin[],
+  currentLocation: KakaoMapCurrentLocation | null | undefined,
+  level: number,
+  pathColor: string,
+): string {
+  const jsKey = process.env.EXPO_PUBLIC_KAKAO_JS_KEY ?? '';
+
+  const params = new URLSearchParams({
+    appkey: jsKey,
+    pins: JSON.stringify(pins),
+    level: String(level),
+    pathColor,
+  });
+
+  if (currentLocation) {
+    params.set('currentLocation', JSON.stringify(currentLocation));
+  }
+
+  return `${MAP_PAGE_URL}?${params.toString()}`;
+}
+
+export default function KakaoMapView({
+  pins,
+  height,
+  currentLocation,
+  level = 4,
+  pathColor = DEFAULT_ACCENT,
+  onError,
+}: KakaoMapViewProps) {
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const mapUrl = useMemo(
+    () => buildMapUrl(pins, currentLocation, level, pathColor),
+    [pins, currentLocation, level, pathColor],
+  );
+
+  const handleMessage = (event: WebViewMessageEvent) => {
+    try {
+      const data = JSON.parse(event.nativeEvent.data);
+      if (data.type === 'console') {
+        // 아래 injectedJavaScriptBeforeContentLoaded가 웹뷰 안의
+        // console.log/warn/error를 전부 여기로 끌어옵니다 — 지도 페이지
+        // 자체를 못 고치는 상황에서도(원격 배포된 페이지) Metro 터미널
+        // 에서 실제로 무슨 일이 있었는지 볼 수 있어요.
+        console.log('[KakaoMapView:console]', data.message);
+      } else if (data.type === 'error') {
+        console.warn('[KakaoMapView]', data.message);
+        setErrorMessage(data.message);
+        onError?.(data.message);
+      } else if (data.type === 'ready') {
+        setErrorMessage(null);
+      }
+    } catch {
+      // 파싱 실패는 무시 — 지도 동작 자체엔 영향 없음
+    }
+  };
+
+  return (
+    <View style={[styles.container, { height }]}>
+      <WebView
+        originWhitelist={['*']}
+        source={{ uri: mapUrl }}
+        style={styles.webview}
+        javaScriptEnabled
+        domStorageEnabled
+        startInLoadingState
+        // Android에서 WebView는 하드웨어 서피스로 그려져서, JS 쪽 zIndex/
+        // 렌더 순서와 무관하게 형제 뷰(홈 화면의 바텀시트 등) 위로 겹쳐
+        // 보이는 문제가 있습니다. 'software'로 바꾸면 일반 RN 뷰처럼
+        // 정상적인 순서로 합성돼서 이 문제가 사라집니다(약간의 성능 비용은 있음).
+        androidLayerType="software"
+        // 페이지 자체 스크립트가 실행되기 전에 console.*을 가로채서
+        // RN 쪽으로 넘깁니다. injectedJavaScript(로드 후 실행)가 아니라
+        // BeforeContentLoaded를 쓰는 이유: 우리 지도 페이지의 로그는
+        // 페이지가 파싱되자마자 동기적으로 찍히기 때문에, 늦게 주입하면
+        // 놓칩니다.
+        injectedJavaScriptBeforeContentLoaded={`(function() {
+          ['log', 'warn', 'error'].forEach(function (level) {
+            var original = console[level];
+            console[level] = function () {
+              var args = Array.prototype.slice.call(arguments);
+              var text = args.map(function (a) {
+                try { return typeof a === 'string' ? a : JSON.stringify(a); }
+                catch (e) { return String(a); }
+              }).join(' ');
+              if (window.ReactNativeWebView) {
+                window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'console', message: '[' + level + '] ' + text }));
+              }
+              original.apply(console, args);
+            };
+          });
+          true;
+        })();`}
+        onMessage={handleMessage}
+        onError={(event) => {
+          const message = 'WebView 로드 실패: ' + event.nativeEvent.description;
+          console.warn('[KakaoMapView]', message);
+          setErrorMessage(message);
+        }}
+        renderLoading={() => (
+          <View style={styles.loading}>
+            <ActivityIndicator size="large" color={DEFAULT_ACCENT} />
+          </View>
+        )}
+      />
+      {errorMessage && (
+        <View style={styles.errorBanner} pointerEvents="none">
+          <Text style={styles.errorText}>{errorMessage}</Text>
+        </View>
+      )}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    width: '100%',
+    overflow: 'hidden',
+  },
+  webview: {
+    flex: 1,
+    backgroundColor: 'transparent',
+  },
+  loading: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F5F5F5',
+  },
+  errorBanner: {
+    position: 'absolute',
+    left: 12,
+    right: 12,
+    bottom: 12,
+    backgroundColor: 'rgba(0,0,0,0.8)',
+    borderRadius: 8,
+    padding: 10,
+  },
+  errorText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+  },
+});

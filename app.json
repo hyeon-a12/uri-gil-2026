@@ -43,6 +43,12 @@
           "microphonePermission": "영상 촬영 시 소리를 녹음하기 위해 마이크 접근이 필요합니다.",
           "recordAudioAndroid": true
         }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "우리길에서 현재 위치를 지도에 표시하기 위해 위치 접근이 필요합니다."
+        }
       ]
     ],
     "experiments": {
