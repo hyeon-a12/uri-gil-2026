@@ -3,7 +3,8 @@ import {
   router,
   useLocalSearchParams,
 } from 'expo-router';
-import { useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
 import {
   Alert,
   Animated,
@@ -25,6 +26,7 @@ import { VideoPreview } from '@/components/location-confirm/VideoPreview';
 import { MOCK_LOCATION_SUGGESTIONS } from '@/constants/mockLocations';
 import { saveRecording } from '@/services/recordingService';
 import { getActiveFolder } from '@/services/activeFolderService';
+import { getAllFolders, FolderItem } from '@/services/folderService';
 
 const COLORS = {
   background: '#FFFFFF',
@@ -58,31 +60,12 @@ type ConfirmStep =
   | 'location'
   | 'trip';
 
-interface TripOption {
-  id: string;
-  title: string;
-  date: string;
-}
-
-const MOCK_TRIPS: TripOption[] = [
-  {
-    id: 'trip-1',
-    title: '전주 먹으러 왔다',
-    date: '2026.06.20.',
-  },
-  {
-    id: 'trip-2',
-    title: '가족여행 전주',
-    date: '2025.01.23.',
-  },
-];
-
 function TripOptionCard({
   trip,
   selected,
   onPress,
 }: {
-  trip: TripOption;
+  trip: FolderItem;
   selected: boolean;
   onPress: () => void;
 }) {
@@ -115,7 +98,7 @@ function TripOptionCard({
               selected && styles.tripDateSelected,
             ]}
           >
-            생성일 {trip.date}
+            생성일 {trip.dateRange}
           </Text>
         </View>
 
@@ -142,6 +125,22 @@ function TripOptionCard({
  * 3. 선택 완료 후 클립 관리 화면으로 이동
  */
 export default function LocationConfirmScreen() {
+  const [trips, setTrips] = useState<FolderItem[]>([]);
+
+  useFocusEffect(
+    useCallback(() => {
+      (async () => {
+        try {
+          const folders = await getAllFolders();
+          setTrips(folders);
+        } catch (error) {
+          console.warn('[LocationConfirm] 폴더 로드 실패:', error);
+          setTrips([]);
+        }
+      })();
+    }, []),
+  );
+
   const { videoUri } =
     useLocalSearchParams<{
       videoUri?: string;
@@ -220,7 +219,7 @@ export default function LocationConfirmScreen() {
 
   const selectedTrip = useMemo(
     () =>
-      MOCK_TRIPS.find(
+      trips.find(
         (trip) => trip.id === selectedTripId,
       ),
     [selectedTripId],
@@ -278,12 +277,19 @@ export default function LocationConfirmScreen() {
     }
 
     // 클립 관리 화면에서 "카메라 연결하기"로 미리 지정해둔 여행(폴더)에 저장합니다.
-    const folderId = await getActiveFolder();
+    const activeFolderId = await getActiveFolder();
 
-    if (!folderId) {
+    if (!activeFolderId) {
       Alert.alert(
-        '연결된 여행이 없습니다',
-        '클립 관리 화면에서 여행의 "카메라 연결하기"를 먼저 눌러주세요.',
+        'Tip',
+        "클립 관리에서 여행의 '카메라 연결하기'를 선택하면 자동으로 카메라와 연결됩니다."
+      )
+    }
+
+    const targetFolderId = activeFolderId ?? selectedTripId;
+    if (!targetFolderId) {
+      Alert.alert(
+        '여행 선택해라'
       );
       return;
     }
@@ -294,7 +300,7 @@ export default function LocationConfirmScreen() {
         videoUri,
         // TODO: expo-video-thumbnails 등으로 실제 썸네일을 만들기 전까지는 영상 자체를 썸네일로 재사용합니다.
         thumbnail: videoUri,
-        folderId,
+        folderId: targetFolderId,
         // TODO: 로그인 연동 전까지 쓰는 임시 사용자 ID입니다.
         userId: 'guest',
         location: {
@@ -641,7 +647,7 @@ export default function LocationConfirmScreen() {
                   }
                   showsVerticalScrollIndicator={false}
                 >
-                  {MOCK_TRIPS.map((trip) => (
+                  {trips.map((trip) => (
                     <TripOptionCard
                       key={trip.id}
                       trip={trip}
@@ -653,58 +659,6 @@ export default function LocationConfirmScreen() {
                       }
                     />
                   ))}
-
-                  <Pressable
-                    onPress={handleCreateNewTrip}
-                    style={({ pressed }) => [
-                      styles.createTripButton,
-                      pressed &&
-                        styles.cardPressed,
-                    ]}
-                  >
-                    <View
-                      style={
-                        styles.createTripIconContainer
-                      }
-                    >
-                      <Ionicons
-                        name="add"
-                        size={22}
-                        color={COLORS.primary}
-                      />
-                    </View>
-
-                    <View
-                      style={
-                        styles.createTripTextArea
-                      }
-                    >
-                      <Text
-                        allowFontScaling={false}
-                        style={
-                          styles.createTripTitle
-                        }
-                      >
-                        새 여행 만들기
-                      </Text>
-
-                      <Text
-                        allowFontScaling={false}
-                        style={
-                          styles.createTripDescription
-                        }
-                      >
-                        새로운 여행을 생성하고
-                        클립을 추가해보세요.
-                      </Text>
-                    </View>
-
-                    <Ionicons
-                      name="chevron-forward"
-                      size={19}
-                      color={COLORS.textTertiary}
-                    />
-                  </Pressable>
                 </ScrollView>
 
                 <Pressable
@@ -719,12 +673,6 @@ export default function LocationConfirmScreen() {
                       styles.primaryButtonPressed,
                   ]}
                 >
-                  <Ionicons
-                    name="checkmark"
-                    size={20}
-                    color="#FFFFFF"
-                  />
-
                   <Text
                     allowFontScaling={false}
                     style={styles.primaryButtonText}

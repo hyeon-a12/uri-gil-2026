@@ -38,7 +38,7 @@ export const COLORS = {
 
   // 장소 확인 화면 (Figma)
   locationSheet: '#E9EDF5',
-  locationSelect: '#6289DC',
+  locationSelect: '#FFB134',
   locationButtonDisabled: '#D8D3CE',
   locationDragHandle: '#C8CDD8',
 
