@@ -26,7 +26,7 @@ const MAX_CLIPS = 15;
 const COLORS = {
   background: '#FFFFFF',
   white: '#FFFFFF',
-  primary: '#FFB134',
+  primary: '#FF7F5C',
   primaryDark: '#EA861F',
   primarySoft: '#FFF3DF',
 

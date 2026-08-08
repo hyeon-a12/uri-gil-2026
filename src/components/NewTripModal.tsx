@@ -16,12 +16,12 @@ import { Ionicons } from '@expo/vector-icons';
  * ─────────────────────────────────────────────────────────────
  * ⚠️ 색상 관련 참고
  * ─────────────────────────────────────────────────────────────
- * 단색 #FFB134 버튼으로 통일하고 싶으시면
+ * 단색 #FF7F5C 버튼으로 통일하고 싶으시면
  * GRADIENT 배열을 안 쓰고 backgroundColor: COLORS.accent 하나로 바꾸시면 됩니다
  * (아래 PrimaryButton 컴포넌트 안에 분기 처리해뒀어요).
  */
 const COLORS = {
-  accent: '#FFB134',
+  accent: '#FF7F5C',
   accentDark: '#E8663F',
   dark: '#1E2128',
   black: '#222222',
@@ -31,7 +31,7 @@ const COLORS = {
   gray100: '#F5F5F5',
   white: '#FFFFFF',
 };
-const GRADIENT: [string, string] = ['#FFC364', '#FFB134'];
+const GRADIENT: [string, string] = ['#FFC364', '#FF7F5C'];
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 

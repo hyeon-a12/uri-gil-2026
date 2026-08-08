@@ -30,7 +30,7 @@ const COLORS = {
   background: '#FFFFFF',
   card: '#FFFFFF',
 
-  primary: '#FFB134',
+  primary: '#FF7F5C',
   primaryDark: '#E9851D',
   primarySoft: '#FFF3DF',
 

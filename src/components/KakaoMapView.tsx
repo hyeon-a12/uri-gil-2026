@@ -60,7 +60,7 @@ type KakaoMapViewProps = {
   onError?: (message: string) => void;
 };
 
-const DEFAULT_ACCENT = '#FFB134';
+const DEFAULT_ACCENT = '#FF7F5C';
 
 function buildMapUrl(
   pins: KakaoMapPin[],

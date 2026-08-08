@@ -4,7 +4,7 @@ export const colors = {
   bg: '#FFFFFF',
   card: '#FFFFFF',
 
-  accent: '#FFB134',
+  accent: '#FF7F5C',
   accentDark: '#E97B1F',
   accentSoft: '#FFF3DF',
 

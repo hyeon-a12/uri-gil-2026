@@ -358,7 +358,7 @@ const styles = StyleSheet.create({
   },
 
   passwordToggleText: {
-    color: '#FFB134',
+    color: '#FF7F5C',
     fontSize: 13,
     fontFamily: 'SpoqaHanSansNeo-Medium',
   },
@@ -383,8 +383,8 @@ const styles = StyleSheet.create({
   },
 
   checkboxChecked: {
-    borderColor: '#FFB134',
-    backgroundColor: '#FFB134',
+    borderColor: '#FF7F5C',
+    backgroundColor: '#FF7F5C',
   },
 
   checkText: {
@@ -404,7 +404,7 @@ const styles = StyleSheet.create({
   joinButton: {
     height: 56,
     borderRadius: 16,
-    backgroundColor: '#FFB134',
+    backgroundColor: '#FF7F5C',
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 22,
@@ -430,7 +430,7 @@ const styles = StyleSheet.create({
   },
 
   loginText: {
-    color: '#FFB134',
+    color: '#FF7F5C',
     fontSize: 14,
     fontFamily: 'SpoqaHanSansNeo-Bold',
     marginLeft: 8,

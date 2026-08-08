@@ -245,7 +245,7 @@ const styles = StyleSheet.create({
 
   passwordToggleText: {
     fontFamily: 'SpoqaHanSansNeo-Medium',
-    color: '#FFB134',
+    color: '#FF7F5C',
     fontSize: 13,
   },
 
@@ -263,7 +263,7 @@ const styles = StyleSheet.create({
   loginButton: {
     height: 56,
     borderRadius: 16,
-    backgroundColor: '#FFB134',
+    backgroundColor: '#FF7F5C',
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 14,
@@ -290,7 +290,7 @@ const styles = StyleSheet.create({
 
   joinText: {
     fontFamily: 'SpoqaHanSansNeo-Bold',
-    color: '#FFB134',
+    color: '#FF7F5C',
     fontSize: 14,
     marginLeft: 8,
   },

@@ -8,8 +8,8 @@
 
 export const COLORS = {
   // 포인트 컬러 (이 색 하나만 강조색으로 사용)
-  primary: '#FFB134',
-  primaryTint: '#FFF3DF',   // 프로모션 배지, 태그 배경 등 연한 포인트 컬러
+  primary: '#FF7F5C',
+  primaryTint: '#FFE8E0',   // 프로모션 배지, 태그 배경 등 연한 포인트 컬러
 
   // 배경
   white: '#FFFFFF',
@@ -28,8 +28,8 @@ export const COLORS = {
   navInactive: '#666666',
 
   // 핑 상태
-  pinVisited: '#FFB134',           // 방문 완료 (포인트 컬러 그대로)
-  pinUnvisited: '#FFB13435',       // 미방문 (같은 색인데 투명도 20%)
+  pinVisited: '#FF7F5C',           // 방문 완료 (포인트 컬러 그대로)
+  pinUnvisited: '#FF7F5C35',       // 미방문 (같은 색인데 투명도 20%)
   // 뒤에 35는 16진수 투명도예요. 00=완전투명, FF=불투명, 35≒20%
 
   // 기능 색상

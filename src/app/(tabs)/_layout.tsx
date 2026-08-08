@@ -12,7 +12,7 @@ import { AppText as Text } from '@/components/AppText';
   import ClipIcon from "@/assets/images/tabIcons/clip.svg";
 
 
-const ACTIVE = '#FFB134';
+const ACTIVE = '#FF7F5C';
 // 탭을 선택했을 때(눌렀을 때) 아이콘·글자 색이 메인 컬러(ACTIVE)로 표시됩니다.
 // (가운데 카메라 버튼의 배경색도 항상 같은 ACTIVE 오렌지를 씁니다.)
 const SELECTED = ACTIVE;

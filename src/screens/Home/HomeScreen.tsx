@@ -19,7 +19,7 @@ import KakaoMapView, {
 } from '@/components/KakaoMapView';
 
 const COLORS = {
-  accent: '#FFB134', // Point/Accent — 메인 CTA, 강조 액션
+  accent: '#FF7F5C', // Point/Accent — 메인 CTA, 강조 액션
   accentTint: '#FFF3DF', // 프로모션 배지, 태그 배경
   surface: '#F5F5F5', // 카드/섹션 구분용 연한 회색 배경
   white: '#FFFFFF', // 앱 전체 배경

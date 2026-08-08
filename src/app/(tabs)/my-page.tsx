@@ -17,7 +17,7 @@ const COLORS = {
   background: '#FFFFFF', // 앱의 기본 배경색
   card: '#FFFFFF',       // 카드나 박스의 배경색
 
-  primary: '#FFB134',    // 메인 브랜드 컬러 (오렌지)
+  primary: '#FF7F5C',    // 메인 브랜드 컬러 (오렌지)
   primaryDark: '#E97B1F',// 눌렸을 때나 강조할 때 쓸 어두운 오렌지
   primarySoft: '#FFF3DF',// 아주 연한 오렌지 배경
 
