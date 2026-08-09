@@ -9,13 +9,16 @@ import {
   TouchableOpacity,
   FlatList,
   Image,
+  Modal,
+  TouchableWithoutFeedback,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { Ionicons, Feather, MaterialCommunityIcons } from '@expo/vector-icons';
+import * as MediaLibrary from 'expo-media-library';
 
 import { navigateToCamera } from '@/navigation/recordingNavigation';
-import { getRecordingsByFolder } from '@/services/recordingService';
+import { deleteRecording, getRecordingsByFolder } from '@/services/recordingService';
 
 const COLORS = {
   background: '#FFFFFF',
@@ -35,6 +38,9 @@ const COLORS = {
   unchecked: '#B5B5AF',
   delete: '#E46F61',
   shadow: '#4B4138',
+  disabled: '#D8D5CF',
+
+  overlay: 'rgba(0,0,0,0.25)',
 };
 
 interface ClipItem {
@@ -185,6 +191,7 @@ export default function ClipSelectScreen() {
 
   const [clips, setClips] = useState<ClipItem[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [selectedClipForMenu, setSelectedClipForMenu] = useState<ClipItem | null>(null);
 
   const selectedCount = selectedIds.size;
   const allSelected = clips.length > 0 && selectedCount === clips.length;
@@ -273,39 +280,45 @@ export default function ClipSelectScreen() {
           {isSelected ? (
             <Ionicons name="checkmark" size={16} color="#FFFFFF" />
           ) : null}
-          </TouchableOpacity>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.card}
+          activeOpacity={1}
+          onPress={() => toggleClip(item.id)}
+        >
+          <View style={styles.thumbnailContainer}>
+            <Image source={{ uri: item.uri }} style={styles.thumbnail} />
+            <View style={styles.playOverlay}>
+              <Ionicons name="play" size={16} color="#FFFFFF" />
+            </View>
+          </View>
+
+          <View style={styles.cardInfo}>
+            <Text style={styles.clipTitle} numberOfLines={1}>
+              {item.title ?? '제목 없음'}
+            </Text>
+            <Text style={styles.clipDate}>{formatDate(item.recordedAt)}</Text>
+            <View style={styles.durationRow}>
+              <MaterialCommunityIcons
+                name="clock-outline"
+                size={12}
+                color={ COLORS?.textSecondary || '#8E8E93' }
+              />
+              <Text style={styles.durationText}>
+                {formatDuration(item.durationSeconds)}
+              </Text>
+            </View>
+          </View>
 
           <TouchableOpacity
-            style={styles.card}
-            activeOpacity={1}>
-            <View style={styles.thumbnailContainer}>
-              <Image source={{ uri: item.uri }} style={styles.thumbnail} />
-              <View style={styles.playOverlay}>
-                <Ionicons name="play" size={16} color="#FFFFFF" />
-              </View>
-            </View>
-
-            <View style={styles.cardInfo}>
-              <Text style={styles.clipTitle} numberOfLines={1}>
-                {item.title ?? '제목 없음'}
-              </Text>
-              <Text style={styles.clipDate}>{formatDate(item.recordedAt)}</Text>
-              <View style={styles.durationRow}>
-                <MaterialCommunityIcons
-                  name="clock-outline"
-                  size={12}
-                  color={ COLORS?.textSecondary || '#8E8E93' }
-                />
-                <Text style={styles.durationText}>
-                  {formatDuration(item.durationSeconds)}
-                </Text>
-              </View>
-            </View>
-
-            <View style={styles.dragHandle}>
-              <Feather name="menu" size={20} color="#C7C7CC" />
-            </View>
-            </TouchableOpacity>
+            style={styles.dragHandle}
+            hitSlop={10}
+            onPress={() => setSelectedClipForMenu(item)}
+          >
+            <Feather name="menu" size={20} color={COLORS.textTertiary} />
+          </TouchableOpacity>
+        </TouchableOpacity>
       </View>
     );
   };
@@ -331,41 +344,73 @@ export default function ClipSelectScreen() {
     setSelectedIds(new Set(clips.map((clip) => clip.id)));
   };
 
+  const handleDownloadClip = () => {
+    if (!selectedClipForMenu) return;
+    const clip = selectedClipForMenu;
+    setSelectedClipForMenu(null);
+
+    Alert.alert(
+      '다운로드',
+      `${clip.title} 영상을 갤러리에 저장할까요?`,
+      [
+        {text: '취소', style: 'cancel'},
+        {text: '저장', onPress: async () => {
+          try {
+            const {status} = await MediaLibrary.requestPermissionsAsync();
+            if (status !== 'granted') {
+              Alert.alert('권한 필요', '갤러리 접근 권한이 필요합니다.');
+              return;
+            }
+
+            const videoUri = await getRecordingsByFolder(clip.id);
+            if (videoUri) {
+              Alert.alert('저장 실패', '영상 파일 경로를 찾을 수 없습니다.');
+              return;
+            }
+
+            await MediaLibrary.saveToLibraryAsync(videoUri);
+            Alert.alert('저장 완료', '갤러리에 저장되었습니다.');
+          } catch (error) {
+            console.error('[handleDownloadClip] 실패:', error);
+            Alert.alert('저장 실패', '갤러리에 저장 중 문제가 발생했습니다.');
+            }
+          },
+        },
+      ],
+    );
+  };
+
   const handleCancel = () => {
     setSelectedIds(new Set());
     router.back();
   };
 
   const handleDelete = () => {
-    if (selectedCount === 0) {
-      Alert.alert(
-        '선택된 클립이 없습니다',
-        '삭제할 클립을 한 개 이상 선택해주세요.',
-      );
-
-      return;
-    }
+    if (!selectedClipForMenu) return;
+    const clip = selectedClipForMenu;
+    setSelectedClipForMenu(null);
 
     Alert.alert(
-      '선택한 클립 삭제',
-      `${selectedCount}개의 클립을 삭제할까요?`,
+      '클립 삭제',
+      `${clip.title} 클립을 삭제할까요?`,
       [
+        {text: '취소', style: 'cancel'},
         {
-          text: '취소',
-          style: 'cancel',
-        },
-        {
-          text: '삭제',
-          style: 'destructive',
-          onPress: () => {
-            setClips((currentClips) =>
-              currentClips.filter(
-                (clip) =>
-                  !selectedIds.has(clip.id),
-              ),
-            );
-
-            setSelectedIds(new Set());
+          text: '삭제', style: 'destructive', onPress: async () => {
+            try {
+              await deleteRecording(clip.id);
+              setClips((prev) => prev.filter((c) => c.id != clip.id));
+              setSelectedIds((prev) => {
+                const next = new Set(prev);
+                next.delete(clip.id);
+                return next;
+              });
+            } catch (error) {
+              console.error('[handleDelete] 실패:', error);
+              Alert.alert(
+                '삭제 실패',
+              );
+            }
           },
         },
       ],
@@ -513,6 +558,51 @@ export default function ClipSelectScreen() {
             <Text style={styles.createButtonText}>영상 생성</Text>
           </TouchableOpacity>
       </View>
+
+      <Modal
+        visible={!!selectedClipForMenu}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSelectedClipForMenu(null)}
+      >
+        <TouchableWithoutFeedback onPress={() => setSelectedClipForMenu(null)}>
+          <View style={styles.modalOverlay}>
+            <TouchableWithoutFeedback>
+              <View style={styles.menuBox}>
+                <TouchableOpacity
+                  style={styles.menuItem}
+                  activeOpacity={0.7}
+                  onPress={handleDownloadClip}
+                >
+                  <Ionicons
+                    name='download-outline'
+                    size={20}
+                    color={COLORS.textPrimary}
+                  />
+                  <Text style={styles.menuText}>다운로드</Text>
+                </TouchableOpacity>
+
+                <View style={styles.menuDivider} />
+
+                <TouchableOpacity
+                  style={styles.menuItem}
+                  activeOpacity={0.7}
+                  onPress={handleDelete}
+                >
+                  <Ionicons
+                    name="trash-outline"
+                    size={20}
+                    color={COLORS.delete}
+                  />
+                  <Text style={[styles.menuText, styles.menuTextDelete]}>
+                    삭제하기
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </TouchableWithoutFeedback>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
     </View>
   );
 }
@@ -1052,5 +1142,45 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 15,
     fontWeight: '700',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: COLORS.overlay,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  menuBox: {
+    width: 220,
+    backgroundColor: COLORS.card,
+    borderRadius: 16,
+    paddingVertical: 8,
+    paddingHorizontal: 8,
+    shadowColor: '#000',
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 5,
+  },
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    gap: 10,
+  },
+  menuDivider: {
+    height: 1,
+    backgroundColor: COLORS.divider,
+    marginHorizontal: 8,
+    marginVertical: 4,
+  },
+  menuText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: COLORS.textPrimary,
+  },
+  menuTextDelete: {
+    color: COLORS.delete,
   },
 });

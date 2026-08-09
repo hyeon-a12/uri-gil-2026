@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   Alert,
   Pressable,
@@ -11,10 +11,11 @@ import {
 } from 'react-native';
 import { AppText as Text } from '@/components/AppText';
 import { Image } from 'expo-image';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { setActiveFolder, clearActiveFolder } from '@/services/activeFolderService';
+import { getAllFolders, saveFolder, deleteFolder as deleteFolderFromStorage, FolderItem } from '@/services/folderService';
 import NewTripModal from '@/components/NewTripModal';
 
 const COLORS = {
@@ -41,52 +42,33 @@ const COLORS = {
   overlay: 'rgba(0,0,0,0.25)',
 };
 
-interface FolderItem {
-  id: string;
-  title: string;
-  dateRange: string;
-  clipCount: number;
-  thumbnail: string;
-}
-
-const MOCK_FOLDERS: FolderItem[] = [
-  {
-    id: '1',
-    title: '전주',
-    dateRange: '2026.07.23. 16:00',
-    clipCount: 6,
-    thumbnail:
-      'https://images.unsplash.com/photo-1500534623283-312aade485b7?w=600',
-  },
-  {
-    id: '2',
-    title: '경주',
-    dateRange: '2026.07.23. 16:20',
-    clipCount: 7,
-    thumbnail:
-      'https://images.unsplash.com/photo-1509042239860-f550ce710b93?w=600',
-  },
-  {
-    id: '3',
-    title: '포항',
-    dateRange: '2026.07.23. 17:10',
-    clipCount: 11,
-    thumbnail:
-      'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=600',
-  },
-];
-
 export default function ClipManageScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  
+  useFocusEffect(
+    useCallback(() => {
+      void loadFolders();
+    }, []),
+  );
+  
+  const loadFolders = async () => {
+    try {
+      const stored = await getAllFolders();
+      setFolders(stored);
+    } catch (error) {
+      console.error('[loadFolders] 실패:', error);
+      setFolders([]);
+    }
+  };
 
   const { locationName } = useLocalSearchParams<{
     locationName?: string;
   }>();
 
   const [activeTab, setActiveTab] = useState<'editing' | 'myTravel'>('editing');
-  const [folders, setFolders] = useState<FolderItem[]>(MOCK_FOLDERS);
-  const [activeFolderId, setActiveFolderId] = useState<string | null>('1');
+  const [folders, setFolders] = useState<FolderItem[]>([]);
+  const [activeFolderId, setActiveFolderId] = useState<string | null>('null');
   const [selectedFolderForMenu, setSelectedFolderForMenu] =
     useState<FolderItem | null>(null);
   const [newTripModalVisible, setNewTripModalVisible] = useState(false);
@@ -105,7 +87,7 @@ export default function ClipManageScreen() {
     setNewTripModalVisible(true);
   };
 
-  const handleTripCreated: React.ComponentProps<typeof NewTripModal>['onCreated'] = (
+  const handleTripCreated: React.ComponentProps<typeof NewTripModal>['onCreated'] = async (
     trip,
   ) => {
     const newFolder: FolderItem = {
@@ -121,7 +103,13 @@ export default function ClipManageScreen() {
         'https://images.unsplash.com/photo-1500534623283-312aade485b7?w=600',
     };
 
-    setFolders((prev) => [newFolder, ...prev]);
+    try {
+      await saveFolder(newFolder);
+      setFolders((prev) => [newFolder, ...prev]);
+    } catch (error) {
+      console.error('[handleTripCreated] 저장 실패:', error);
+      Alert.alert('저장 실패', '폴더를 만드는 중 문제가 발생했습니다.');
+    }
   };
 
   const handleConnectCamera = async () => {
@@ -132,31 +120,31 @@ export default function ClipManageScreen() {
     }
   };
 
-  const handleDeleteFolder = () => {
+  const handleDelete = () => {
     if (!selectedFolderForMenu) return;
-
     const folder = selectedFolderForMenu;
     setSelectedFolderForMenu(null);
 
     Alert.alert(
-      `폴더 삭제`,
-      `'${folder.title}' 폴더를 삭제할까요?\n폴더 안의 모든 클립도 함께 삭제됩니다.`,
+      '폴더 삭제',
+      `${folder.title} 폴더를 삭제할까요?`,
       [
-        { text: '취소', style: 'cancel' },
+        {text: '취소', style: 'cancel'},
         {
-          text: '삭제',
-          style: 'destructive',
-          onPress: async () => {
+          text: '삭제', style: 'destructive', onPress: async () => {
             try {
               if (activeFolderId === folder.id) {
                 setActiveFolderId(null);
                 await clearActiveFolder();
               }
 
-              setFolders((prev) => prev.filter((f) => f.id !== folder.id));
+              await deleteFolderFromStorage(folder.id);
+              setFolders((prev) => prev.filter((c) => c.id != folder.id));
             } catch (error) {
-              console.error('[handleDeleteFolder] 삭제 실패', error);
-              Alert.alert('삭제 실패', '폴더를 삭제하는 중 문제가 발생했습니다.');
+              console.error('[handleDelete] 실패:', error);
+              Alert.alert(
+                '삭제 실패',
+              );
             }
           },
         },
@@ -273,7 +261,7 @@ export default function ClipManageScreen() {
                       : '여행 일정 생성하기'}
                   </Text>
                   <Text style={styles.bannerSubtitle}>
-                    새로운 여행을 떠나보세요.
+                    새로운 여행을 생성하고 클립을 추가해보세요.
                   </Text>
                 </View>
               </TouchableOpacity>
@@ -314,7 +302,7 @@ export default function ClipManageScreen() {
                 <TouchableOpacity
                   style={styles.menuItem}
                   activeOpacity={0.7}
-                  onPress={handleDeleteFolder}
+                  onPress={handleDelete}
                 >
                   <Ionicons
                     name='trash-outline'
