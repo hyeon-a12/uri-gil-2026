@@ -73,6 +73,7 @@ export default function ClipManageScreen() {
       );
       
       setFolders(withCounts);
+      setActiveFolderId(activeId);
     } catch (error) {
       console.error('[loadFolders] 실패:', error);
       setFolders([]);

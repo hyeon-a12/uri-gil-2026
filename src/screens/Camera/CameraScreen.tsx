@@ -19,6 +19,7 @@ import { AppText as Text } from '@/components/AppText';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { navigateToLocationConfirm } from '@/navigation/recordingNavigation';
+import { getAllFolders } from '@/services/folderService';
 
 const MAX_CLIP_SECONDS = 10;
 const MAX_CLIPS = 15;
@@ -196,8 +197,39 @@ export default function CameraScreen() {
     1,
   );
 
-  const canRecord =
-    clipCount < MAX_CLIPS && permissionsReady;
+  const [hasFolders, setHasFolders] = useState<boolean | null>(null);
+  const canRecord = clipCount < MAX_CLIPS && permissionsReady && hasFolders === true;
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const folders = await getAllFolders();
+        setHasFolders(folders.length > 0);
+
+        if (folders.length === 0) {
+          Alert.alert(
+            '저장할 여행이 없습니다.',
+            '클립 관리에서 여행을 생성하세요.',
+            [
+              {
+                text: '클립 관리로 이동',
+                onPress: () => router.replace('/clip-manage'),
+              },
+              {
+                text: '취소',
+                style: 'cancel',
+                onPress: () => router.back(),
+              },
+            ],
+            { cancelable: false },
+          );
+        }
+      } catch (error) {
+        console.error('[CameraScreen] 폴더 조회 실패:', error);
+        setHasFolders(true);
+      }
+    })();
+  }, []);
 
   useEffect(() => {
     if (!isRecording) {
@@ -253,6 +285,14 @@ export default function CameraScreen() {
   const handleRecordPress = async () => {
     if (isRecording) {
       cameraRef.current?.stopRecording();
+      return;
+    }
+
+    if (hasFolders === false) {
+      Alert.alert(
+        '저장할 여행이 없습니다.',
+        '클립 관리에서 여행을 생성하세요.',
+      );
       return;
     }
 
