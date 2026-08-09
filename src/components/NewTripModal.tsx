@@ -69,7 +69,8 @@ const THEMES = [
 ];
 
 // ── 타입 ────────────────────────────────────────────────────
-type Step = 1 | 2 | 3 | 4 | 'success';
+// 1단계(기본 정보)와 3단계(테마)를 한 화면으로 합쳐서 전체 4단계 → 3단계로 줄었습니다.
+type Step = 1 | 2 | 3 | 'success';
 
 // ShootingStyleId/GridTemplateId는 저장 스키마(FolderItem)에도 쓰여서 folderService.ts로
 // 옮겼습니다. 'thirds'(구도 가이드선)였던 걸 'grid'로 바꾼 이유는 실제로 하려던 게
@@ -297,9 +298,9 @@ function PrimaryButton({
 function StepIndicator({
   currentStep,
   label,
-  totalSteps = 4,
+  totalSteps = 3,
 }: {
-  currentStep: 1 | 2 | 3 | 4;
+  currentStep: 1 | 2 | 3;
   label: string;
   totalSteps?: number;
 }) {
@@ -573,7 +574,7 @@ export default function NewTripModal({ visible, onClose, onCreated }: Props) {
   const isStep2Valid = !!form.startDate && !!form.endDate;
   // '그리드 선택'을 골랐으면 구체적인 템플릿까지 정해야 진행 가능.
   // 다른 스타일은 기본값이 이미 있어서 별도 검증이 필요 없어요.
-  const isStep4Valid =
+  const isStep3Valid =
     form.shootingStyle !== 'grid' || !!form.gridTemplateId;
 
   return (
@@ -598,8 +599,7 @@ export default function NewTripModal({ visible, onClose, onCreated }: Props) {
 
           {step === 1 && <StepIndicator currentStep={1} label="기본 정보" />}
           {step === 2 && <StepIndicator currentStep={2} label="일정" />}
-          {step === 3 && <StepIndicator currentStep={3} label="테마" />}
-          {step === 4 && <StepIndicator currentStep={4} label="촬영 스타일" />}
+          {step === 3 && <StepIndicator currentStep={3} label="촬영 스타일" />}
 
           {/* ── STEP 1: 기본 정보 ─────────────────────────── */}
           {step === 1 && (
@@ -646,6 +646,23 @@ export default function NewTripModal({ visible, onClose, onCreated }: Props) {
                   setForm((prev) => ({ ...prev, memo: text }))
                 }
               />
+
+              <Text style={styles.fieldLabel}>
+                여행 테마 <Text style={styles.fieldLabelMuted}>(중복 선택 가능)</Text>
+              </Text>
+              <Text style={styles.fieldHint}>
+                선택한 테마를 바탕으로 루트 추천을 받을 수 있어요
+              </Text>
+              <View style={styles.chipWrap}>
+                {THEMES.map((theme) => (
+                  <SelectableChip
+                    key={theme}
+                    label={theme}
+                    selected={form.themes.includes(theme)}
+                    onPress={() => toggleTheme(theme)}
+                  />
+                ))}
+              </View>
 
               <View style={{ height: 24 }} />
               <PrimaryButton
@@ -863,41 +880,8 @@ export default function NewTripModal({ visible, onClose, onCreated }: Props) {
             </ScrollView>
           )}
 
-          {/* ── STEP 3: 테마 ─────────────────────────────── */}
+          {/* ── STEP 3: 촬영 스타일 + 요약 ─────────────────── */}
           {step === 3 && (
-            <ScrollView style={styles.body} showsVerticalScrollIndicator={false}>
-              <Text style={styles.fieldLabel}>
-                여행 테마 <Text style={styles.fieldLabelMuted}>(중복 선택 가능)</Text>
-              </Text>
-              <Text style={styles.fieldHint}>
-                선택한 테마를 바탕으로 루트 추천을 받을 수 있어요
-              </Text>
-              <View style={styles.chipWrap}>
-                {THEMES.map((theme) => (
-                  <SelectableChip
-                    key={theme}
-                    label={theme}
-                    selected={form.themes.includes(theme)}
-                    onPress={() => toggleTheme(theme)}
-                  />
-                ))}
-              </View>
-
-              <View style={{ height: 24 }} />
-              <View style={styles.footerRow}>
-                <TouchableOpacity style={styles.backButton} onPress={() => setStep(2)}>
-                  <Ionicons name="chevron-back" size={20} color={COLORS.black} />
-                </TouchableOpacity>
-                <View style={{ flex: 1, marginLeft: 12 }}>
-                  <PrimaryButton label="다음 →" onPress={() => setStep(4)} />
-                </View>
-              </View>
-              <View style={{ height: 20 }} />
-            </ScrollView>
-          )}
-
-          {/* ── STEP 4: 촬영 스타일 + 요약 ─────────────────── */}
-          {step === 4 && (
             <ScrollView style={styles.body} showsVerticalScrollIndicator={false}>
               <Text style={styles.fieldLabel}>클립 길이</Text>
               <Text style={styles.fieldHint}>
@@ -1031,14 +1015,14 @@ export default function NewTripModal({ visible, onClose, onCreated }: Props) {
 
               <View style={{ height: 24 }} />
               <View style={styles.footerRow}>
-                <TouchableOpacity style={styles.backButton} onPress={() => setStep(3)}>
+                <TouchableOpacity style={styles.backButton} onPress={() => setStep(2)}>
                   <Ionicons name="chevron-back" size={20} color={COLORS.black} />
                 </TouchableOpacity>
                 <View style={{ flex: 1, marginLeft: 12 }}>
                   <PrimaryButton
                     label="여행 만들기!"
                     icon="airplane-outline"
-                    disabled={!isStep4Valid}
+                    disabled={!isStep3Valid}
                     onPress={handleCreate}
                   />
                 </View>
@@ -1146,7 +1130,7 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 24,
     paddingHorizontal: CARD_HORIZONTAL_PADDING,
     paddingTop: 22,
-    maxHeight: SCREEN_HEIGHT * 0.88 * 1.3, // 기존 높이(0.88)의 1.3배
+    maxHeight: SCREEN_HEIGHT * 0.9, // 화면 높이를 넘지 않도록 90%로 상한
   },
   headerRow: {
     flexDirection: 'row',
