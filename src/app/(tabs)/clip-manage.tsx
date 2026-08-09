@@ -14,9 +14,10 @@ import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { setActiveFolder, clearActiveFolder } from '@/services/activeFolderService';
+import { setActiveFolder, clearActiveFolder, getActiveFolder } from '@/services/activeFolderService';
 import { getAllFolders, saveFolder, deleteFolder as deleteFolderFromStorage, FolderItem } from '@/services/folderService';
 import NewTripModal from '@/components/NewTripModal';
+import { getRecordingsByFolder } from '@/services/recordingService';
 
 const COLORS = {
   background: '#FFFFFF',
@@ -52,10 +53,26 @@ export default function ClipManageScreen() {
     }, []),
   );
   
+  type FolderWithCount = FolderItem & { clipCount: number };
+  const [folders, setFolders] = useState<FolderWithCount[]>([]);
+
   const loadFolders = async () => {
     try {
       const stored = await getAllFolders();
-      setFolders(stored);
+      const activeId = await getActiveFolder();
+
+      const withCounts: FolderWithCount[] = await Promise.all(
+        stored.map(async (f) => {
+          const records = await getRecordingsByFolder(f.id);
+          return {
+            ...f,
+            clipCount: records.length,
+            isCurrentActive: f.id === activeId,
+          };
+        }),
+      );
+      
+      setFolders(withCounts);
     } catch (error) {
       console.error('[loadFolders] 실패:', error);
       setFolders([]);
@@ -67,7 +84,6 @@ export default function ClipManageScreen() {
   }>();
 
   const [activeTab, setActiveTab] = useState<'editing' | 'myTravel'>('editing');
-  const [folders, setFolders] = useState<FolderItem[]>([]);
   const [activeFolderId, setActiveFolderId] = useState<string | null>('null');
   const [selectedFolderForMenu, setSelectedFolderForMenu] =
     useState<FolderItem | null>(null);
@@ -98,14 +114,16 @@ export default function ClipManageScreen() {
       ).padStart(2, '0')}.${String(trip.startDate!.getDate()).padStart(2, '0')}. ~ ${trip.endDate.getFullYear()}.${String(
         trip.endDate.getMonth() + 1,
       ).padStart(2, '0')}.${String(trip.endDate.getDate()).padStart(2, '0')}.`,
-      clipCount: 0,
       thumbnail:
         'https://images.unsplash.com/photo-1500534623283-312aade485b7?w=600',
     };
 
     try {
       await saveFolder(newFolder);
-      setFolders((prev) => [newFolder, ...prev]);
+      setFolders((prev) => [
+        { ...newFolder, clipCount: 0 },
+        ...prev,
+      ]);
     } catch (error) {
       console.error('[handleTripCreated] 저장 실패:', error);
       Alert.alert('저장 실패', '폴더를 만드는 중 문제가 발생했습니다.');
@@ -152,7 +170,7 @@ export default function ClipManageScreen() {
     );
   };
 
-  const renderFolderItem = ({ item }: { item: FolderItem }) => {
+  const renderFolderItem = ({ item }: { item: FolderWithCount }) => {
     const isActive = item.id === activeFolderId;
 
     return (

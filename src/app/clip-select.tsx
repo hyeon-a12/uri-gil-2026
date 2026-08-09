@@ -247,16 +247,8 @@ export default function ClipSelectScreen() {
     return `${yyyy}.${mm}.${dd} ${hh}:${min}`;
   };
 
-  const formatDuration = (msDuration?: number) => {
-    if (!msDuration) return '00:00';
-    const totalSeconds = Math.floor(msDuration / 1000);
-    const minutes = Math.floor(totalSeconds / 60);
-    const seconds = totalSeconds % 60;
-    return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-  };
-
   const sumSeconds = (items: ClipItem[]) =>
-    items.reduce((acc, c) => acc + Math.floor((c.durationSeconds ?? 0) / 1000), 0);
+    items.reduce((acc, c) => acc + (c.durationSeconds ?? 0), 0);
 
   const selectedClips = useMemo(
     () => clips.filter((c) => selectedIds.has(c.id)),
@@ -285,7 +277,7 @@ export default function ClipSelectScreen() {
         <TouchableOpacity
           style={styles.card}
           activeOpacity={1}
-          onPress={() => toggleClip(item.id)}
+          onPress={() => toggleSelect(item.id)}
         >
           <View style={styles.thumbnailContainer}>
             <Image source={{ uri: item.uri }} style={styles.thumbnail} />
@@ -314,25 +306,16 @@ export default function ClipSelectScreen() {
           <TouchableOpacity
             style={styles.dragHandle}
             hitSlop={10}
-            onPress={() => setSelectedClipForMenu(item)}
+            onPress={(e) => {
+              e.stopPropagation();
+              setSelectedClipForMenu(item);
+            }}
           >
             <Feather name="menu" size={20} color={COLORS.textTertiary} />
           </TouchableOpacity>
         </TouchableOpacity>
       </View>
     );
-  };
-
-  const toggleClip = (clipId: string) => {
-    setSelectedIds((currentIds) => {
-      const next = new Set(currentIds);
-      if (next.has(clipId)) {
-        next.delete(clipId);
-      } else {
-        next.add(clipId);
-      }
-      return next;
-    });
   };
 
   const toggleSelectAll = () => {
@@ -362,13 +345,12 @@ export default function ClipSelectScreen() {
               return;
             }
 
-            const videoUri = await getRecordingsByFolder(clip.id);
-            if (videoUri) {
+            if (!clip.uri) {
               Alert.alert('저장 실패', '영상 파일 경로를 찾을 수 없습니다.');
               return;
             }
 
-            await MediaLibrary.saveToLibraryAsync(videoUri);
+            await MediaLibrary.saveToLibraryAsync(clip.uri);
             Alert.alert('저장 완료', '갤러리에 저장되었습니다.');
           } catch (error) {
             console.error('[handleDownloadClip] 실패:', error);

@@ -270,6 +270,8 @@ export default function CameraScreen() {
     setIsRecording(true);
     setElapsedSeconds(0);
 
+    const startedAt = Date.now();
+
     try {
       const video =
         await cameraRef.current.recordAsync({
@@ -282,11 +284,13 @@ export default function CameraScreen() {
         );
       }
 
+      const durationMs = Date.now() - startedAt;
+
       setClipCount((currentCount) =>
         Math.min(currentCount + 1, MAX_CLIPS),
       );
 
-      navigateToLocationConfirm(video.uri);
+      navigateToLocationConfirm(video.uri, undefined, durationMs);
     } catch (error) {
       console.error(
         'Video recording failed:',

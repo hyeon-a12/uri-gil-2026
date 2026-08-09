@@ -141,9 +141,10 @@ export default function LocationConfirmScreen() {
     }, []),
   );
 
-  const { videoUri } =
+  const { videoUri, durationMs } =
     useLocalSearchParams<{
       videoUri?: string;
+      durationMs?: string;
     }>();
 
   const [step, setStep] =
@@ -261,18 +262,13 @@ export default function LocationConfirmScreen() {
   };
 
   const handleComplete = async () => {
-    if (
-      !hasLocationSelection ||
-      !hasTripSelection
-    ) {
-      return;
-    }
+    if (!hasLocationSelection) return;
 
     if (!videoUri) {
       Alert.alert(
-        '영상을 찾을 수 없습니다',
-        '다시 촬영해주세요.',
-      );
+        '영상이 없습니다.',
+        '촬영을 먼저 완료해주세요.',
+      )
       return;
     }
 
@@ -284,13 +280,6 @@ export default function LocationConfirmScreen() {
         'Tip',
         "클립 관리에서 여행의 '카메라 연결하기'를 선택하면 자동으로 카메라와 연결됩니다."
       )
-    }
-
-    const targetFolderId = activeFolderId ?? selectedTripId;
-    if (!targetFolderId) {
-      Alert.alert(
-        '여행 선택해라'
-      );
       return;
     }
 
@@ -300,7 +289,8 @@ export default function LocationConfirmScreen() {
         videoUri,
         // TODO: expo-video-thumbnails 등으로 실제 썸네일을 만들기 전까지는 영상 자체를 썸네일로 재사용합니다.
         thumbnail: videoUri,
-        folderId: targetFolderId,
+        durationMs: durationMs ? Number(durationMs) : 0,
+        folderId: activeFolderId,
         // TODO: 로그인 연동 전까지 쓰는 임시 사용자 ID입니다.
         userId: 'guest',
         location: {
@@ -313,7 +303,7 @@ export default function LocationConfirmScreen() {
 
       Alert.alert(
         '클립이 저장되었습니다',
-        `${selectedTrip?.title ?? '선택한 여행'}에 클립을 추가했어요.`,
+        '선택한 여행에 클립을 추가했어요.',
         [
           {
             text: '확인',
@@ -393,295 +383,156 @@ export default function LocationConfirmScreen() {
               <View style={styles.dragHandle} />
             </View>
 
-            {step === 'location' ? (
-              <>
-                <View style={styles.sheetHeader}>
-                  <View style={styles.titleRow}>
-                    <View
-                      style={
-                        styles.titleIconContainer
-                      }
-                    >
-                      <Ionicons
-                        name="location-outline"
-                        size={20}
-                        color={COLORS.primary}
-                      />
-                    </View>
-
-                    <Text
-                      allowFontScaling={false}
-                      numberOfLines={1}
-                      style={styles.sheetTitle}
-                    >
-                      여기가 맞나요?
-                    </Text>
-
-                    {/* 인라인 "다음" 버튼 - 제목 오른쪽 */}
-                    <Pressable
-                      onPress={handleNext}
-                      disabled={!hasLocationSelection}
-                      style={({ pressed }) => [
-                        styles.inlineNextButton,
-                        !hasLocationSelection &&
-                          styles.inlineNextButtonDisabled,
-                        pressed &&
-                          hasLocationSelection &&
-                          styles.inlineNextButtonPressed,
-                      ]}
-                    >
-                      <Text
-                        allowFontScaling={false}
-                        style={
-                          styles.inlineNextButtonText
-                        }
-                      >
-                        다음
-                      </Text>
-
-                      <Ionicons
-                        name="arrow-forward"
-                        size={15}
-                        color="#FFFFFF"
-                      />
-                    </Pressable>
-                  </View>
-
-                  <Text
-                    allowFontScaling={false}
-                    style={styles.sheetDescription}
-                  >
-                    촬영한 장소와 가장 가까운 위치를
-                    선택해주세요.
-                  </Text>
+            {/* 장소 확인 영역 */}
+            <View style={styles.sheetHeader}>
+              <View style={styles.titleRow}>
+                <View
+                  style={
+                    styles.titleIconContainer
+                  }
+                >
+                  <Ionicons
+                    name="location-outline"
+                    size={20}
+                    color={COLORS.primary}
+                  />
                 </View>
 
-                <ScrollView
-                  style={styles.listScroll}
-                  contentContainerStyle={
-                    styles.listContent
-                  }
-                  keyboardShouldPersistTaps="handled"
-                  showsVerticalScrollIndicator={false}
+                <Text
+                  allowFontScaling={false}
+                  numberOfLines={1}
+                  style={styles.sheetTitle}
                 >
-                  {/* 직접 입력 필드 - 항상 최상단 */}
-                  <View
-                    style={[
-                      styles.manualInputField,
-                      isManualActive &&
-                        styles.manualInputFieldActive,
-                    ]}
-                  >
-                    <Ionicons
-                      name="create-outline"
-                      size={19}
-                      color={
-                        isManualActive
-                          ? COLORS.primary
-                          : COLORS.textSecondary
-                      }
-                    />
+                  여기가 맞나요?
+                </Text>
 
-                    <TextInput
-                      value={manualLocation}
-                      onChangeText={(text) => {
-                        setSelectedLocationId(null);
-                        setManualLocation(text);
-                      }}
-                      onFocus={() => {
-                        setSelectedLocationId(null);
-                        setManualInputFocused(true);
-                      }}
-                      onBlur={() => {
-                        setManualInputFocused(false);
-                      }}
-                      placeholder="직접 입력하기"
-                      placeholderTextColor={
-                        COLORS.textSecondary
-                      }
-                      returnKeyType="done"
-                      allowFontScaling={false}
-                      style={[
-                        styles.manualInputInline,
-                        isManualActive &&
-                          styles.manualInputInlineActive,
-                      ]}
-                    />
-
-                    {manualLocation.length > 0 ? (
-                      <Pressable
-                        hitSlop={10}
-                        onPress={() =>
-                          setManualLocation('')
-                        }
-                      >
-                        <Ionicons
-                          name="close-circle"
-                          size={20}
-                          color={
-                            COLORS.textTertiary
-                          }
-                        />
-                      </Pressable>
-                    ) : null}
-                  </View>
-
-                  {MOCK_LOCATION_SUGGESTIONS.map(
-                    (location) => (
-                      <LocationOptionCard
-                        key={location.id}
-                        location={location}
-                        selected={
-                          selectedLocationId ===
-                          location.id
-                        }
-                        onPress={() =>
-                          handleLocationSelect(
-                            location.id,
-                          )
-                        }
-                      />
-                    ),
-                  )}
-                </ScrollView>
-              </>
-            ) : (
-              <>
-                <View style={styles.sheetHeader}>
-                  <View style={styles.titleRow}>
-                    <View
-                      style={
-                        styles.titleIconContainer
-                      }
-                    >
-                      <Ionicons
-                        name="map-outline"
-                        size={20}
-                        color={COLORS.primary}
-                      />
-                    </View>
-
-                    <Text
-                      allowFontScaling={false}
-                      style={styles.sheetTitle}
-                    >
-                      어떤 여행에 추가할까요?
-                    </Text>
-                  </View>
-
-                  <Text
-                    allowFontScaling={false}
-                    style={styles.sheetDescription}
-                  >
-                    선택한 여행에 촬영한 클립을
-                    저장할게요.
-                  </Text>
-                </View>
-
-                {selectedLocation ? (
-                  <View
-                    style={
-                      styles.selectedLocationSummary
-                    }
-                  >
-                    <View
-                      style={
-                        styles.selectedLocationIcon
-                      }
-                    >
-                      <Ionicons
-                        name="location"
-                        size={18}
-                        color={COLORS.primary}
-                      />
-                    </View>
-
-                    <View
-                      style={
-                        styles.selectedLocationTextArea
-                      }
-                    >
-                      <Text
-                        allowFontScaling={false}
-                        style={
-                          styles.selectedLocationLabel
-                        }
-                      >
-                        선택한 장소
-                      </Text>
-
-                      <Text
-                        numberOfLines={1}
-                        allowFontScaling={false}
-                        style={
-                          styles.selectedLocationName
-                        }
-                      >
-                        {selectedLocation?.name ??
-                          '선택한 장소'}
-                      </Text>
-                    </View>
-
-                    <Pressable
-                      hitSlop={10}
-                      onPress={() =>
-                        setStep('location')
-                      }
-                    >
-                      <Text
-                        allowFontScaling={false}
-                        style={
-                          styles.locationChangeText
-                        }
-                      >
-                        변경
-                      </Text>
-                    </Pressable>
-                  </View>
-                ) : null}
-
-                <ScrollView
-                  style={styles.listScroll}
-                  contentContainerStyle={
-                    styles.listContent
-                  }
-                  showsVerticalScrollIndicator={false}
-                >
-                  {trips.map((trip) => (
-                    <TripOptionCard
-                      key={trip.id}
-                      trip={trip}
-                      selected={
-                        selectedTripId === trip.id
-                      }
-                      onPress={() =>
-                        setSelectedTripId(trip.id)
-                      }
-                    />
-                  ))}
-                </ScrollView>
-
+                {/* 인라인 "다음" 버튼 - 제목 오른쪽 */}
                 <Pressable
                   onPress={handleComplete}
-                  disabled={!hasTripSelection}
+                  disabled={!hasLocationSelection}
                   style={({ pressed }) => [
-                    styles.primaryButton,
-                    !hasTripSelection &&
-                      styles.primaryButtonDisabled,
+                    styles.inlineNextButton,
+                    !hasLocationSelection &&
+                      styles.inlineNextButtonDisabled,
                     pressed &&
-                      hasTripSelection &&
-                      styles.primaryButtonPressed,
+                      hasLocationSelection &&
+                      styles.inlineNextButtonPressed,
                   ]}
                 >
                   <Text
                     allowFontScaling={false}
-                    style={styles.primaryButtonText}
+                    style={
+                      styles.inlineNextButtonText
+                    }
                   >
-                    완료
+                    다음
                   </Text>
+
+                  <Ionicons
+                    name="arrow-forward"
+                    size={15}
+                    color="#FFFFFF"
+                  />
                 </Pressable>
-              </>
-            )}
+              </View>
+
+              <Text
+                allowFontScaling={false}
+                style={styles.sheetDescription}
+              >
+                촬영한 장소와 가장 가까운 위치를
+                선택해주세요.
+              </Text>
+            </View>
+
+            <ScrollView
+              style={styles.listScroll}
+              contentContainerStyle={
+                styles.listContent
+              }
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+            >
+              {/* 직접 입력 필드 - 항상 최상단 */}
+              <View
+                style={[
+                  styles.manualInputField,
+                  isManualActive &&
+                    styles.manualInputFieldActive,
+                ]}
+              >
+                <Ionicons
+                  name="create-outline"
+                  size={19}
+                  color={
+                    isManualActive
+                      ? COLORS.primary
+                      : COLORS.textSecondary
+                  }
+                />
+
+                <TextInput
+                  value={manualLocation}
+                  onChangeText={(text) => {
+                    setSelectedLocationId(null);
+                    setManualLocation(text);
+                  }}
+                  onFocus={() => {
+                    setSelectedLocationId(null);
+                    setManualInputFocused(true);
+                  }}
+                  onBlur={() => {
+                    setManualInputFocused(false);
+                  }}
+                  placeholder="직접 입력하기"
+                  placeholderTextColor={
+                    COLORS.textSecondary
+                  }
+                  returnKeyType="done"
+                  allowFontScaling={false}
+                  style={[
+                    styles.manualInputInline,
+                    isManualActive &&
+                      styles.manualInputInlineActive,
+                  ]}
+                />
+
+                {manualLocation.length > 0 ? (
+                  <Pressable
+                    hitSlop={10}
+                    onPress={() =>
+                      setManualLocation('')
+                    }
+                  >
+                    <Ionicons
+                      name="close-circle"
+                      size={20}
+                      color={
+                        COLORS.textTertiary
+                      }
+                    />
+                  </Pressable>
+                ) : null}
+              </View>
+
+              {MOCK_LOCATION_SUGGESTIONS.map(
+                (location) => (
+                  <LocationOptionCard
+                    key={location.id}
+                    location={location}
+                    selected={
+                      selectedLocationId ===
+                      location.id
+                    }
+                    onPress={() =>
+                      handleLocationSelect(
+                        location.id,
+                      )
+                    }
+                  />
+                ),
+              )}
+            </ScrollView>
           </Animated.View>
         </View>
       </KeyboardAvoidingView>

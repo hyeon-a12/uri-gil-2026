@@ -6,8 +6,9 @@ export interface FolderItem {
     id: string;
     title: string;
     dateRange: string;
-    clipCount: number;
     thumbnail: string;
+    isCurrentActive?: boolean;
+    isMerged?: boolean;
 }
 
 interface StoredFolder extends FolderItem {

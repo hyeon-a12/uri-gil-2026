@@ -30,6 +30,7 @@ export async function saveRecording(
         ...data,
         id,
         videoUri: persistedUri,
+        durationMs: data.durationMs ?? 0,
     };
 
     const existing = await getAllRecordings();
