@@ -24,29 +24,34 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LocationOptionCard } from '@/components/location-confirm/LocationOptionCard';
 import { VideoPreview } from '@/components/location-confirm/VideoPreview';
 import { MOCK_LOCATION_SUGGESTIONS } from '@/constants/mockLocations';
+import { COLORS as APP_COLORS } from '@/constants/color';
 import { saveRecording } from '@/services/recordingService';
-import { getActiveFolder } from '@/services/activeFolderService';
 import { getAllFolders, FolderItem } from '@/services/folderService';
+import { useTripStore } from '@/store/useTripStore';
 
+// 이 화면 안에서만 쓰는 색상 별칭. 값 자체는 앱 공통 팔레트(src/constants/color.js)를
+// 그대로 가져다 쓰고, 이 화면에서 쓰던 기존 스타일 코드(COLORS.xxx)는 그대로 유지합니다.
 const COLORS = {
-  background: '#FFFFFF',
-  card: '#FFFFFF',
+  background: APP_COLORS.white,
+  card: APP_COLORS.white,
 
-  primary: '#FF7F5C',
-  primaryDark: '#E9851D',
-  primarySoft: '#FFF3DF',
+  primary: APP_COLORS.primary,
+  primaryDark: '#E97B1F', // my-page/my-route 등 다른 화면과 동일하게 쓰는 눌림 상태 색
+  primarySoft: APP_COLORS.primaryTint,
 
-  textPrimary: '#222222',
-  textSecondary: '#8A8A8A',
-  textTertiary: '#8A8A8A',
+  textPrimary: APP_COLORS.text,
+  textSecondary: APP_COLORS.textSecondary,
+  textTertiary: APP_COLORS.textTertiary,
 
-  border: '#DDDDDD',
-  divider: '#DDDDDD',
+  border: APP_COLORS.border,
+  divider: APP_COLORS.border,
 
-  sheet: '#FFF9F3',
-  disabled: '#DDDAD4',
+  // 장소 확인 화면 전용으로 Figma에서 정의된 색 — 앱 전역 팔레트에 이미 있던 걸 그대로 씀
+  sheet: APP_COLORS.locationSheet,
+  disabled: APP_COLORS.locationButtonDisabled,
+  dragHandle: APP_COLORS.locationDragHandle,
 
-  shadow: '#4A4035',
+  shadow: '#443A31', // 다른 화면들과 동일한 톤의 그림자 색
 };
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -133,6 +138,14 @@ export default function LocationConfirmScreen() {
         try {
           const folders = await getAllFolders();
           setTrips(folders);
+
+          // "카메라 연결하기"로 미리 지정해둔 활성 폴더가 있으면 기본으로 미리 선택해둡니다.
+          // 사용자가 다른 여행을 직접 고르면 그 선택이 우선하고(덮어쓰지 않음), 이미
+          // 고른 게 있으면 다시 초기화하지 않습니다.
+          const currentTrip = useTripStore.getState().currentTrip;
+          if (currentTrip) {
+            setSelectedTripId((prev) => prev ?? currentTrip.id);
+          }
         } catch (error) {
           console.warn('[LocationConfirm] 폴더 로드 실패:', error);
           setTrips([]);
@@ -276,23 +289,10 @@ export default function LocationConfirmScreen() {
       return;
     }
 
-    // 클립 관리 화면에서 "카메라 연결하기"로 미리 지정해둔 여행(폴더)에 저장합니다.
-    const activeFolderId = await getActiveFolder();
-
-    if (!activeFolderId) {
-      Alert.alert(
-        'Tip',
-        "클립 관리에서 여행의 '카메라 연결하기'를 선택하면 자동으로 카메라와 연결됩니다."
-      )
-    }
-
-    const targetFolderId = activeFolderId ?? selectedTripId;
-    if (!targetFolderId) {
-      Alert.alert(
-        '여행 선택해라'
-      );
-      return;
-    }
+    // hasTripSelection 체크를 이미 통과했으므로 selectedTripId는 항상 값이 있습니다.
+    // ("카메라 연결하기"로 지정된 활성 폴더는 위 useFocusEffect에서 기본값으로만 미리
+    // 선택해둔 것이라, 사용자가 다른 여행을 골랐다면 그 선택이 그대로 반영됩니다.)
+    const targetFolderId = selectedTripId!;
 
     try {
       await saveRecording({
@@ -795,7 +795,7 @@ const styles = StyleSheet.create({
 
     borderRadius: 3,
 
-    backgroundColor: '#D5D1C9',
+    backgroundColor: COLORS.dragHandle,
   },
 
   sheetHeader: {
@@ -926,7 +926,7 @@ const styles = StyleSheet.create({
 
   manualInputFieldActive: {
     borderColor: COLORS.primary,
-    backgroundColor: '#FFFDFC',
+    backgroundColor: COLORS.card,
   },
 
   manualInputInline: {

@@ -37,8 +37,8 @@ export const COLORS = {
   danger: '#FF4444',        // 삭제, 에러, 촬영 중 빨간불
 
   // 장소 확인 화면 (Figma)
-  locationSheet: '#E9EDF5',
-  locationSelect: '#FFB134',
+  locationSheet: '#FFFBF4',
+  locationSelect: '#FF7F5C',
   locationButtonDisabled: '#D8D3CE',
   locationDragHandle: '#C8CDD8',
 

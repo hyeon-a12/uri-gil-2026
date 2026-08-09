@@ -23,6 +23,14 @@ import { navigateToLocationConfirm } from '@/navigation/recordingNavigation';
 const MAX_CLIP_SECONDS = 10;
 const MAX_CLIPS = 15;
 
+// 녹화 시작 직후(네이티브 레코더가 아직 준비 안 됐을 수 있는 구간) 바로 정지 신호를
+// 보내면 recordAsync()가 응답 없이 멈추는 경우가 있어서, 최소 이 시간만큼은 정지 신호를 지연시킵니다.
+const MIN_RECORD_HOLD_MS = 400;
+
+// recordAsync()가 정지 신호를 받고도 이 시간(최대 녹화 시간 + 여유분) 안에 응답이 없으면
+// 네이티브 레코더가 멈춘 것으로 보고 강제로 화면 상태를 초기화합니다.
+const RECORD_WATCHDOG_MS = (MAX_CLIP_SECONDS + 5) * 1000;
+
 const COLORS = {
   background: '#FFFFFF',
   white: '#FFFFFF',
@@ -164,6 +172,13 @@ export default function CameraScreen() {
   const insets = useSafeAreaInsets();
   const cameraRef = useRef<CameraView>(null);
 
+  // recordAsync()가 언제 응답 없이 멈추는지 추적하기 위한 참조값들 (state로 두면
+  // 매 렌더마다 새 타이머를 만들게 되므로 ref로 관리합니다)
+  const recordingStartTimeRef = useRef<number | null>(null);
+  const watchdogTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingStopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const recordingCancelledRef = useRef(false);
+
   const [
     cameraPermission,
     requestCameraPermission,
@@ -219,6 +234,18 @@ export default function CameraScreen() {
     };
   }, [isRecording]);
 
+  // 화면을 벗어날 때 남아있는 타이머가 언마운트 후 state를 건드리지 않도록 정리합니다.
+  useEffect(() => {
+    return () => {
+      if (watchdogTimerRef.current) {
+        clearTimeout(watchdogTimerRef.current);
+      }
+      if (pendingStopTimerRef.current) {
+        clearTimeout(pendingStopTimerRef.current);
+      }
+    };
+  }, []);
+
   const requestPermissions = async () => {
     const cameraResult =
       await requestCameraPermission();
@@ -242,9 +269,46 @@ export default function CameraScreen() {
     );
   };
 
+  const clearWatchdog = () => {
+    if (watchdogTimerRef.current) {
+      clearTimeout(watchdogTimerRef.current);
+      watchdogTimerRef.current = null;
+    }
+  };
+
+  // 정지 신호를 실제로 네이티브에 전달하는 부분. 녹화 시작 직후(MIN_RECORD_HOLD_MS 이내)라면
+  // 네이티브 레코더가 아직 준비 안 됐을 수 있어서, 그 시점까지 기다렸다가 보냅니다.
+  const requestStopRecording = () => {
+    const startedAt = recordingStartTimeRef.current ?? Date.now();
+    const elapsed = Date.now() - startedAt;
+
+    if (elapsed < MIN_RECORD_HOLD_MS) {
+      if (pendingStopTimerRef.current) {
+        return;
+      }
+
+      pendingStopTimerRef.current = setTimeout(() => {
+        pendingStopTimerRef.current = null;
+        console.log('[Camera] 지연된 정지 신호 전송');
+        cameraRef.current?.stopRecording();
+      }, MIN_RECORD_HOLD_MS - elapsed);
+
+      return;
+    }
+
+    console.log('[Camera] 정지 신호 전송');
+    cameraRef.current?.stopRecording();
+  };
+
   const handleClose = () => {
     if (isRecording) {
       cameraRef.current?.stopRecording();
+    }
+
+    clearWatchdog();
+    if (pendingStopTimerRef.current) {
+      clearTimeout(pendingStopTimerRef.current);
+      pendingStopTimerRef.current = null;
     }
 
     router.back();
@@ -252,7 +316,7 @@ export default function CameraScreen() {
 
   const handleRecordPress = async () => {
     if (isRecording) {
-      cameraRef.current?.stopRecording();
+      requestStopRecording();
       return;
     }
 
@@ -269,12 +333,40 @@ export default function CameraScreen() {
 
     setIsRecording(true);
     setElapsedSeconds(0);
+    recordingCancelledRef.current = false;
+    recordingStartTimeRef.current = Date.now();
+
+    clearWatchdog();
+    watchdogTimerRef.current = setTimeout(() => {
+      // 정지 신호를 보냈는데도 recordAsync()가 응답이 없는 경우를 대비한 안전장치.
+      // 화면이 무한정 "촬영 중" 상태로 멈춰있지 않도록 강제로 초기화합니다.
+      console.warn('[Camera] recordAsync 응답 없음 — 강제로 상태를 초기화합니다');
+      recordingCancelledRef.current = true;
+      watchdogTimerRef.current = null;
+      setIsRecording(false);
+      setElapsedSeconds(0);
+
+      Alert.alert(
+        '촬영 처리가 지연되고 있어요',
+        '카메라 응답이 없어 촬영을 취소했어요. 다시 시도해주세요.',
+      );
+    }, RECORD_WATCHDOG_MS);
 
     try {
+      console.log('[Camera] 촬영 시작');
+
       const video =
         await cameraRef.current.recordAsync({
           maxDuration: MAX_CLIP_SECONDS,
         });
+
+      clearWatchdog();
+
+      if (recordingCancelledRef.current) {
+        // 이미 워치독이 발동해서 화면 상태를 초기화한 뒤 뒤늦게 도착한 결과 — 무시합니다.
+        console.warn('[Camera] 워치독 발동 이후 뒤늦게 도착한 결과라 무시합니다');
+        return;
+      }
 
       if (!video?.uri) {
         throw new Error(
@@ -282,12 +374,20 @@ export default function CameraScreen() {
         );
       }
 
+      console.log('[Camera] 촬영 완료:', video.uri);
+
       setClipCount((currentCount) =>
         Math.min(currentCount + 1, MAX_CLIPS),
       );
 
       navigateToLocationConfirm(video.uri);
     } catch (error) {
+      clearWatchdog();
+
+      if (recordingCancelledRef.current) {
+        return;
+      }
+
       console.error(
         'Video recording failed:',
         error,
@@ -298,8 +398,10 @@ export default function CameraScreen() {
         '잠시 후 다시 촬영해주세요.',
       );
     } finally {
-      setIsRecording(false);
-      setElapsedSeconds(0);
+      if (!recordingCancelledRef.current) {
+        setIsRecording(false);
+        setElapsedSeconds(0);
+      }
     }
   };
 

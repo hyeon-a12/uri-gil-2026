@@ -1,9 +1,12 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { View, Image, Pressable, ScrollView, StyleSheet, Dimensions } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import { useFocusEffect } from 'expo-router';
 import { AppText as Text } from '@/components/AppText';
 import { colors } from '@/constants/menu-theme';
 import { SectionLabel, ScreenHeader } from '@/components/common';
+import { getAllFolders } from '@/services/folderService';
+import { getAllRecordings } from '@/services/recordingService';
 
 interface Clip {
   id: string;
@@ -19,28 +22,41 @@ interface TripOption {
   label: string;
 }
 
-// TODO: 실제로는 API에서 받아옴
-const TRIPS: TripOption[] = [
-  { id: 'trip1', label: '한옥마을 여행' },
-  { id: 'trip2', label: '객리단길 탐방' },
-  { id: 'trip3', label: '팔복예술공장' },
-];
-
-const MOCK_CLIPS: Clip[] = [
-  { id: '1', place: '객리단길 카페거리', durationSec: 14, thumbnailUrl: '', tripId: 'trip1', tripTitle: '전주 한옥마을 힐링 여행' },
-  { id: '2', place: '덕진공원 연못길', durationSec: 9, thumbnailUrl: '', tripId: 'trip1', tripTitle: '전주 한옥마을 힐링 여행' },
-  { id: '3', place: '팔복예술공장', durationSec: 21, thumbnailUrl: '', tripId: 'trip2', tripTitle: '객리단길 골목 탐방' },
-];
-
 const GAP = 10;
 const COLUMN_WIDTH = (Dimensions.get('window').width - 16 * 2 - GAP) / 2;
 
 export default function MyClipsScreen() {
   const [selectedTripId, setSelectedTripId] = useState<string | null>(null); // null = 전체
+  const [trips, setTrips] = useState<TripOption[]>([]);
+  const [clips, setClips] = useState<Clip[]>([]);
+
+  useFocusEffect(
+    useCallback(() => {
+      (async () => {
+        const [folders, recordings] = await Promise.all([
+          getAllFolders(),
+          getAllRecordings(),
+        ]);
+        const titleById = new Map(folders.map((f) => [f.id, f.title]));
+
+        setTrips(folders.map((f) => ({ id: f.id, label: f.title })));
+        setClips(
+          recordings.map((r) => ({
+            id: r.id,
+            place: r.location.placeName || '이름 없는 장소',
+            durationSec: r.durationMs ? Math.round(r.durationMs / 1000) : 0,
+            thumbnailUrl: r.thumbnail,
+            tripId: r.folderId,
+            tripTitle: titleById.get(r.folderId) ?? '알 수 없는 여행',
+          })),
+        );
+      })();
+    }, []),
+  );
 
   // 선택된 여행이 있으면 그 여행 클립만, 없으면 여행별로 묶어서 전부 보여줌
   const grouped = useMemo(() => {
-    const filtered = selectedTripId ? MOCK_CLIPS.filter((c) => c.tripId === selectedTripId) : MOCK_CLIPS;
+    const filtered = selectedTripId ? clips.filter((c) => c.tripId === selectedTripId) : clips;
     const byTrip = new Map<string, Clip[]>();
     filtered.forEach((clip) => {
       const list = byTrip.get(clip.tripTitle) ?? [];
@@ -48,7 +64,7 @@ export default function MyClipsScreen() {
       byTrip.set(clip.tripTitle, list);
     });
     return Array.from(byTrip.entries()); // [ [tripTitle, Clip[]], ... ]
-  }, [selectedTripId]);
+  }, [clips, selectedTripId]);
 
   return (
     <View style={styles.screen}>
@@ -57,7 +73,7 @@ export default function MyClipsScreen() {
       <View style={styles.body}>
         <View style={styles.tabs}>
           <FilterChip label="전체" active={selectedTripId === null} onPress={() => setSelectedTripId(null)} />
-          {TRIPS.map((trip) => (
+          {trips.map((trip) => (
             <FilterChip
               key={trip.id}
               label={trip.label}

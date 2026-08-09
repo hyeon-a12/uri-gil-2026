@@ -1,15 +1,16 @@
-import React from 'react';
+import React, { useCallback, useState } from 'react';
 import { View, ScrollView, StyleSheet } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { AppText } from '@/components/AppText';
 import { colors } from '@/constants/menu-theme';
 import { Card, ListRow, SectionLabel, ScreenHeader } from '@/components/common';
+import { getAllFolders } from '@/services/folderService';
+import { getRecordingsByFolder } from '@/services/recordingService';
 
 interface VisitedPlace {
   order: number;
   name: string;
-  category: string;
-  visitedAt: string | null;
+  visitedAt: string;
 }
 
 interface TripDetail {
@@ -20,36 +21,71 @@ interface TripDetail {
   places: VisitedPlace[];
 }
 
-// TODO: 실제로는 tripId로 API 호출해서 받아옴
-const MOCK_TRIP_DETAILS: Record<string, TripDetail> = {
-  '1': {
-    id: '1',
-    title: '전주 한옥마을 힐링 여행',
-    dateRange: '2026.07.15 - 07.17',
-    clipCount: 6,
-    places: [
-      { order: 1, name: '전주 한옥마을', category: '관광지', visitedAt: '07.15 14:20' },
-      { order: 2, name: '객리단길 카페거리', category: '카페', visitedAt: '07.16 10:05' },
-      { order: 3, name: '덕진공원', category: '관광지', visitedAt: '07.16 16:40' },
-      { order: 4, name: '팔복예술공장', category: '문화시설', visitedAt: null },
-    ],
-  },
-  '2': {
-    id: '2',
-    title: '객리단길 골목 탐방',
-    dateRange: '2026.06.02 - 06.03',
-    clipCount: 11,
-    places: [{ order: 1, name: '팔복예술공장', category: '문화시설', visitedAt: '06.03 13:00' }],
-  },
-};
+function formatVisitedAt(recordedAtIso: string): string {
+  const d = new Date(recordedAtIso);
+  const MM = String(d.getMonth() + 1).padStart(2, '0');
+  const DD = String(d.getDate()).padStart(2, '0');
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mm = String(d.getMinutes()).padStart(2, '0');
+  return `${MM}.${DD} ${hh}:${mm}`;
+}
 
 export default function TripDetailScreen() {
   // 파일명이 [tripId].tsx 라서, URL의 그 부분이 자동으로 tripId라는 파라미터로 들어옴
   // 예: router.push('/trip-detail/1') → tripId === '1'
+  // tripId는 folderService에 저장된 폴더(여행)의 id와 같은 값입니다.
   const { tripId } = useLocalSearchParams<{ tripId: string }>();
-  const trip = MOCK_TRIP_DETAILS[tripId];
+  const [trip, setTrip] = useState<TripDetail | null | undefined>(undefined);
 
-  if (!trip) {
+  useFocusEffect(
+    useCallback(() => {
+      (async () => {
+        const folders = await getAllFolders();
+        const folder = folders.find((f) => f.id === tripId);
+        if (!folder) {
+          setTrip(null);
+          return;
+        }
+
+        const recordings = await getRecordingsByFolder(tripId);
+        const sorted = [...recordings].sort((a, b) =>
+          a.recordedAt.localeCompare(b.recordedAt),
+        );
+
+        // 같은 장소에서 여러 번 촬영했으면 방문 순서 목록에는 한 번만 표시 (처음 촬영 시각 기준)
+        const seen = new Set<string>();
+        const places: VisitedPlace[] = [];
+        sorted.forEach((r) => {
+          const name = r.location.placeName || '이름 없는 장소';
+          if (seen.has(name)) return;
+          seen.add(name);
+          places.push({
+            order: places.length + 1,
+            name,
+            visitedAt: formatVisitedAt(r.recordedAt),
+          });
+        });
+
+        setTrip({
+          id: folder.id,
+          title: folder.title,
+          dateRange: folder.dateRange,
+          clipCount: recordings.length,
+          places,
+        });
+      })();
+    }, [tripId]),
+  );
+
+  if (trip === undefined) {
+    return (
+      <View style={styles.screen}>
+        <ScreenHeader title="여행 상세" />
+      </View>
+    );
+  }
+
+  if (trip === null) {
     return (
       <View style={styles.screen}>
         <ScreenHeader title="여행 상세" />
@@ -57,9 +93,6 @@ export default function TripDetailScreen() {
       </View>
     );
   }
-
-  const visitedCount = trip.places.filter((p) => p.visitedAt !== null).length;
-  const completionRate = Math.round((visitedCount / trip.places.length) * 100);
 
   return (
     <View style={styles.screen}>
@@ -69,15 +102,19 @@ export default function TripDetailScreen() {
         <View style={styles.hero}>
           <AppText style={styles.heroTitle}>{trip.dateRange}</AppText>
           <AppText style={styles.heroSub}>
-            방문 {visitedCount}곳 · 촬영 클립 {trip.clipCount}개 · 완료율 {completionRate}%
+            방문 {trip.places.length}곳 · 촬영 클립 {trip.clipCount}개
           </AppText>
         </View>
 
         <SectionLabel text="방문 순서" />
         <Card>
-          {trip.places.map((place, idx) => (
-            <PlaceRow key={place.order} place={place} isLast={idx === trip.places.length - 1} />
-          ))}
+          {trip.places.length === 0 ? (
+            <AppText style={styles.errorText}>아직 촬영한 클립이 없어요</AppText>
+          ) : (
+            trip.places.map((place, idx) => (
+              <PlaceRow key={place.order} place={place} isLast={idx === trip.places.length - 1} />
+            ))
+          )}
         </Card>
       </ScrollView>
     </View>
@@ -85,15 +122,14 @@ export default function TripDetailScreen() {
 }
 
 function PlaceRow({ place, isLast }: { place: VisitedPlace; isLast: boolean }) {
-  const visited = place.visitedAt !== null;
   return (
     <ListRow
       isLast={isLast}
       title={place.name}
-      subtitle={visited ? `${place.visitedAt} · ${place.category}` : '아직 방문하지 않았어요'}
+      subtitle={`${place.visitedAt} 방문`}
       right={
-        <View style={[styles.orderBadge, !visited && styles.orderBadgeMuted]}>
-          <AppText style={[styles.orderBadgeText, !visited && styles.orderBadgeTextMuted]}>{place.order}</AppText>
+        <View style={styles.orderBadge}>
+          <AppText style={styles.orderBadgeText}>{place.order}</AppText>
         </View>
       }
     />
@@ -115,7 +151,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  orderBadgeMuted: { backgroundColor: colors.border },
   orderBadgeText: { fontSize: 11, fontWeight: '800', color: colors.accent },
-  orderBadgeTextMuted: { color: colors.textTertiary },
 });

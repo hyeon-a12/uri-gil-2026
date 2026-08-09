@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback, useState } from 'react';
 // 화면 구성에 필요한 React Native 기본 컴포넌트들을 불러옵니다.
 // SafeAreaView: 아이폰 노치 등 화면이 잘리지 않는 안전 영역을 확보해 줍니다.
 // ScrollView: 화면이 길어질 때 위아래로 스크롤할 수 있게 해줍니다.
@@ -8,9 +8,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 // 아이콘 사용을 위해 Expo에서 기본 제공하는 Feather 아이콘셋을 불러옵니다.
 import { Feather } from '@expo/vector-icons';
 // 메뉴 카드를 눌렀을 때 해당 화면으로 이동시키기 위해 사용합니다.
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 // 앱 전체 공통 폰트(SpoqaHanSansNeo)가 자동 적용되는 Text 컴포넌트입니다.
 import { AppText as Text } from '@/components/AppText';
+import { getAllFolders, getFolderStatus } from '@/services/folderService';
+import { getAllRecordings } from '@/services/recordingService';
 
 // 🎨 앱 전체에서 공통으로 사용할 색상 팔레트입니다.
 const COLORS = {
@@ -53,6 +55,39 @@ const MenuItem = ({
 );
 
 export default function MyPageScreen() {
+  const [stats, setStats] = useState({
+    completedRoutes: 0,
+    recordedClips: 0,
+    visitedPlaces: 0,
+  });
+
+  useFocusEffect(
+    useCallback(() => {
+      (async () => {
+        const [folders, recordings] = await Promise.all([
+          getAllFolders(),
+          getAllRecordings(),
+        ]);
+
+        const completedRoutes = folders.filter(
+          (folder) => getFolderStatus(folder) === 'done',
+        ).length;
+
+        const visitedPlaces = new Set(
+          recordings
+            .map((r) => r.location.placeName)
+            .filter((name): name is string => !!name),
+        ).size;
+
+        setStats({
+          completedRoutes,
+          recordedClips: recordings.length,
+          visitedPlaces,
+        });
+      })();
+    }, []),
+  );
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
@@ -80,12 +115,16 @@ export default function MyPageScreen() {
             </View>
             <Text style={styles.orderCardDesc}>날짜 ?</Text>
             
-            {/* 주문 상태값 5개를 가로로 나열하는 뷰입니다. */}
+            {/* 주문 상태값 3개를 가로로 나열하는 뷰입니다. */}
             <View style={styles.orderStatusContainer}>
-              {['완료한 루트', '촬영한 클립', '방문한 장소'].map((status, index) => (
-                <View key={index} style={styles.orderStatusItem}>
-                  <Text style={styles.orderStatusNumber}>0</Text>
-                  <Text style={styles.orderStatusLabel}>{status}</Text>
+              {[
+                { label: '완료한 루트', value: stats.completedRoutes },
+                { label: '촬영한 클립', value: stats.recordedClips },
+                { label: '방문한 장소', value: stats.visitedPlaces },
+              ].map((status) => (
+                <View key={status.label} style={styles.orderStatusItem}>
+                  <Text style={styles.orderStatusNumber}>{status.value}</Text>
+                  <Text style={styles.orderStatusLabel}>{status.label}</Text>
                 </View>
               ))}
             </View>

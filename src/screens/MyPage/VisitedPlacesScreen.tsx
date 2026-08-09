@@ -1,13 +1,15 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { View, Pressable, ScrollView, StyleSheet } from 'react-native';
+import { useFocusEffect } from 'expo-router';
 import { AppText as Text } from '@/components/AppText';
 import { colors } from '@/constants/menu-theme';
 import { Card, ListRow, SectionLabel, ScreenHeader } from '@/components/common';
+import { getAllFolders } from '@/services/folderService';
+import { getAllRecordings } from '@/services/recordingService';
 
 interface Place {
   id: string;
   name: string;
-  category: string;
   visitedDate: string;
   tripId: string;
   tripTitle: string;
@@ -18,24 +20,60 @@ interface TripOption {
   label: string;
 }
 
-// TODO: 실제로는 API에서 받아옴
-const TRIPS: TripOption[] = [
-  { id: 'trip1', label: '한옥마을 여행' },
-  { id: 'trip2', label: '객리단길 탐방' },
-];
-
-const PLACES: Place[] = [
-  { id: '1', name: '객리단길 카페거리', category: '카페', visitedDate: '2026.07.16', tripId: 'trip1', tripTitle: '전주 한옥마을 힐링 여행' },
-  { id: '2', name: '덕진공원', category: '관광지', visitedDate: '2026.07.16', tripId: 'trip1', tripTitle: '전주 한옥마을 힐링 여행' },
-  { id: '3', name: '전주 한옥마을', category: '관광지', visitedDate: '2026.07.15', tripId: 'trip1', tripTitle: '전주 한옥마을 힐링 여행' },
-  { id: '4', name: '팔복예술공장', category: '문화시설', visitedDate: '2026.06.03', tripId: 'trip2', tripTitle: '객리단길 골목 탐방' },
-];
+function formatDate(recordedAtIso: string): string {
+  const d = new Date(recordedAtIso);
+  return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`;
+}
 
 export default function VisitedPlacesScreen() {
   const [selectedTripId, setSelectedTripId] = useState<string | null>(null); // null = 전체
+  const [trips, setTrips] = useState<TripOption[]>([]);
+  const [places, setPlaces] = useState<Place[]>([]);
+
+  useFocusEffect(
+    useCallback(() => {
+      (async () => {
+        const [folders, recordings] = await Promise.all([
+          getAllFolders(),
+          getAllRecordings(),
+        ]);
+        const titleById = new Map(folders.map((f) => [f.id, f.title]));
+        setTrips(folders.map((f) => ({ id: f.id, label: f.title })));
+
+        // 같은 여행 안에서 같은 장소를 여러 번 촬영했으면 하나로 묶고, 가장 이른 촬영 시각을 방문일로 씀
+        const grouped = new Map<
+          string,
+          { name: string; tripId: string; tripTitle: string; earliestIso: string }
+        >();
+        recordings.forEach((r) => {
+          const name = r.location.placeName || '이름 없는 장소';
+          const key = `${r.folderId}__${name}`;
+          const existing = grouped.get(key);
+          if (!existing || r.recordedAt < existing.earliestIso) {
+            grouped.set(key, {
+              name,
+              tripId: r.folderId,
+              tripTitle: titleById.get(r.folderId) ?? '알 수 없는 여행',
+              earliestIso: r.recordedAt,
+            });
+          }
+        });
+
+        setPlaces(
+          Array.from(grouped.entries()).map(([id, v]) => ({
+            id,
+            name: v.name,
+            visitedDate: formatDate(v.earliestIso),
+            tripId: v.tripId,
+            tripTitle: v.tripTitle,
+          })),
+        );
+      })();
+    }, []),
+  );
 
   const grouped = useMemo(() => {
-    const filtered = selectedTripId ? PLACES.filter((p) => p.tripId === selectedTripId) : PLACES;
+    const filtered = selectedTripId ? places.filter((p) => p.tripId === selectedTripId) : places;
     const byTrip = new Map<string, Place[]>();
     filtered.forEach((place) => {
       const list = byTrip.get(place.tripTitle) ?? [];
@@ -43,7 +81,7 @@ export default function VisitedPlacesScreen() {
       byTrip.set(place.tripTitle, list);
     });
     return Array.from(byTrip.entries());
-  }, [selectedTripId]);
+  }, [places, selectedTripId]);
 
   return (
     <View style={styles.screen}>
@@ -52,7 +90,7 @@ export default function VisitedPlacesScreen() {
       <View style={styles.body}>
         <View style={styles.tabs}>
           <FilterChip label="전체" active={selectedTripId === null} onPress={() => setSelectedTripId(null)} />
-          {TRIPS.map((trip) => (
+          {trips.map((trip) => (
             <FilterChip
               key={trip.id}
               label={trip.label}
@@ -63,16 +101,16 @@ export default function VisitedPlacesScreen() {
         </View>
 
         <ScrollView contentContainerStyle={styles.listContent}>
-          {grouped.map(([tripTitle, places]) => (
+          {grouped.map(([tripTitle, tripPlaces]) => (
             <React.Fragment key={tripTitle}>
               <SectionLabel text={tripTitle} />
               <Card style={styles.card}>
-                {places.map((place, idx) => (
+                {tripPlaces.map((place, idx) => (
                   <ListRow
                     key={place.id}
-                    isLast={idx === places.length - 1}
+                    isLast={idx === tripPlaces.length - 1}
                     title={place.name}
-                    subtitle={`${place.category} · ${place.visitedDate} 방문`}
+                    subtitle={`${place.visitedDate} 방문`}
                     onPress={() => {}}
                   />
                 ))}

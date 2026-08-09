@@ -8,9 +8,13 @@ import {
   StyleSheet,
   Modal,
   Dimensions,
+  StyleProp,
+  ViewStyle,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import Svg, { Rect, Line, Circle, Path } from 'react-native-svg';
+import type { ShootingStyleId, GridTemplateId } from '@/services/folderService';
 
 /**
  * ─────────────────────────────────────────────────────────────
@@ -65,7 +69,23 @@ const THEMES = [
 ];
 
 // ── 타입 ────────────────────────────────────────────────────
-type Step = 1 | 2 | 3 | 'success';
+type Step = 1 | 2 | 3 | 4 | 'success';
+
+// ShootingStyleId/GridTemplateId는 저장 스키마(FolderItem)에도 쓰여서 folderService.ts로
+// 옮겼습니다. 'thirds'(구도 가이드선)였던 걸 'grid'로 바꾼 이유는 실제로 하려던 게
+// 라이브 촬영 가이드가 아니라 "클립 여러 개를 한 화면에 분할해서 합치는 편집 포맷"
+// 선택이었기 때문이에요(3분할 영상 같은 거).
+
+const GRID_TEMPLATES: {
+  id: GridTemplateId;
+  label: string;
+  slotCount: number;
+}[] = [
+  { id: 'rows3', label: '3분할 (가로 3단)', slotCount: 3 },
+  { id: 'rows2', label: '2분할 (가로 2단)', slotCount: 2 },
+  { id: 'cols2', label: '2분할 (세로 2단)', slotCount: 2 },
+  { id: 'grid4', label: '4분할 (2×2)', slotCount: 4 },
+];
 
 type TripForm = {
   name: string;
@@ -75,6 +95,9 @@ type TripForm = {
   endDate: Date | null;
   partySize: number;
   themes: string[];
+  clipLengthSeconds: number;
+  shootingStyle: ShootingStyleId;
+  gridTemplateId: GridTemplateId | null; // shootingStyle === 'grid'일 때만 의미 있음
 };
 
 const INITIAL_FORM: TripForm = {
@@ -85,6 +108,9 @@ const INITIAL_FORM: TripForm = {
   endDate: null,
   partySize: 1,
   themes: [],
+  clipLengthSeconds: 10,
+  shootingStyle: 'basic',
+  gridTemplateId: null,
 };
 
 type Props = {
@@ -93,6 +119,31 @@ type Props = {
   /** 여행 생성이 최종 확정된 순간 부모(Home/내 루트)에 데이터를 넘겨줍니다. */
   onCreated: (trip: TripForm & { startDate: Date; endDate: Date }) => void;
 };
+
+// ── 촬영 스타일 데이터 ───────────────────────────────────────
+// 각 스타일은 미니 프리뷰(StylePreview)로 시각적으로 보여줍니다.
+// "인형 두고 찍는 스타일"처럼 텍스트만으론 뭘 하라는 건지 알기 어려운
+// 항목일수록, 그림 하나가 설명 두 줄보다 낫습니다.
+const CLIP_LENGTH_OPTIONS = [5, 10, 15]; // 초 단위
+
+const SHOOTING_STYLES: {
+  id: ShootingStyleId;
+  label: string;
+  description: string;
+}[] = [
+  { id: 'basic', label: '기본 스타일', description: '가이드 없이 자유롭게' },
+  { id: 'grid', label: '그리드 선택', description: '클립을 분할 화면으로' },
+  {
+    id: 'doll',
+    label: '인형과 함께',
+    description: '소품 놓을 위치 표시',
+  },
+  {
+    id: 'withPerson',
+    label: '사람과 함께',
+    description: '인물 서는 위치 표시',
+  },
+];
 
 // ── 날짜 유틸 ────────────────────────────────────────────────
 function isSameDate(a: Date | null, b: Date | null): boolean {
@@ -206,21 +257,23 @@ function PrimaryButton({
   onPress,
   disabled,
   icon,
+  style,
 }: {
   label: string;
   onPress: () => void;
   disabled?: boolean;
   icon?: keyof typeof Ionicons.glyphMap;
+  style?: StyleProp<ViewStyle>;
 }) {
   if (disabled) {
     return (
-      <View style={[styles.primaryButton, styles.primaryButtonDisabled]}>
+      <View style={[styles.primaryButton, styles.primaryButtonDisabled, style]}>
         <Text style={styles.primaryButtonTextDisabled}>{label}</Text>
       </View>
     );
   }
   return (
-    <TouchableOpacity activeOpacity={0.85} onPress={onPress}>
+    <TouchableOpacity activeOpacity={0.85} onPress={onPress} style={style}>
       <LinearGradient
         colors={GRADIENT}
         start={{ x: 0, y: 0 }}
@@ -244,13 +297,16 @@ function PrimaryButton({
 function StepIndicator({
   currentStep,
   label,
+  totalSteps = 4,
 }: {
-  currentStep: 1 | 2 | 3;
+  currentStep: 1 | 2 | 3 | 4;
   label: string;
+  totalSteps?: number;
 }) {
+  const stepNumbers = Array.from({ length: totalSteps }, (_, i) => i + 1);
   return (
     <View style={styles.stepIndicatorRow}>
-      {[1, 2, 3].map((step, idx) => {
+      {stepNumbers.map((step, idx) => {
         const isDone = step < currentStep;
         const isActive = step === currentStep;
         return (
@@ -274,7 +330,7 @@ function StepIndicator({
                 </Text>
               )}
             </View>
-            {idx < 2 && <View style={styles.stepDivider} />}
+            {idx < stepNumbers.length - 1 && <View style={styles.stepDivider} />}
           </React.Fragment>
         );
       })}
@@ -312,6 +368,139 @@ function SelectableChip({
         {label}
       </Text>
     </TouchableOpacity>
+  );
+}
+
+/**
+ * 촬영 스타일 카드 안에 들어가는 세로 프레임 미니 프리뷰.
+ * "3분할"이나 "인형 위치" 같은 건 말로 설명하는 것보다 이 작은 그림
+ * 하나가 훨씬 빠르게 이해돼요. 릴스 비율(세로 9:16)에 맞춰 프레임
+ * 자체를 세로로 그렸습니다.
+ */
+function StylePreview({ styleId }: { styleId: ShootingStyleId }) {
+  const w = 44;
+  const h = 78;
+
+  return (
+    <Svg width={w} height={h}>
+      {/* 공통: 세로 프레임 테두리 */}
+      <Rect
+        x={1}
+        y={1}
+        width={w - 2}
+        height={h - 2}
+        rx={6}
+        stroke={COLORS.gray400}
+        strokeWidth={1.5}
+        fill="none"
+      />
+
+      {styleId === 'grid' && (
+        // 대표 아이콘으로 3분할(가로 3단) 모양을 보여줍니다.
+        // 실제로 어떤 템플릿을 쓸지는 카드 선택 후 아래 템플릿
+        // 목록에서 다시 고릅니다(GridTemplatePreview 참고).
+        <>
+          <Line
+            x1={2}
+            y1={h / 3}
+            x2={w - 2}
+            y2={h / 3}
+            stroke={COLORS.accent}
+            strokeWidth={1.5}
+          />
+          <Line
+            x1={2}
+            y1={(h / 3) * 2}
+            x2={w - 2}
+            y2={(h / 3) * 2}
+            stroke={COLORS.accent}
+            strokeWidth={1.5}
+          />
+        </>
+      )}
+
+      {styleId === 'doll' && (
+        // 프레임 하단 중앙에 "소품을 여기 두세요" 지점을 점선 원으로 표시
+        <Circle
+          cx={w / 2}
+          cy={h - 16}
+          r={7}
+          stroke={COLORS.accent}
+          strokeWidth={1.5}
+          strokeDasharray="2,2"
+          fill="none"
+        />
+      )}
+
+      {styleId === 'withPerson' && (
+        // 사람이 설 위치를 아주 단순한 실루엣(머리+몸)으로 표시
+        <>
+          <Circle cx={w / 2} cy={h - 26} r={5} fill={COLORS.accent} />
+          <Path
+            d={`M ${w / 2 - 8} ${h - 6} Q ${w / 2} ${h - 24} ${w / 2 + 8} ${h - 6}`}
+            stroke={COLORS.accent}
+            strokeWidth={1.5}
+            fill="none"
+          />
+        </>
+      )}
+    </Svg>
+  );
+}
+
+/**
+ * 그리드 템플릿 하나를 아주 작게 미리 보여주는 아이콘.
+ * StylePreview보다 더 작고(썸네일용), 순수하게 "몇 칸으로 나뉘는지"만
+ * 보여주면 되니까 프레임/장식 없이 분할선만 그립니다.
+ */
+function GridTemplatePreview({ templateId }: { templateId: GridTemplateId }) {
+  const w = 32;
+  const h = 44;
+  const line = (
+    x1: number,
+    y1: number,
+    x2: number,
+    y2: number,
+    key: string,
+  ) => (
+    <Line
+      key={key}
+      x1={x1}
+      y1={y1}
+      x2={x2}
+      y2={y2}
+      stroke={COLORS.accent}
+      strokeWidth={1.5}
+    />
+  );
+
+  return (
+    <Svg width={w} height={h}>
+      <Rect
+        x={1}
+        y={1}
+        width={w - 2}
+        height={h - 2}
+        rx={4}
+        stroke={COLORS.gray400}
+        strokeWidth={1.2}
+        fill="none"
+      />
+      {templateId === 'rows3' && (
+        <>
+          {line(2, h / 3, w - 2, h / 3, 'a')}
+          {line(2, (h / 3) * 2, w - 2, (h / 3) * 2, 'b')}
+        </>
+      )}
+      {templateId === 'rows2' && line(2, h / 2, w - 2, h / 2, 'a')}
+      {templateId === 'cols2' && line(w / 2, 2, w / 2, h - 2, 'a')}
+      {templateId === 'grid4' && (
+        <>
+          {line(w / 2, 2, w / 2, h - 2, 'a')}
+          {line(2, h / 2, w - 2, h / 2, 'b')}
+        </>
+      )}
+    </Svg>
   );
 }
 
@@ -382,6 +571,10 @@ export default function NewTripModal({ visible, onClose, onCreated }: Props) {
 
   const isStep1Valid = form.name.trim().length > 0 && !!form.region;
   const isStep2Valid = !!form.startDate && !!form.endDate;
+  // '그리드 선택'을 골랐으면 구체적인 템플릿까지 정해야 진행 가능.
+  // 다른 스타일은 기본값이 이미 있어서 별도 검증이 필요 없어요.
+  const isStep4Valid =
+    form.shootingStyle !== 'grid' || !!form.gridTemplateId;
 
   return (
     <Modal
@@ -406,6 +599,7 @@ export default function NewTripModal({ visible, onClose, onCreated }: Props) {
           {step === 1 && <StepIndicator currentStep={1} label="기본 정보" />}
           {step === 2 && <StepIndicator currentStep={2} label="일정" />}
           {step === 3 && <StepIndicator currentStep={3} label="테마" />}
+          {step === 4 && <StepIndicator currentStep={4} label="촬영 스타일" />}
 
           {/* ── STEP 1: 기본 정보 ─────────────────────────── */}
           {step === 1 && (
@@ -413,17 +607,19 @@ export default function NewTripModal({ visible, onClose, onCreated }: Props) {
               <Text style={styles.fieldLabel}>
                 여행 이름 <Text style={styles.required}>*</Text>
               </Text>
-              <TextInput
-                style={styles.textInput}
-                placeholder="예) 전주 한옥마을 2박 3일"
-                placeholderTextColor={COLORS.gray400}
-                value={form.name}
-                maxLength={24}
-                onChangeText={(text) =>
-                  setForm((prev) => ({ ...prev, name: text }))
-                }
-              />
-              <Text style={styles.charCount}>{form.name.length}/24</Text>
+              <View style={styles.inputWithCounter}>
+                <TextInput
+                  style={styles.textInput}
+                  placeholder="예) 전주 한옥마을 2박 3일"
+                  placeholderTextColor={COLORS.gray400}
+                  value={form.name}
+                  maxLength={24}
+                  onChangeText={(text) =>
+                    setForm((prev) => ({ ...prev, name: text }))
+                  }
+                />
+                <Text style={styles.charCount}>{form.name.length}/24</Text>
+              </View>
 
               <Text style={styles.fieldLabel}>
                 여행 지역 <Text style={styles.required}>*</Text>
@@ -567,39 +763,6 @@ export default function NewTripModal({ visible, onClose, onCreated }: Props) {
                           );
                         }
 
-                        // ── 버그 수정: "모두 선택하면 숫자가 벌어지는" 문제 ──
-                        // 이전 버전은 양 끝 날짜만 고정 32px 원으로 그리고
-                        // 가운데 날짜는 flex: 1로 "남는 공간을 전부" 차지하게
-                        // 했어요. 그런데 가운데 칸 하나가 남는 공간을 혼자
-                        // 떠안다 보니, 그 칸의 실제 너비가 평소 달력 칸보다
-                        // 훨씬 넓어져서 숫자 사이 간격이 들쭉날쭉해 보였던
-                        // 거예요 — 이게 "숫자가 벌어진다"고 느끼신 부분입니다.
-                        //
-                        // 고친 방식: 구간 안의 모든 날짜 칸을 "구간 전체
-                        // 너비 ÷ 날짜 개수"로 똑같이 나눕니다. 이렇게 하면
-                        // 각 칸의 너비가 하이라이트 안 된 평소 달력 칸과
-                        // 정확히 같아져서 숫자 간격이 흐트러지지 않아요.
-                        // 대신 "이어붙은 배경(pill)"은 숫자 칸들과 별개로
-                        // position: 'absolute'인 별도의 View로 구간 전체에
-                        // 깔아버려서, 숫자 위치는 그대로 두고 배경만 하나로
-                        // 이어져 보이게 만들었습니다.
-                        // ── 버그 수정: 연한 배경이 원 밖으로 튀어나오는 문제 ──
-                        // 모든 칸을 CALENDAR_CELL_WIDTH로 통일했더니 숫자
-                        // 간격은 고쳐졌는데, 원(circle, 지름 32px)이 자기
-                        // 칸(CALENDAR_CELL_WIDTH, 보통 32px보다 넓음) 안에서
-                        // 가운데 정렬되다 보니 원 좌우로 배경색이 살짝 삐져
-                        // 나와 보였어요 — 이게 "동그라미 밖으로 튀어나온다"는
-                        // 부분입니다.
-                        //
-                        // 고친 방식: 배경(pill)의 왼쪽 끝은 "첫 번째 원의
-                        // 중심"에서 시작하고, 오른쪽 끝은 "마지막 원의 중심"
-                        // 에서 끝나도록 좌우로 CALENDAR_CELL_WIDTH/2만큼
-                        // 안쪽으로 밀어 넣었습니다. 원의 중심에서 시작하면
-                        // 배경의 절반(중심~오른쪽 끝)은 그 위에 그려지는
-                        // 원(circle)이 그대로 덮어버려서 안 보이고, 원 밖으로
-                        //는 배경이 아예 칠해지지 않으니 튀어나올 여지가
-                        // 없어집니다. 원과 원 사이(진짜 이어줘야 하는 구간)만
-                        // 배경이 그대로 보이고요.
                         const trackInset = CALENDAR_CELL_WIDTH / 2;
                         return (
                           <View
@@ -650,18 +813,6 @@ export default function NewTripModal({ visible, onClose, onCreated }: Props) {
               </View>
 
               <Text style={styles.fieldLabel}>여행 기간</Text>
-              {/*
-                ── 버그 수정 지점 ② ─────────────────────────────
-                stepperRow는 justifyContent: 'space-between'이라 "왼쪽
-                요소 / 오른쪽 요소" 두 개가 있을 때(예: 아래 '여행 인원'처럼
-                라벨+스테퍼)를 위한 스타일이에요. 그런데 여긴 자식이 아이콘
-                하나, 텍스트 하나로 따로 떨어져 있어서 space-between이 둘을
-                행 양 끝으로 밀어버리는 바람에 달력 아이콘은 왼쪽 끝, 날짜
-                텍스트는 오른쪽 끝에 붙어 가운데가 텅 비어 보이는 버그가
-                있었습니다. 아이콘+텍스트를 partyLabelRow로 한 번 묶어서
-                "한 덩어리"로 만들면, space-between이 적용될 두 번째 자식이
-                없으니 그냥 왼쪽 정렬된 한 그룹으로 자연스럽게 보입니다.
-              */}
               <View style={styles.stepperRow}>
                 <View style={styles.partyLabelRow}>
                   <Ionicons
@@ -712,7 +863,7 @@ export default function NewTripModal({ visible, onClose, onCreated }: Props) {
             </ScrollView>
           )}
 
-          {/* ── STEP 3: 테마 + 요약 ───────────────────────── */}
+          {/* ── STEP 3: 테마 ─────────────────────────────── */}
           {step === 3 && (
             <ScrollView style={styles.body} showsVerticalScrollIndicator={false}>
               <Text style={styles.fieldLabel}>
@@ -731,6 +882,118 @@ export default function NewTripModal({ visible, onClose, onCreated }: Props) {
                   />
                 ))}
               </View>
+
+              <View style={{ height: 24 }} />
+              <View style={styles.footerRow}>
+                <TouchableOpacity style={styles.backButton} onPress={() => setStep(2)}>
+                  <Ionicons name="chevron-back" size={20} color={COLORS.black} />
+                </TouchableOpacity>
+                <View style={{ flex: 1, marginLeft: 12 }}>
+                  <PrimaryButton label="다음 →" onPress={() => setStep(4)} />
+                </View>
+              </View>
+              <View style={{ height: 20 }} />
+            </ScrollView>
+          )}
+
+          {/* ── STEP 4: 촬영 스타일 + 요약 ─────────────────── */}
+          {step === 4 && (
+            <ScrollView style={styles.body} showsVerticalScrollIndicator={false}>
+              <Text style={styles.fieldLabel}>클립 길이</Text>
+              <Text style={styles.fieldHint}>
+                한 장소에서 찍는 클립 하나의 길이예요. 하루에 찍는 개수는
+                제한이 없어요.
+              </Text>
+              <View style={styles.chipWrap}>
+                {CLIP_LENGTH_OPTIONS.map((seconds) => (
+                  <SelectableChip
+                    key={seconds}
+                    label={`${seconds}초`}
+                    selected={form.clipLengthSeconds === seconds}
+                    onPress={() =>
+                      setForm((prev) => ({ ...prev, clipLengthSeconds: seconds }))
+                    }
+                  />
+                ))}
+              </View>
+
+              <Text style={[styles.fieldLabel, { marginTop: 8 }]}>촬영 스타일</Text>
+              <Text style={styles.fieldHint}>
+                촬영할 때 화면에 보여드릴 가이드예요
+              </Text>
+              <View style={styles.styleGrid}>
+                {SHOOTING_STYLES.map((option) => {
+                  const selected = form.shootingStyle === option.id;
+                  return (
+                    <TouchableOpacity
+                      key={option.id}
+                      style={[styles.styleCard, selected && styles.styleCardSelected]}
+                      activeOpacity={0.85}
+                      onPress={() =>
+                        setForm((prev) => ({
+                          ...prev,
+                          shootingStyle: option.id,
+                          // 그리드가 아닌 다른 스타일로 바꾸면 이전에 골라둔
+                          // 템플릿은 의미가 없어지니까 같이 초기화합니다.
+                          gridTemplateId:
+                            option.id === 'grid' ? prev.gridTemplateId : null,
+                        }))
+                      }
+                    >
+                      {selected && (
+                        <View style={styles.styleCardCheck}>
+                          <Ionicons name="checkmark" size={11} color={COLORS.white} />
+                        </View>
+                      )}
+                      <StylePreview styleId={option.id} />
+                      <Text style={styles.styleCardLabel}>{option.label}</Text>
+                      <Text style={styles.styleCardDescription}>
+                        {option.description}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              {/* '그리드 선택'을 골랐을 때만, 구체적으로 어떤 분할
+                  템플릿을 쓸지 한 번 더 고르게 합니다. */}
+              {form.shootingStyle === 'grid' && (
+                <View style={styles.gridTemplateSection}>
+                  <Text style={styles.gridTemplateHint}>
+                    어떤 모양으로 나눌까요?
+                  </Text>
+                  <View style={styles.gridTemplateRow}>
+                    {GRID_TEMPLATES.map((template) => {
+                      const selected = form.gridTemplateId === template.id;
+                      return (
+                        <TouchableOpacity
+                          key={template.id}
+                          style={[
+                            styles.gridTemplateChip,
+                            selected && styles.gridTemplateChipSelected,
+                          ]}
+                          onPress={() =>
+                            setForm((prev) => ({
+                              ...prev,
+                              gridTemplateId: template.id,
+                            }))
+                          }
+                        >
+                          <GridTemplatePreview templateId={template.id} />
+                          <Text
+                            style={[
+                              styles.gridTemplateChipLabel,
+                              selected && styles.gridTemplateChipLabelSelected,
+                            ]}
+                          >
+                            {template.label}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </View>
+              )}
 
               <Text style={[styles.fieldLabel, { marginTop: 8 }]}>여행 요약</Text>
               <View style={styles.summaryCard}>
@@ -753,17 +1016,29 @@ export default function NewTripModal({ visible, onClose, onCreated }: Props) {
                   label="테마"
                   value={form.themes.length > 0 ? form.themes.join(', ') : '미선택'}
                 />
+                <SummaryRow
+                  icon="videocam-outline"
+                  label="촬영"
+                  value={`${form.clipLengthSeconds}초 · ${
+                    SHOOTING_STYLES.find((s) => s.id === form.shootingStyle)?.label ?? '-'
+                  }${
+                    form.shootingStyle === 'grid' && form.gridTemplateId
+                      ? ` (${GRID_TEMPLATES.find((t) => t.id === form.gridTemplateId)?.label})`
+                      : ''
+                  }`}
+                />
               </View>
 
               <View style={{ height: 24 }} />
               <View style={styles.footerRow}>
-                <TouchableOpacity style={styles.backButton} onPress={() => setStep(2)}>
+                <TouchableOpacity style={styles.backButton} onPress={() => setStep(3)}>
                   <Ionicons name="chevron-back" size={20} color={COLORS.black} />
                 </TouchableOpacity>
                 <View style={{ flex: 1, marginLeft: 12 }}>
                   <PrimaryButton
                     label="여행 만들기!"
                     icon="airplane-outline"
+                    disabled={!isStep4Valid}
                     onPress={handleCreate}
                   />
                 </View>
@@ -793,7 +1068,11 @@ export default function NewTripModal({ visible, onClose, onCreated }: Props) {
               </View>
 
               <View style={{ height: 20 }} />
-              <PrimaryButton label="내 루트에서 계획하기 →" onPress={handleClose} />
+              <PrimaryButton
+                label="내 루트에서 계획하기 →"
+                onPress={handleClose}
+                style={{ width: '91%' }}
+              />
               <TouchableOpacity style={{ marginTop: 14 }} onPress={handleClose}>
                 <Text style={styles.laterText}>나중에 하기</Text>
               </TouchableOpacity>
@@ -866,7 +1145,7 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     paddingHorizontal: CARD_HORIZONTAL_PADDING,
-    paddingTop: 10,
+    paddingTop: 22,
     maxHeight: SCREEN_HEIGHT * 0.88 * 1.3, // 기존 높이(0.88)의 1.3배
   },
   headerRow: {
@@ -958,11 +1237,15 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: COLORS.black,
   },
+  inputWithCounter: {
+    position: 'relative',
+  },
   charCount: {
-    alignSelf: 'flex-end',
+    position: 'absolute',
+    right: 14,
+    bottom: 12,
     fontSize: 11,
     color: COLORS.gray400,
-    marginTop: 4,
   },
   chipWrap: {
     flexDirection: 'row',
@@ -1056,19 +1339,12 @@ const styles = StyleSheet.create({
     height: CALENDAR_TRACK_HEIGHT,
     position: 'relative',
   },
-  // 이어붙은 pill 배경. left/right 인셋은 렌더링 시점에 주입됩니다
-  // (원 중심에서 시작/끝나도록 CALENDAR_CELL_WIDTH/2만큼 안쪽으로).
-  // 양 끝이 항상 원(circle) 밑에 가려지기 때문에 모서리를 따로
-  // 둥글릴 필요가 없어요 — 둥근 느낌은 원이 이미 만들어줍니다.
   rangeTrackBackground: {
     position: 'absolute',
     top: 0,
     bottom: 0,
     backgroundColor: '#FFF1E4',
   },
-  // 구간 안의 모든 날짜(끝/중간 상관없이)가 이 스타일을 공유합니다.
-  // 너비를 평소 dayCell과 똑같은 CALENDAR_CELL_WIDTH로 고정해서
-  // 숫자 간격이 항상 일정하게 유지됩니다.
   rangeTrackCell: {
     width: CALENDAR_CELL_WIDTH,
     height: CALENDAR_TRACK_HEIGHT,
@@ -1115,6 +1391,89 @@ const styles = StyleSheet.create({
     minWidth: 16,
     textAlign: 'center',
   },
+
+  // 촬영 스타일 카드
+  styleGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  styleCard: {
+    width: '47%',
+    borderWidth: 1.5,
+    borderColor: COLORS.gray200,
+    borderRadius: 16,
+    paddingVertical: 14,
+    alignItems: 'center',
+    gap: 6,
+  },
+  styleCardSelected: {
+    borderColor: COLORS.accent,
+    backgroundColor: '#FFF6F0',
+  },
+  styleCardCheck: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: COLORS.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  styleCardLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.black,
+    marginTop: 4,
+  },
+  styleCardDescription: {
+    fontSize: 11,
+    color: COLORS.gray400,
+    textAlign: 'center',
+  },
+
+  // 그리드 템플릿 서브 피커
+  gridTemplateSection: {
+    marginTop: 12,
+    backgroundColor: COLORS.gray100,
+    borderRadius: 16,
+    padding: 12,
+  },
+  gridTemplateHint: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.black,
+    marginBottom: 10,
+  },
+  gridTemplateRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  gridTemplateChip: {
+    width: '47%',
+    backgroundColor: COLORS.white,
+    borderWidth: 1.5,
+    borderColor: COLORS.gray200,
+    borderRadius: 12,
+    paddingVertical: 10,
+    alignItems: 'center',
+    gap: 4,
+  },
+  gridTemplateChipSelected: {
+    borderColor: COLORS.accent,
+  },
+  gridTemplateChipLabel: {
+    fontSize: 11,
+    color: COLORS.gray500,
+  },
+  gridTemplateChipLabelSelected: {
+    color: COLORS.accent,
+    fontWeight: '700',
+  },
+
   summaryCard: {
     backgroundColor: COLORS.gray100,
     borderRadius: 16,

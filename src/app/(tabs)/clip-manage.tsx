@@ -16,6 +16,8 @@ import { Ionicons, Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { setActiveFolder, clearActiveFolder } from '@/services/activeFolderService';
 import { getAllFolders, saveFolder, deleteFolder as deleteFolderFromStorage, FolderItem } from '@/services/folderService';
+import { getRecordingsByFolder } from '@/services/recordingService';
+import { useTripStore } from '@/store/useTripStore';
 import NewTripModal from '@/components/NewTripModal';
 
 const COLORS = {
@@ -55,7 +57,15 @@ export default function ClipManageScreen() {
   const loadFolders = async () => {
     try {
       const stored = await getAllFolders();
-      setFolders(stored);
+      // clipCount는 폴더 생성 시점에 0으로 저장돼있을 뿐이라, 실제 클립 개수는
+      // recordingService에서 매번 다시 세어와야 촬영한 만큼 화면에 반영됩니다.
+      const withCounts = await Promise.all(
+        stored.map(async (folder) => {
+          const recordings = await getRecordingsByFolder(folder.id);
+          return { ...folder, clipCount: recordings.length };
+        }),
+      );
+      setFolders(withCounts);
     } catch (error) {
       console.error('[loadFolders] 실패:', error);
       setFolders([]);
@@ -68,7 +78,10 @@ export default function ClipManageScreen() {
 
   const [activeTab, setActiveTab] = useState<'editing' | 'myTravel'>('editing');
   const [folders, setFolders] = useState<FolderItem[]>([]);
-  const [activeFolderId, setActiveFolderId] = useState<string | null>('null');
+  // 활성 폴더는 로컬 state로 따로 들고 있지 않고 useTripStore를 구독합니다 — 앱 시작 시
+  // hydrateCurrentTrip()이 채워주고, "카메라 연결하기"/삭제 시에도 여기서 갱신되므로
+  // 이 화면은 항상 최신 값을 바로 읽기만 하면 됩니다.
+  const activeFolderId = useTripStore((state) => state.currentTrip?.id ?? null);
   const [selectedFolderForMenu, setSelectedFolderForMenu] =
     useState<FolderItem | null>(null);
   const [newTripModalVisible, setNewTripModalVisible] = useState(false);
@@ -101,6 +114,16 @@ export default function ClipManageScreen() {
       clipCount: 0,
       thumbnail:
         'https://images.unsplash.com/photo-1500534623283-312aade485b7?w=600',
+
+      // 예전에는 폴더 이름/날짜 말고는 다 버려지던 필드들 — 여행 만들기 모달에서
+      // 입력받은 그대로 저장합니다.
+      region: trip.region,
+      memo: trip.memo,
+      partySize: trip.partySize,
+      themes: trip.themes,
+      clipLengthSeconds: trip.clipLengthSeconds,
+      shootingStyle: trip.shootingStyle,
+      gridTemplateId: trip.gridTemplateId,
     };
 
     try {
@@ -115,7 +138,7 @@ export default function ClipManageScreen() {
   const handleConnectCamera = async () => {
     if (selectedFolderForMenu) {
       await setActiveFolder(selectedFolderForMenu.id);
-      setActiveFolderId(selectedFolderForMenu.id);
+      useTripStore.getState().setCurrentTrip(selectedFolderForMenu);
       setSelectedFolderForMenu(null);
     }
   };
@@ -134,8 +157,8 @@ export default function ClipManageScreen() {
           text: '삭제', style: 'destructive', onPress: async () => {
             try {
               if (activeFolderId === folder.id) {
-                setActiveFolderId(null);
                 await clearActiveFolder();
+                useTripStore.getState().clearCurrentTrip();
               }
 
               await deleteFolderFromStorage(folder.id);
