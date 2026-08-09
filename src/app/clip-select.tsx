@@ -339,7 +339,7 @@ export default function ClipSelectScreen() {
         {text: '취소', style: 'cancel'},
         {text: '저장', onPress: async () => {
           try {
-            const {status} = await MediaLibrary.requestPermissionsAsync();
+            const {status} = await MediaLibrary.requestPermissionsAsync(true);
             if (status !== 'granted') {
               Alert.alert('권한 필요', '갤러리 접근 권한이 필요합니다.');
               return;
