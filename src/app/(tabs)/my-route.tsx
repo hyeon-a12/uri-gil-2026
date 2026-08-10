@@ -1,5 +1,15 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { router } from 'expo-router';
+import {
+  getAllFolders,
+  saveFolder,
+  type FolderItem,
+} from '@/services/folderService';
+import NewTripModal from '@/components/NewTripModal';
+import {
+  selectCurrentTrip,
+  useTripStore,
+} from '@/store/useTripStore';
 import {
   Alert,
   Modal,
@@ -1123,9 +1133,254 @@ function RoutePlanView() {
   );
 }
 
+function getTripDisplayName(trip: FolderItem | null): string {
+  if (!trip) {
+    return '여행 선택';
+  }
+
+  // FolderItem의 실제 이름 필드가 프로젝트마다 다를 수 있어
+  // 흔히 쓰는 필드명을 순서대로 확인합니다.
+  const candidate = trip as FolderItem & Record<string, unknown>;
+  const displayName =
+    candidate.name ??
+    candidate.title ??
+    candidate.folderName ??
+    candidate.tripName;
+
+  return typeof displayName === 'string' && displayName.trim().length > 0
+    ? displayName
+    : `여행 ${trip.id}`;
+}
+
+interface TripSelectorModalProps {
+  visible: boolean;
+  trips: FolderItem[];
+  currentTrip: FolderItem | null;
+  onSelect: (trip: FolderItem) => void;
+  onClose: () => void;
+  onCreateTrip: () => void;
+}
+
+function TripSelectorModal({
+  visible,
+  trips,
+  currentTrip,
+  onSelect,
+  onClose,
+  onCreateTrip,
+}: TripSelectorModalProps) {
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={onClose}
+    >
+      <Pressable
+        style={styles.tripModalBackdrop}
+        onPress={onClose}
+      >
+        <Pressable
+          style={styles.tripModalCard}
+          onPress={(event) => event.stopPropagation()}
+        >
+          <View style={styles.tripModalHandle} />
+
+          <View style={styles.tripModalHeader}>
+            <View>
+              <Text style={styles.tripModalTitle}>
+                여행 선택
+              </Text>
+
+              <Text style={styles.tripModalSubtitle}>
+                확인하거나 기록할 여행을 선택해주세요.
+              </Text>
+            </View>
+
+            <Pressable
+              hitSlop={10}
+              onPress={onClose}
+              style={styles.tripModalClose}
+            >
+              <Ionicons
+                name="close"
+                size={21}
+                color={COLORS.textSecondary}
+              />
+            </Pressable>
+          </View>
+
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            style={styles.tripModalList}
+          >
+            {trips.map((trip) => {
+              const selected =
+                currentTrip?.id === trip.id;
+
+              return (
+                <Pressable
+                  key={trip.id}
+                  onPress={() => onSelect(trip)}
+                  style={({ pressed }) => [
+                    styles.tripOption,
+                    selected &&
+                      styles.tripOptionSelected,
+                    pressed && styles.cardPressed,
+                  ]}
+                >
+                  <View
+                    style={[
+                      styles.tripOptionIcon,
+                      selected &&
+                        styles.tripOptionIconSelected,
+                    ]}
+                  >
+                    <Ionicons
+                      name="airplane"
+                      size={20}
+                      color={
+                        selected
+                          ? COLORS.primary
+                          : COLORS.textSecondary
+                      }
+                    />
+                  </View>
+
+                  <View style={styles.tripOptionTextArea}>
+                    <Text
+                      numberOfLines={1}
+                      style={[
+                        styles.tripOptionTitle,
+                        selected &&
+                          styles.tripOptionTitleSelected,
+                      ]}
+                    >
+                      {getTripDisplayName(trip)}
+                    </Text>
+
+                    <Text style={styles.tripOptionSubtitle}>
+                      여행 기록 보기
+                    </Text>
+                  </View>
+
+                  {selected ? (
+                    <Ionicons
+                      name="checkmark-circle"
+                      size={23}
+                      color={COLORS.primary}
+                    />
+                  ) : (
+                    <Ionicons
+                      name="chevron-forward"
+                      size={19}
+                      color={COLORS.textTertiary}
+                    />
+                  )}
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+
+          <Pressable
+            style={({ pressed }) => [
+              styles.newTripButton,
+              pressed && styles.cardPressed,
+            ]}
+            onPress={onCreateTrip}
+          >
+            <View style={styles.newTripIcon}>
+              <Ionicons
+                name="add"
+                size={21}
+                color={COLORS.textSecondary}
+              />
+            </View>
+
+            <Text style={styles.newTripText}>
+              새 여행 만들기
+            </Text>
+          </Pressable>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
 export default function MyRouteScreen() {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
+
+  const currentTrip = useTripStore((state) => state.currentTrip);
+
+  const [trips, setTrips] = useState<FolderItem[]>([]);
+  const [tripSelectorVisible, setTripSelectorVisible] = useState(false);
+  const [newTripModalVisible, setNewTripModalVisible] = useState(false);
+
+  const loadTrips = async () => {
+    try {
+      const folders = await getAllFolders();
+      setTrips(folders);
+    } catch (error) {
+      console.error('여행 목록을 불러오지 못했습니다.', error);
+    }
+  };
+
+  useEffect(() => {
+    void loadTrips();
+  }, []);
+
+  const handleOpenNewTripModal = () => {
+    setTripSelectorVisible(false);
+
+    setTimeout(() => {
+      setNewTripModalVisible(true);
+    }, 350);
+  };
+
+  const handleCreatedTrip = async (trip: {
+    name: string;
+    region: string | null;
+    memo: string;
+    startDate: Date;
+    endDate: Date;
+    partySize: number;
+    themes: string[];
+    clipLengthSeconds: number;
+    shootingStyle: FolderItem['shootingStyle'];
+    gridTemplateId: FolderItem['gridTemplateId'];
+  }) => {
+    const formatDate = (date: Date) => {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      return `${year}.${month}.${day}.`;
+    };
+
+    const folder: FolderItem = {
+      id: `folder-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      title: trip.name.trim(),
+      dateRange: `${formatDate(trip.startDate)} ~ ${formatDate(trip.endDate)}`,
+      clipCount: 0,
+      thumbnail: '',
+      region: trip.region,
+      memo: trip.memo,
+      partySize: trip.partySize,
+      themes: trip.themes,
+      clipLengthSeconds: trip.clipLengthSeconds,
+      shootingStyle: trip.shootingStyle,
+      gridTemplateId: trip.gridTemplateId,
+    };
+
+    try {
+      await saveFolder(folder);
+      await selectCurrentTrip(folder);
+      await loadTrips();
+    } catch (error) {
+      console.error('새 여행 저장에 실패했습니다.', error);
+      Alert.alert('여행 생성 실패', '새 여행을 저장하지 못했습니다.');
+    }
+  };
 
   const [selectedMode, setSelectedMode] =
     useState<RouteViewMode>('info');
@@ -1175,23 +1430,37 @@ export default function MyRouteScreen() {
           />
         </Pressable>
 
-        <View style={styles.headerTitleArea}>
-          <Text
-            numberOfLines={1}
-            allowFontScaling={false}
-            style={styles.headerTitle}
-          >
-            제주 서부 루트
-          </Text>
+        <Pressable
+          onPress={() => setTripSelectorVisible(true)}
+          style={({ pressed }) => [
+            styles.headerTitleArea,
+            pressed && styles.headerTripPressed,
+          ]}
+        >
+          <View style={styles.headerTripTitleRow}>
+            <Text
+              numberOfLines={1}
+              allowFontScaling={false}
+              style={styles.headerTitle}
+            >
+              {getTripDisplayName(currentTrip)}
+            </Text>
+
+            <Ionicons
+              name="chevron-down"
+              size={16}
+              color={COLORS.textSecondary}
+            />
+          </View>
 
           <Text
             numberOfLines={1}
             allowFontScaling={false}
             style={styles.headerSubtitle}
           >
-            2박 3일 · 장소 4곳
+            2박 3일 · 장소 {ROUTE_STOPS.length}곳
           </Text>
-        </View>
+        </Pressable>
 
         <Pressable
           hitSlop={12}
@@ -1259,6 +1528,29 @@ export default function MyRouteScreen() {
           onChange={setSelectedMode}
         />
       </View>
+
+      <TripSelectorModal
+        visible={tripSelectorVisible}
+        trips={trips}
+        currentTrip={currentTrip}
+        onClose={() => setTripSelectorVisible(false)}
+        onSelect={async (trip) => {
+          try {
+            await selectCurrentTrip(trip);
+            setTripSelectorVisible(false);
+          } catch (error) {
+            console.error('여행 변경에 실패했습니다.', error);
+            Alert.alert('여행 변경 실패', '여행을 변경하지 못했습니다.');
+          }
+        }}
+        onCreateTrip={handleOpenNewTripModal}
+      />
+
+      <NewTripModal
+        visible={newTripModalVisible}
+        onClose={() => setNewTripModalVisible(false)}
+        onCreated={handleCreatedTrip}
+      />
     </View>
   );
 }
@@ -1306,6 +1598,20 @@ const styles = StyleSheet.create({
 
     alignItems: 'center',
     justifyContent: 'center',
+  },
+
+  headerTripTitleRow: {
+    maxWidth: '100%',
+
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+
+    gap: 4,
+  },
+
+  headerTripPressed: {
+    opacity: 0.68,
   },
 
   headerTitle: {
@@ -2404,6 +2710,151 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 17,
     fontWeight: '800',
+  },
+
+  tripModalBackdrop: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(20,20,18,0.35)',
+  },
+
+  tripModalCard: {
+    maxHeight: '72%',
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    paddingBottom: 28,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    backgroundColor: COLORS.background,
+  },
+
+  tripModalHandle: {
+    alignSelf: 'center',
+    width: 42,
+    height: 5,
+    marginBottom: 20,
+    borderRadius: 3,
+    backgroundColor: '#D7D7D7',
+  },
+
+  tripModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    marginBottom: 18,
+  },
+
+  tripModalTitle: {
+    color: COLORS.textPrimary,
+    fontSize: 20,
+    lineHeight: 27,
+    fontWeight: '800',
+  },
+
+  tripModalSubtitle: {
+    marginTop: 4,
+    color: COLORS.textSecondary,
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '500',
+  },
+
+  tripModalClose: {
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 18,
+    backgroundColor: '#F6F6F6',
+  },
+
+  tripModalList: {
+    maxHeight: 350,
+  },
+
+  tripOption: {
+    minHeight: 74,
+    paddingHorizontal: 13,
+    paddingVertical: 11,
+    marginBottom: 9,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 17,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.card,
+  },
+
+  tripOptionSelected: {
+    borderColor: COLORS.primary,
+    backgroundColor: COLORS.primarySoft,
+  },
+
+  tripOptionIcon: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+    borderRadius: 22,
+    backgroundColor: '#F5F5F5',
+  },
+
+  tripOptionIconSelected: {
+    backgroundColor: '#FFFFFF',
+  },
+
+  tripOptionTextArea: {
+    flex: 1,
+  },
+
+  tripOptionTitle: {
+    color: COLORS.textPrimary,
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '700',
+  },
+
+  tripOptionTitleSelected: {
+    color: COLORS.primaryDark,
+    fontWeight: '800',
+  },
+
+  tripOptionSubtitle: {
+    marginTop: 3,
+    color: COLORS.textSecondary,
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: '500',
+  },
+
+  newTripButton: {
+    height: 56,
+    marginTop: 8,
+    paddingHorizontal: 13,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 17,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderStyle: 'dashed',
+  },
+
+  newTripIcon: {
+    width: 36,
+    height: 36,
+    marginRight: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 18,
+    backgroundColor: '#F5F5F5',
+  },
+
+  newTripText: {
+    color: COLORS.textSecondary,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '700',
   },
 
   // === '일정' 탭 스타일 끝 ===
