@@ -2,9 +2,11 @@ import React, { useMemo, useState } from 'react';
 import { router } from 'expo-router';
 import {
   Alert,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
+  TextInput,
   View,
   useWindowDimensions,
 } from 'react-native';
@@ -42,7 +44,8 @@ const COLORS = {
   shadow: '#443A31',
 };
 
-type RouteViewMode = 'info' | 'map' | 'list';
+// 사용자 흐름을 단순화해 '일정'과 '지도' 두 가지 보기만 제공합니다.
+type RouteViewMode = 'info' | 'map';
 
 interface RouteStop {
   id: string;
@@ -51,17 +54,31 @@ interface RouteStop {
   shortName: string;
   sticker: string;
 
+  day: number; // 몇 박 몇 일 중 몇 일차 방문인지
+
   x: number;
   y: number;
 
   clipCount: number;
   time: string;
 
+  distanceToNext?: string; // 같은 day 안에서 다음 장소까지의 이동 거리 표시용
+
   clips: {
     id: string;
     thumbnail: string;
     duration: string;
   }[];
+}
+
+// 이동 중 기록 한 건 (사진 중심, GPS로 기존 장소에 자동 매칭)
+interface TravelLog {
+  id: string;
+  day: number;
+  time: string;
+  thumbnail: string;
+  matchedStopId: string | null;
+  matchedStopName: string | null;
 }
 
 const ROUTE_STOPS: RouteStop[] = [
@@ -72,11 +89,15 @@ const ROUTE_STOPS: RouteStop[] = [
     shortName: '협재해변',
     sticker: '🏖️',
 
+    day: 1,
+
     x: 18,
     y: 25,
 
     clipCount: 2,
     time: '14:35',
+
+    distanceToNext: '1.2km',
 
     clips: [
       {
@@ -99,6 +120,8 @@ const ROUTE_STOPS: RouteStop[] = [
     name: '카페 이연',
     shortName: '카페 이연',
     sticker: '☕',
+
+    day: 1,
 
     x: 51,
     y: 46,
@@ -128,6 +151,8 @@ const ROUTE_STOPS: RouteStop[] = [
     shortName: '모슬포항',
     sticker: '⛵',
 
+    day: 2,
+
     x: 74,
     y: 67,
 
@@ -150,6 +175,8 @@ const ROUTE_STOPS: RouteStop[] = [
     shortName: '동문시장',
     sticker: '🍜',
 
+    day: 3,
+
     x: 86,
     y: 40,
 
@@ -166,6 +193,44 @@ const ROUTE_STOPS: RouteStop[] = [
     ],
   },
 ];
+
+// 데모용 목데이터: 실제로는 촬영 시 GPS 좌표와 ROUTE_STOPS 좌표를 비교해서
+// 반경 이내면 matchedStopId를 채우고, 아니면 null로 저장하면 됩니다.
+const TRAVEL_LOGS: TravelLog[] = [
+  {
+    id: 'log-1',
+    day: 1,
+    time: '14:38',
+    thumbnail:
+      'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=300',
+    matchedStopId: 'stop-1',
+    matchedStopName: '협재해변',
+  },
+  {
+    id: 'log-2',
+    day: 1,
+    time: '15:22',
+    thumbnail:
+      'https://images.unsplash.com/photo-1500534623283-312aade485b7?w=300',
+    matchedStopId: null,
+    matchedStopName: null,
+  },
+  {
+    id: 'log-3',
+    day: 1,
+    time: '16:15',
+    thumbnail:
+      'https://images.unsplash.com/photo-1509042239860-f550ce710b93?w=300',
+    matchedStopId: 'stop-2',
+    matchedStopName: '카페 이연',
+  },
+];
+
+// 장소별 메모 초기값 (실제로는 서버/로컬 저장소에서 불러오면 됩니다)
+const INITIAL_STOP_MEMOS: Record<string, string> = {
+  'stop-1':
+    '노을이 예뻐서 한참 앉아있었다. 근처 포차에서 먹은 딱새우회가 진짜 맛있었음 🦐',
+};
 
 function MapDecoration() {
   return (
@@ -519,21 +584,15 @@ function InternalNavigation({
   }[] = [
     {
       mode: 'info',
-      label: '루트 정보',
-      icon: 'map-outline',
-      activeIcon: 'map',
+      label: '일정',
+      icon: 'calendar-outline',
+      activeIcon: 'calendar',
     },
     {
       mode: 'map',
       label: '지도',
-      icon: 'location-outline',
-      activeIcon: 'location',
-    },
-    {
-      mode: 'list',
-      label: '리스트',
-      icon: 'list-outline',
-      activeIcon: 'list',
+      icon: 'map-outline',
+      activeIcon: 'map',
     },
   ];
 
@@ -546,7 +605,10 @@ function InternalNavigation({
           <Pressable
             key={item.mode}
             onPress={() => onChange(item.mode)}
-            style={styles.internalNavigationItem}
+            style={[
+              styles.internalNavigationItem,
+              selected && styles.internalNavigationItemSelected,
+            ]}
           >
             <Ionicons
               name={selected ? item.activeIcon : item.icon}
@@ -576,150 +638,488 @@ function InternalNavigation({
   );
 }
 
-function RouteInformationView() {
+interface MemoEditorModalProps {
+  visible: boolean;
+  stopName: string | null;
+  draft: string;
+  onChangeDraft: (text: string) => void;
+  onSave: () => void;
+  onClose: () => void;
+}
+
+// 장소에 남기는 메모(좋았던 점, 먹은 음식 등)를 쓰고 수정하는 모달
+function MemoEditorModal({
+  visible,
+  stopName,
+  draft,
+  onChangeDraft,
+  onSave,
+  onClose,
+}: MemoEditorModalProps) {
   return (
-    <ScrollView
-      style={styles.alternativeView}
-      contentContainerStyle={styles.alternativeContent}
-      showsVerticalScrollIndicator={false}
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={onClose}
     >
-      <Text
-        allowFontScaling={false}
-        style={styles.alternativeTitle}
-      >
-        제주 서부 루트
-      </Text>
+      <View style={styles.memoModalBackdrop}>
+        <View style={styles.memoModalCard}>
+          <Text
+            allowFontScaling={false}
+            style={styles.memoModalTitle}
+          >
+            {stopName ?? ''} 메모
+          </Text>
 
-      <Text
-        allowFontScaling={false}
-        style={styles.alternativeDescription}
-      >
-        2박 3일 동안 제주 서부의 바다와 카페를 따라
-        이동한 여행이에요.
-      </Text>
+          <Text
+            allowFontScaling={false}
+            style={styles.memoModalHint}
+          >
+            좋았던 점, 먹은 음식처럼 남기고 싶은 걸 적어보세요.
+          </Text>
 
-      <View style={styles.routeSummaryGrid}>
-        <View style={styles.summaryCard}>
-          <Ionicons
-            name="calendar-outline"
-            size={23}
-            color={COLORS.primary}
+          <TextInput
+            value={draft}
+            onChangeText={onChangeDraft}
+            placeholder="예: 노을이 예뻤고, 옆 포차에서 먹은 딱새우회가 최고였다."
+            placeholderTextColor={COLORS.textTertiary}
+            multiline
+            autoFocus
+            style={styles.memoInput}
           />
 
-          <Text style={styles.summaryValue}>
-            2박 3일
-          </Text>
+          <View style={styles.memoModalButtonRow}>
+            <Pressable
+              onPress={onClose}
+              style={({ pressed }) => [
+                styles.memoModalButton,
+                styles.memoModalButtonGhost,
+                pressed && styles.cardPressed,
+              ]}
+            >
+              <Text
+                allowFontScaling={false}
+                style={styles.memoModalButtonGhostText}
+              >
+                취소
+              </Text>
+            </Pressable>
 
-          <Text style={styles.summaryLabel}>
-            여행 기간
-          </Text>
-        </View>
-
-        <View style={styles.summaryCard}>
-          <Ionicons
-            name="location-outline"
-            size={23}
-            color={COLORS.primary}
-          />
-
-          <Text style={styles.summaryValue}>
-            4곳
-          </Text>
-
-          <Text style={styles.summaryLabel}>
-            방문 장소
-          </Text>
-        </View>
-
-        <View style={styles.summaryCard}>
-          <Ionicons
-            name="film-outline"
-            size={23}
-            color={COLORS.primary}
-          />
-
-          <Text style={styles.summaryValue}>
-            10개
-          </Text>
-
-          <Text style={styles.summaryLabel}>
-            촬영 클립
-          </Text>
+            <Pressable
+              onPress={onSave}
+              style={({ pressed }) => [
+                styles.memoModalButton,
+                styles.memoModalButtonPrimary,
+                pressed && styles.cardPressed,
+              ]}
+            >
+              <Text
+                allowFontScaling={false}
+                style={styles.memoModalButtonPrimaryText}
+              >
+                저장
+              </Text>
+            </Pressable>
+          </View>
         </View>
       </View>
-    </ScrollView>
+    </Modal>
   );
 }
 
-function RouteListView({
-  selectedStopId,
-  onSelectStop,
-}: RouteMapProps) {
-  return (
-    <ScrollView
-      style={styles.alternativeView}
-      contentContainerStyle={styles.routeListContent}
-      showsVerticalScrollIndicator={false}
-    >
-      {ROUTE_STOPS.map((stop, index) => {
-        const selected = stop.id === selectedStopId;
+// '루트 정보' 탭 대신 들어가는 새 화면: day별 일정 타임라인 + 장소별 메모 + 이동 중 기록
+function RoutePlanView() {
+  const [selectedDay, setSelectedDay] = useState(1);
 
-        return (
-          <Pressable
-            key={stop.id}
-            onPress={() => onSelectStop(stop.id)}
-            style={({ pressed }) => [
-              styles.routeListCard,
-              selected && styles.routeListCardSelected,
-              pressed && styles.cardPressed,
-            ]}
-          >
-            <View style={styles.routeListOrderArea}>
-              <View
+  const [stopMemos, setStopMemos] = useState<Record<string, string>>(
+    INITIAL_STOP_MEMOS,
+  );
+
+  const [memoModalVisible, setMemoModalVisible] = useState(false);
+  const [activeStopId, setActiveStopId] = useState<string | null>(null);
+  const [memoDraft, setMemoDraft] = useState('');
+
+  const dayNumbers = useMemo(() => {
+    const unique = new Set(ROUTE_STOPS.map((stop) => stop.day));
+    return Array.from(unique).sort((a, b) => a - b);
+  }, []);
+
+  const dayStops = useMemo(
+    () =>
+      ROUTE_STOPS.filter((stop) => stop.day === selectedDay).sort(
+        (a, b) => a.order - b.order,
+      ),
+    [selectedDay],
+  );
+
+  const dayLogs = useMemo(
+    () => TRAVEL_LOGS.filter((log) => log.day === selectedDay),
+    [selectedDay],
+  );
+
+  const activeStop = useMemo(
+    () => ROUTE_STOPS.find((stop) => stop.id === activeStopId) ?? null,
+    [activeStopId],
+  );
+
+  const openMemoEditor = (stop: RouteStop) => {
+    setActiveStopId(stop.id);
+    setMemoDraft(stopMemos[stop.id] ?? '');
+    setMemoModalVisible(true);
+  };
+
+  const closeMemoEditor = () => {
+    setMemoModalVisible(false);
+  };
+
+  const saveMemo = () => {
+    if (activeStopId) {
+      const trimmed = memoDraft.trim();
+
+      setStopMemos((prev) => {
+        const next = { ...prev };
+
+        if (trimmed.length > 0) {
+          next[activeStopId] = trimmed;
+        } else {
+          delete next[activeStopId];
+        }
+
+        return next;
+      });
+    }
+
+    setMemoModalVisible(false);
+  };
+
+  return (
+    <View style={styles.planScreen}>
+      <ScrollView
+        style={styles.alternativeView}
+        contentContainerStyle={styles.planContent}
+        showsVerticalScrollIndicator={false}
+      >
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.dayChipRow}
+        >
+          {dayNumbers.map((day) => {
+            const selected = day === selectedDay;
+
+            return (
+              <Pressable
+                key={day}
+                onPress={() => setSelectedDay(day)}
                 style={[
-                  styles.routeListOrder,
-                  selected &&
-                    styles.routeListOrderSelected,
+                  styles.dayChip,
+                  selected && styles.dayChipSelected,
                 ]}
               >
-                <Text style={styles.routeListOrderText}>
-                  {stop.order}
+                <Text
+                  allowFontScaling={false}
+                  style={[
+                    styles.dayChipText,
+                    selected && styles.dayChipTextSelected,
+                  ]}
+                >
+                  Day {day}
                 </Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+
+        <View style={styles.planTimeline}>
+          {dayStops.map((stop, index) => {
+            const memo = stopMemos[stop.id];
+
+            return (
+              <View key={stop.id} style={styles.planTimelineRow}>
+                <View style={styles.planTimelineIndicator}>
+                  <View style={styles.planTimelineDot}>
+                    <Text
+                      allowFontScaling={false}
+                      style={styles.planTimelineDotText}
+                    >
+                      {stop.order}
+                    </Text>
+                  </View>
+
+                  {index < dayStops.length - 1 ? (
+                    <View style={styles.planTimelineLineArea}>
+                      <View style={styles.planTimelineLine} />
+
+                      {stop.distanceToNext ? (
+                        <View style={styles.planDistanceBadge}>
+                          <Text
+                            allowFontScaling={false}
+                            style={styles.planDistanceBadgeText}
+                          >
+                            {stop.distanceToNext}
+                          </Text>
+                        </View>
+                      ) : null}
+                    </View>
+                  ) : null}
+                </View>
+
+                <View style={styles.planStopCard}>
+                  <View style={styles.planStopCardTop}>
+                    <View style={styles.planStopStickerCircle}>
+                      <Text style={styles.planStopSticker}>
+                        {stop.sticker}
+                      </Text>
+                    </View>
+
+                    <View style={styles.planStopTextArea}>
+                      <Text
+                        numberOfLines={1}
+                        allowFontScaling={false}
+                        style={styles.planStopName}
+                      >
+                        {stop.name}
+                      </Text>
+
+                      <Text
+                        allowFontScaling={false}
+                        style={styles.planStopMeta}
+                      >
+                        {stop.time} · 클립 {stop.clipCount}개
+                      </Text>
+                    </View>
+
+                    <Pressable
+                      hitSlop={8}
+                      onPress={() => openMemoEditor(stop)}
+                      style={styles.planStopIconButton}
+                    >
+                      <Ionicons
+                        name={memo ? 'chatbubble' : 'chatbubble-outline'}
+                        size={16}
+                        color={
+                          memo ? COLORS.primary : COLORS.textSecondary
+                        }
+                      />
+                    </Pressable>
+
+                    <Pressable
+                      hitSlop={8}
+                      onPress={() => {
+                        Alert.alert(
+                          stop.name,
+                          '장소 상세 정보 화면으로 연결할 예정입니다.',
+                        );
+                      }}
+                      style={styles.planStopIconButton}
+                    >
+                      <Ionicons
+                        name="chevron-forward"
+                        size={18}
+                        color={COLORS.textTertiary}
+                      />
+                    </Pressable>
+                  </View>
+
+                  {memo ? (
+                    <Pressable
+                      onPress={() => openMemoEditor(stop)}
+                      style={({ pressed }) => [
+                        styles.planStopMemoBox,
+                        pressed && styles.cardPressed,
+                      ]}
+                    >
+                      <Text
+                        numberOfLines={3}
+                        allowFontScaling={false}
+                        style={styles.planStopMemoText}
+                      >
+                        {memo}
+                      </Text>
+                    </Pressable>
+                  ) : (
+                    <Pressable
+                      onPress={() => openMemoEditor(stop)}
+                      style={({ pressed }) => [
+                        styles.planStopMemoEmpty,
+                        pressed && styles.cardPressed,
+                      ]}
+                    >
+                      <Ionicons
+                        name="add"
+                        size={13}
+                        color={COLORS.textTertiary}
+                      />
+
+                      <Text
+                        allowFontScaling={false}
+                        style={styles.planStopMemoEmptyText}
+                      >
+                        메모 남기기
+                      </Text>
+                    </Pressable>
+                  )}
+                </View>
               </View>
+            );
+          })}
 
-              {index < ROUTE_STOPS.length - 1 ? (
-                <View style={styles.routeListLine} />
-              ) : null}
-            </View>
+          <View style={styles.planAddRow}>
+            <Pressable
+              onPress={() => {
+                Alert.alert(
+                  '장소 추가',
+                  `Day ${selectedDay}에 새 장소를 추가할 예정입니다.`,
+                );
+              }}
+              style={({ pressed }) => [
+                styles.planAddButton,
+                pressed && styles.cardPressed,
+              ]}
+            >
+              <Ionicons
+                name="add"
+                size={16}
+                color={COLORS.textSecondary}
+              />
 
-            <View style={styles.routeListSticker}>
-              <Text style={styles.routeListStickerText}>
-                {stop.sticker}
-              </Text>
-            </View>
-
-            <View style={styles.routeListTextArea}>
               <Text
-                numberOfLines={1}
-                style={styles.routeListTitle}
+                allowFontScaling={false}
+                style={styles.planAddButtonText}
               >
-                {stop.name}
+                장소 추가
               </Text>
+            </Pressable>
+          </View>
+        </View>
 
-              <Text style={styles.routeListMeta}>
-                클립 {stop.clipCount}개 · {stop.time}
-              </Text>
-            </View>
+        <View style={styles.travelLogSection}>
+          <View style={styles.travelLogHeader}>
+            <Text
+              allowFontScaling={false}
+              style={styles.travelLogTitle}
+            >
+              이동 중 기록
+            </Text>
 
-            <Ionicons
-              name="chevron-forward"
-              size={20}
-              color={COLORS.textTertiary}
-            />
-          </Pressable>
-        );
-      })}
-    </ScrollView>
+            <Text
+              allowFontScaling={false}
+              style={styles.travelLogSubtitle}
+            >
+              여행하며 바로 남기기
+            </Text>
+          </View>
+
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.travelLogList}
+          >
+            {dayLogs.map((log) => (
+              <Pressable
+                key={log.id}
+                onPress={() => {
+                  Alert.alert(
+                    log.matchedStopName ?? '미분류 기록',
+                    log.matchedStopName
+                      ? `${log.matchedStopName}에 자동으로 연결됐어요.`
+                      : '근처에 등록된 장소가 없어서 미분류로 남겨뒀어요. 눌러서 장소로 등록할 수 있습니다.',
+                  );
+                }}
+                style={styles.travelLogItem}
+              >
+                <View style={styles.travelLogThumbWrapper}>
+                  <Image
+                    source={{ uri: log.thumbnail }}
+                    style={styles.travelLogThumb}
+                    contentFit="cover"
+                    transition={150}
+                  />
+
+                  <View
+                    style={[
+                      styles.travelLogBadge,
+                      !log.matchedStopId &&
+                        styles.travelLogBadgeUnmatched,
+                    ]}
+                  >
+                    <Ionicons
+                      name={
+                        log.matchedStopId
+                          ? 'location'
+                          : 'location-outline'
+                      }
+                      size={9}
+                      color={
+                        log.matchedStopId
+                          ? '#FFFFFF'
+                          : COLORS.textSecondary
+                      }
+                    />
+                  </View>
+                </View>
+
+                <Text
+                  numberOfLines={1}
+                  allowFontScaling={false}
+                  style={styles.travelLogTime}
+                >
+                  {log.matchedStopName ?? '미분류'} · {log.time}
+                </Text>
+              </Pressable>
+            ))}
+
+            <Pressable
+              onPress={() => {
+                Alert.alert(
+                  '기록 추가',
+                  '카메라를 열어 새 기록을 남길 예정입니다.',
+                );
+              }}
+              style={({ pressed }) => [
+                styles.travelLogAddButton,
+                pressed && styles.cardPressed,
+              ]}
+            >
+              <Ionicons
+                name="add"
+                size={22}
+                color={COLORS.textSecondary}
+              />
+            </Pressable>
+          </ScrollView>
+        </View>
+      </ScrollView>
+
+      <Pressable
+        onPress={() => {
+          Alert.alert(
+            '기록하기',
+            '카메라를 열어 새 기록을 남길 예정입니다.',
+          );
+        }}
+        style={({ pressed }) => [
+          styles.travelLogFab,
+          pressed && styles.cardPressed,
+        ]}
+      >
+        <Ionicons
+          name="camera"
+          size={24}
+          color="#FFFFFF"
+        />
+      </Pressable>
+
+      <MemoEditorModal
+        visible={memoModalVisible}
+        stopName={activeStop?.name ?? null}
+        draft={memoDraft}
+        onChangeDraft={setMemoDraft}
+        onSave={saveMemo}
+        onClose={closeMemoEditor}
+      />
+    </View>
   );
 }
 
@@ -728,7 +1128,7 @@ export default function MyRouteScreen() {
   const { width } = useWindowDimensions();
 
   const [selectedMode, setSelectedMode] =
-    useState<RouteViewMode>('map');
+    useState<RouteViewMode>('info');
 
   const [selectedStopId, setSelectedStopId] =
     useState(ROUTE_STOPS[0].id);
@@ -841,15 +1241,8 @@ export default function MyRouteScreen() {
               <SelectedStopCard stop={selectedStop} />
             </View>
           </ScrollView>
-        ) : selectedMode === 'info' ? (
-          <RouteInformationView />
         ) : (
-          <RouteListView
-            selectedStopId={selectedStopId}
-            onSelectStop={(stopId) => {
-              handleSelectStop(stopId);
-            }}
-          />
+          <RoutePlanView />
         )}
       </View>
 
@@ -1454,14 +1847,15 @@ const styles = StyleSheet.create({
   },
 
   internalNavigation: {
-    height: 68,
+    height: 58,
 
-    paddingHorizontal: 12,
+    paddingHorizontal: 6,
+    paddingVertical: 6,
 
     flexDirection: 'row',
     alignItems: 'center',
 
-    borderRadius: 22,
+    borderRadius: 20,
 
     backgroundColor: 'rgba(255,255,255,0.97)',
 
@@ -1481,9 +1875,16 @@ const styles = StyleSheet.create({
 
   internalNavigationItem: {
     flex: 1,
+    height: 46,
 
     alignItems: 'center',
     justifyContent: 'center',
+
+    borderRadius: 15,
+  },
+
+  internalNavigationItemSelected: {
+    backgroundColor: COLORS.primarySoft,
   },
 
   internalNavigationLabel: {
@@ -1505,91 +1906,28 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 
-  alternativeContent: {
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 190,
-  },
+  // === 여기서부터 '일정' 탭(RoutePlanView) 전용 스타일입니다 ===
 
-  alternativeTitle: {
-    color: COLORS.textPrimary,
-
-    fontSize: 24,
-    lineHeight: 32,
-    fontWeight: '800',
-
-    letterSpacing: -0.6,
-  },
-
-  alternativeDescription: {
-    marginTop: 9,
-
-    color: COLORS.textSecondary,
-
-    fontSize: 14,
-    lineHeight: 22,
-    fontWeight: '500',
-  },
-
-  routeSummaryGrid: {
-    marginTop: 24,
-
-    flexDirection: 'row',
-
-    gap: 10,
-  },
-
-  summaryCard: {
+  planScreen: {
     flex: 1,
-    minHeight: 126,
-
-    paddingVertical: 18,
-
-    alignItems: 'center',
-    justifyContent: 'center',
-
-    borderRadius: 20,
-
-    backgroundColor: COLORS.card,
-
-    borderWidth: 1,
-    borderColor: COLORS.border,
   },
 
-  summaryValue: {
-    marginTop: 10,
-
-    color: COLORS.textPrimary,
-
-    fontSize: 16,
-    lineHeight: 22,
-    fontWeight: '800',
-  },
-
-  summaryLabel: {
-    marginTop: 3,
-
-    color: COLORS.textSecondary,
-
-    fontSize: 11,
-    lineHeight: 16,
-    fontWeight: '600',
-  },
-
-  routeListContent: {
+  planContent: {
     paddingHorizontal: 20,
     paddingTop: 18,
     paddingBottom: 190,
   },
 
-  routeListCard: {
-    minHeight: 92,
-
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-
+  dayChipRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    gap: 8,
+
+    paddingBottom: 4,
+  },
+
+  dayChip: {
+    paddingHorizontal: 16,
+    paddingVertical: 9,
 
     borderRadius: 18,
 
@@ -1597,63 +1935,108 @@ const styles = StyleSheet.create({
 
     borderWidth: 1,
     borderColor: COLORS.border,
-
-    marginBottom: 12,
   },
 
-  routeListCardSelected: {
+  dayChipSelected: {
+    backgroundColor: COLORS.primarySoft,
     borderColor: COLORS.primary,
-
-    backgroundColor: '#FFFDFC',
   },
 
-  routeListOrderArea: {
-    width: 34,
+  dayChipText: {
+    color: COLORS.textSecondary,
+
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '700',
+  },
+
+  dayChipTextSelected: {
+    color: COLORS.primaryDark,
+    fontWeight: '800',
+  },
+
+  planTimeline: {
+    marginTop: 20,
+  },
+
+  planTimelineRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+
+  planTimelineIndicator: {
+    width: 40,
 
     alignItems: 'center',
-    alignSelf: 'stretch',
   },
 
-  routeListOrder: {
-    width: 28,
-    height: 28,
+  planTimelineDot: {
+    width: 22,
+    height: 22,
 
-    borderRadius: 14,
+    borderRadius: 11,
 
     alignItems: 'center',
     justifyContent: 'center',
 
-    backgroundColor: '#FFB36D',
-  },
-
-  routeListOrderSelected: {
     backgroundColor: COLORS.primary,
   },
 
-  routeListOrderText: {
+  planTimelineDotText: {
     color: '#FFFFFF',
 
-    fontSize: 11,
-    lineHeight: 14,
+    fontSize: 10,
+    lineHeight: 13,
     fontWeight: '800',
   },
 
-  routeListLine: {
+  planTimelineLineArea: {
     flex: 1,
-    width: 2,
+    width: '100%',
 
-    marginTop: 5,
+    minHeight: 40,
+
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  planTimelineLine: {
+    position: 'absolute',
+    top: 3,
+    bottom: 3,
+
+    width: 2,
 
     backgroundColor: COLORS.routeSoft,
   },
 
-  routeListSticker: {
-    width: 52,
-    height: 52,
+  planDistanceBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 3,
 
-    marginLeft: 6,
+    borderRadius: 8,
 
-    borderRadius: 26,
+    backgroundColor: COLORS.background,
+
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+
+  planDistanceBadgeText: {
+    color: COLORS.textSecondary,
+
+    fontSize: 9,
+    lineHeight: 12,
+    fontWeight: '700',
+  },
+
+  planStopStickerCircle: {
+    width: 44,
+    height: 44,
+
+    marginRight: 10,
+
+    borderRadius: 22,
 
     alignItems: 'center',
     justifyContent: 'center',
@@ -1661,25 +2044,293 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.primarySoft,
   },
 
-  routeListStickerText: {
-    fontSize: 27,
-  },
-
-  routeListTextArea: {
+  planStopCard: {
     flex: 1,
+    marginBottom: 12,
 
-    marginLeft: 12,
+    paddingHorizontal: 13,
+    paddingVertical: 12,
+
+    borderRadius: 16,
+
+    backgroundColor: COLORS.card,
+
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
 
-  routeListTitle: {
+  planStopCardTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+
+  planStopSticker: {
+    fontSize: 22,
+  },
+
+  planStopTextArea: {
+    flex: 1,
+  },
+
+  planStopName: {
     color: COLORS.textPrimary,
 
-    fontSize: 15,
-    lineHeight: 21,
+    fontSize: 14,
+    lineHeight: 19,
     fontWeight: '800',
   },
 
-  routeListMeta: {
+  planStopMeta: {
+    marginTop: 2,
+
+    color: COLORS.textSecondary,
+
+    fontSize: 11,
+    lineHeight: 16,
+    fontWeight: '500',
+  },
+
+  planStopIconButton: {
+    width: 30,
+    height: 30,
+
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  planStopMemoBox: {
+    marginTop: 10,
+
+    paddingHorizontal: 11,
+    paddingVertical: 9,
+
+    borderRadius: 12,
+
+    backgroundColor: COLORS.primarySoft,
+  },
+
+  planStopMemoText: {
+    color: COLORS.textPrimary,
+
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: '500',
+  },
+
+  planStopMemoEmpty: {
+    marginTop: 10,
+
+    paddingVertical: 8,
+
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+
+    borderRadius: 12,
+
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderStyle: 'dashed',
+  },
+
+  planStopMemoEmptyText: {
+    color: COLORS.textTertiary,
+
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: '600',
+  },
+
+  planAddRow: {
+    flexDirection: 'row',
+    gap: 8,
+
+    marginTop: 2,
+  },
+
+  planAddButton: {
+    flex: 1,
+
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+
+    paddingVertical: 11,
+
+    borderRadius: 14,
+
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderStyle: 'dashed',
+  },
+
+  planAddButtonText: {
+    color: COLORS.textSecondary,
+
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '700',
+  },
+
+  travelLogSection: {
+    marginTop: 28,
+  },
+
+  travelLogHeader: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
+
+    marginBottom: 10,
+  },
+
+  travelLogTitle: {
+    color: COLORS.textPrimary,
+
+    fontSize: 14,
+    lineHeight: 19,
+    fontWeight: '800',
+  },
+
+  travelLogSubtitle: {
+    color: COLORS.textTertiary,
+
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: '500',
+  },
+
+  travelLogList: {
+    gap: 10,
+  },
+
+  travelLogItem: {
+    width: 68,
+  },
+
+  travelLogThumbWrapper: {
+    position: 'relative',
+  },
+
+  travelLogThumb: {
+    width: 68,
+    height: 68,
+
+    borderRadius: 14,
+
+    backgroundColor: '#E8E5DF',
+  },
+
+  travelLogBadge: {
+    position: 'absolute',
+    right: -3,
+    bottom: -3,
+
+    width: 18,
+    height: 18,
+
+    borderRadius: 9,
+
+    alignItems: 'center',
+    justifyContent: 'center',
+
+    backgroundColor: COLORS.primary,
+
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+  },
+
+  travelLogBadgeUnmatched: {
+    backgroundColor: '#FFFFFF',
+  },
+
+  travelLogTime: {
+    marginTop: 5,
+
+    color: COLORS.textSecondary,
+
+    fontSize: 10,
+    lineHeight: 13,
+    fontWeight: '600',
+
+    textAlign: 'center',
+  },
+
+  travelLogAddButton: {
+    width: 68,
+    height: 68,
+
+    alignItems: 'center',
+    justifyContent: 'center',
+
+    borderRadius: 14,
+
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderStyle: 'dashed',
+  },
+
+  travelLogFab: {
+    position: 'absolute',
+    right: 20,
+    bottom: 20,
+    zIndex: 20,
+
+    width: 54,
+    height: 54,
+
+    borderRadius: 27,
+
+    alignItems: 'center',
+    justifyContent: 'center',
+
+    backgroundColor: COLORS.primary,
+
+    shadowColor: COLORS.shadow,
+    shadowOffset: {
+      width: 0,
+      height: 5,
+    },
+    shadowOpacity: 0.22,
+    shadowRadius: 10,
+
+    elevation: 6,
+  },
+
+  memoModalBackdrop: {
+    flex: 1,
+
+    alignItems: 'center',
+    justifyContent: 'center',
+
+    paddingHorizontal: 28,
+
+    backgroundColor: 'rgba(20,20,18,0.45)',
+  },
+
+  memoModalCard: {
+    width: '100%',
+
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 16,
+
+    borderRadius: 22,
+
+    backgroundColor: COLORS.card,
+  },
+
+  memoModalTitle: {
+    color: COLORS.textPrimary,
+
+    fontSize: 16,
+    lineHeight: 22,
+    fontWeight: '800',
+  },
+
+  memoModalHint: {
     marginTop: 4,
 
     color: COLORS.textSecondary,
@@ -1688,4 +2339,72 @@ const styles = StyleSheet.create({
     lineHeight: 17,
     fontWeight: '500',
   },
+
+  memoInput: {
+    marginTop: 14,
+
+    minHeight: 96,
+
+    paddingHorizontal: 13,
+    paddingVertical: 11,
+
+    borderRadius: 14,
+
+    color: COLORS.textPrimary,
+
+    fontSize: 13,
+    lineHeight: 19,
+    fontWeight: '500',
+
+    textAlignVertical: 'top',
+
+    backgroundColor: COLORS.primarySoft,
+  },
+
+  memoModalButtonRow: {
+    flexDirection: 'row',
+    gap: 8,
+
+    marginTop: 16,
+  },
+
+  memoModalButton: {
+    flex: 1,
+
+    alignItems: 'center',
+    justifyContent: 'center',
+
+    paddingVertical: 12,
+
+    borderRadius: 14,
+  },
+
+  memoModalButtonGhost: {
+    backgroundColor: COLORS.background,
+
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+
+  memoModalButtonGhostText: {
+    color: COLORS.textSecondary,
+
+    fontSize: 13,
+    lineHeight: 17,
+    fontWeight: '700',
+  },
+
+  memoModalButtonPrimary: {
+    backgroundColor: COLORS.primary,
+  },
+
+  memoModalButtonPrimaryText: {
+    color: '#FFFFFF',
+
+    fontSize: 13,
+    lineHeight: 17,
+    fontWeight: '800',
+  },
+
+  // === '일정' 탭 스타일 끝 ===
 });
