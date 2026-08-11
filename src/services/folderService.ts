@@ -33,7 +33,8 @@ export type FolderStatus = 'before' | 'ing' | 'done';
 
 // dateRange는 항상 "YYYY.MM.DD. ~ YYYY.MM.DD." 형태로 저장됨 (clip-manage.tsx에서 생성).
 // 여기서 다시 Date로 파싱해서 상태를 계산 — 별도로 startDate/endDate를 저장할 필요가 없음.
-function parseDateRange(dateRange: string): { start: Date; end: Date } | null {
+// getFolderStatus 밖에서도(예: my-route.tsx의 박수 계산) 필요해져서 export합니다.
+export function parseDateRange(dateRange: string): { start: Date; end: Date } | null {
     const match = dateRange.match(
         /^(\d{4})\.(\d{2})\.(\d{2})\.\s*~\s*(\d{4})\.(\d{2})\.(\d{2})\.?$/,
     );

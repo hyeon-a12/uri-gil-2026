@@ -19,6 +19,7 @@ import * as MediaLibrary from 'expo-media-library';
 
 import { navigateToCamera } from '@/navigation/recordingNavigation';
 import { deleteRecording, getRecordingsByFolder } from '@/services/recordingService';
+import { useTripStore } from '@/store/useTripStore';
 
 const COLORS = {
   background: '#FFFFFF',
@@ -184,10 +185,16 @@ function ClipSelectionCard({
 export default function ClipSelectScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { id: folderId, title: folderTitle } = useLocalSearchParams<{
+  const { id: paramFolderId, title: folderTitle } = useLocalSearchParams<{
     id?: string;
     title?: string;
   }>();
+
+  // 명시적 route param(clip-manage.tsx에서 폴더를 눌러 들어온 경우)이 있으면 그게
+  // 우선이고, 파라미터 없이(예: navigateToClip() 호출부에서 folderId를 안 넘긴 경우)
+  // 들어온 경우엔 현재 활성 여행을 기본값으로 씁니다.
+  const currentTrip = useTripStore((state) => state.currentTrip);
+  const folderId = paramFolderId ?? currentTrip?.id;
 
   const [clips, setClips] = useState<ClipItem[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
