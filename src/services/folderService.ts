@@ -21,7 +21,6 @@ export interface FolderItem {
     id: string;
     title: string;
     dateRange: string;
-    clipCount: number;
     thumbnail: string;
 
     // 여행 만들기 모달에서 입력받지만 예전에는 저장 안 되고 버려지던 필드들.
@@ -33,6 +32,8 @@ export interface FolderItem {
     clipLengthSeconds?: number;
     shootingStyle?: ShootingStyleId;
     gridTemplateId?: GridTemplateId | null;
+    isCurrentActive?: boolean;
+    isMerged?: boolean;
 }
 
 interface StoredFolder extends FolderItem {

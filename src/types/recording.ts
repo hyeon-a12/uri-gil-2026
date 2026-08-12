@@ -23,8 +23,8 @@ export type RecordingData = {
   id: string;
   recordedAt: string;
   videoUri: string;
-  durationMs?: number;
   thumbnail: string;
+  durationMs?: number;
   folderId: string;
   userId: string;
   location: {

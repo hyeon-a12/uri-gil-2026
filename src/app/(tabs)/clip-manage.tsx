@@ -14,11 +14,12 @@ import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { setActiveFolder, clearActiveFolder } from '@/services/activeFolderService';
+import { setActiveFolder, clearActiveFolder, getActiveFolder } from '@/services/activeFolderService';
 import { getAllFolders, saveFolder, deleteFolder as deleteFolderFromStorage, FolderItem } from '@/services/folderService';
 import { getRecordingsByFolder } from '@/services/recordingService';
 import { selectCurrentTrip, useTripStore } from '@/store/useTripStore';
 import NewTripModal from '@/components/NewTripModal';
+import { getRecordingsByFolder } from '@/services/recordingService';
 
 const COLORS = {
   background: '#FFFFFF',
@@ -54,18 +55,27 @@ export default function ClipManageScreen() {
     }, []),
   );
   
+  type FolderWithCount = FolderItem & { clipCount: number };
+  const [folders, setFolders] = useState<FolderWithCount[]>([]);
+
   const loadFolders = async () => {
     try {
       const stored = await getAllFolders();
-      // clipCount는 폴더 생성 시점에 0으로 저장돼있을 뿐이라, 실제 클립 개수는
-      // recordingService에서 매번 다시 세어와야 촬영한 만큼 화면에 반영됩니다.
-      const withCounts = await Promise.all(
-        stored.map(async (folder) => {
-          const recordings = await getRecordingsByFolder(folder.id);
-          return { ...folder, clipCount: recordings.length };
+      const activeId = await getActiveFolder();
+
+      const withCounts: FolderWithCount[] = await Promise.all(
+        stored.map(async (f) => {
+          const records = await getRecordingsByFolder(f.id);
+          return {
+            ...f,
+            clipCount: records.length,
+            isCurrentActive: f.id === activeId,
+          };
         }),
       );
+      
       setFolders(withCounts);
+      setActiveFolderId(activeId);
     } catch (error) {
       console.error('[loadFolders] 실패:', error);
       setFolders([]);
@@ -77,11 +87,7 @@ export default function ClipManageScreen() {
   }>();
 
   const [activeTab, setActiveTab] = useState<'editing' | 'myTravel'>('editing');
-  const [folders, setFolders] = useState<FolderItem[]>([]);
-  // 활성 폴더는 로컬 state로 따로 들고 있지 않고 useTripStore를 구독합니다 — 앱 시작 시
-  // hydrateCurrentTrip()이 채워주고, "카메라 연결하기"/삭제 시에도 여기서 갱신되므로
-  // 이 화면은 항상 최신 값을 바로 읽기만 하면 됩니다.
-  const activeFolderId = useTripStore((state) => state.currentTrip?.id ?? null);
+  const [activeFolderId, setActiveFolderId] = useState<string | null>('null');
   const [selectedFolderForMenu, setSelectedFolderForMenu] =
     useState<FolderItem | null>(null);
   const [newTripModalVisible, setNewTripModalVisible] = useState(false);
@@ -111,7 +117,6 @@ export default function ClipManageScreen() {
       ).padStart(2, '0')}.${String(trip.startDate!.getDate()).padStart(2, '0')}. ~ ${trip.endDate.getFullYear()}.${String(
         trip.endDate.getMonth() + 1,
       ).padStart(2, '0')}.${String(trip.endDate.getDate()).padStart(2, '0')}.`,
-      clipCount: 0,
       thumbnail:
         'https://images.unsplash.com/photo-1500534623283-312aade485b7?w=600',
 
@@ -128,11 +133,10 @@ export default function ClipManageScreen() {
 
     try {
       await saveFolder(newFolder);
-      // my-route.tsx의 새 여행 만들기와 동일하게, 생성과 동시에 활성 여행으로
-      // 지정합니다 — 안 그러면 여기서 만든 여행이 홈/내 루트에 바로 반영되지
-      // 않고 이전 활성 여행이 그대로 남는 어긋남이 생깁니다.
-      await selectCurrentTrip(newFolder);
-      setFolders((prev) => [newFolder, ...prev]);
+      setFolders((prev) => [
+        { ...newFolder, clipCount: 0 },
+        ...prev,
+      ]);
     } catch (error) {
       console.error('[handleTripCreated] 저장 실패:', error);
       Alert.alert('저장 실패', '폴더를 만드는 중 문제가 발생했습니다.');
@@ -179,7 +183,7 @@ export default function ClipManageScreen() {
     );
   };
 
-  const renderFolderItem = ({ item }: { item: FolderItem }) => {
+  const renderFolderItem = ({ item }: { item: FolderWithCount }) => {
     const isActive = item.id === activeFolderId;
 
     return (

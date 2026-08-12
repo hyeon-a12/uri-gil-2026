@@ -24,6 +24,7 @@ import { navigateToLocationConfirm } from '@/navigation/recordingNavigation';
 import { useTripStore } from '@/store/useTripStore';
 import { type ShootingStyleId } from '@/services/folderService';
 import CameraChangeIcon from '@/assets/images/camera_change.svg';
+import { getAllFolders } from '@/services/folderService';
 
 const MAX_CLIPS = 15;
 const DEFAULT_CLIP_SECONDS = 10;
@@ -285,6 +286,14 @@ export default function CameraScreen() {
   const handleRecordPress = async () => {
     if (isRecording) return; // 자동 정지 방식이라 탭으로 중지 불가
 
+    if (hasFolders === false) {
+      Alert.alert(
+        '저장할 여행이 없습니다.',
+        '클립 관리에서 여행을 생성하세요.',
+      );
+      return;
+    }
+
     if (!cameraRef.current || !canRecord) {
       if (clipCount >= MAX_CLIPS) {
         Alert.alert(
@@ -298,6 +307,8 @@ export default function CameraScreen() {
     setIsRecording(true);
     setElapsedSeconds(0);
 
+    const startedAt = Date.now();
+
     try {
       const video = await cameraRef.current.recordAsync({
         maxDuration: maxClipSeconds,
@@ -305,8 +316,14 @@ export default function CameraScreen() {
       if (!video?.uri) {
         throw new Error('촬영된 영상 경로를 확인할 수 없습니다.');
       }
-      setClipCount((c) => Math.min(c + 1, MAX_CLIPS));
-      navigateToLocationConfirm(video.uri);
+
+      const durationMs = Date.now() - startedAt;
+
+      setClipCount((currentCount) =>
+        Math.min(currentCount + 1, MAX_CLIPS),
+      );
+
+      navigateToLocationConfirm(video.uri, undefined, durationMs);
     } catch (error) {
       console.error('Video recording failed:', error);
       Alert.alert('촬영에 실패했습니다', '잠시 후 다시 촬영해주세요.');
