@@ -33,6 +33,19 @@ const MAX_CLIP_SECONDS_CAP = 10;
 // 게이지(그리드 스타일 진행률 배지)에서 "여기서 0.5x로 바꾸세요" 타이밍 비율.
 const ZOOM_SWITCH_RATIO = 0.5;
 
+// 셔터 버튼(styles.shutterButton)과 같은 값으로 유지해야 합니다. 버튼이 정사각형이
+// 아니라서(90×77), 진행률 링은 더 작은 쪽인 높이에 맞춰 원형을 유지하고 버튼 안에서
+// 가로로만 중앙 정렬합니다 — 이전엔 링이 90×90으로 하드코딩돼 있어서 버튼 높이가
+// 줄어들 때마다 링 중심이 안쪽 원(흰 동그라미)과 어긋났었습니다.
+const SHUTTER_BUTTON_WIDTH = 90;
+const SHUTTER_BUTTON_HEIGHT = 70;
+const SHUTTER_RING_STROKE = 3.75;
+const SHUTTER_RING_SIZE = SHUTTER_BUTTON_HEIGHT;
+const SHUTTER_RING_CENTER = SHUTTER_RING_SIZE / 2;
+const SHUTTER_RING_RADIUS = SHUTTER_RING_CENTER - SHUTTER_RING_STROKE;
+const SHUTTER_RING_OFFSET_X = (SHUTTER_BUTTON_WIDTH - SHUTTER_RING_SIZE) / 2;
+const SHUTTER_RING_CIRCUMFERENCE = 2 * Math.PI * SHUTTER_RING_RADIUS;
+
 const COLORS = {
   accent: '#FF7F5C',
   white: '#FFFFFF',
@@ -336,33 +349,36 @@ export default function CameraScreen() {
 
   return (
     <View style={styles.screen}>
-      {/* 카메라 프리뷰 — 둥근 모서리 사각형 안에 담김 (여행 표시 줄을 없애서
-          그만큼 위로 늘어남, 상단 안전영역만큼만 살짝 띄움) */}
-      <View style={[styles.previewWrapper, { marginTop: insets.top + 8 }]}>
-        <CameraView
-          ref={cameraRef}
-          style={StyleSheet.absoluteFill}
-          facing={facing}
-          mode="video"
-          zoom={ZOOM_LEVELS[zoomIndex].value}
-          videoQuality="720p"
-          enableTorch={flashEnabled}
-          selectedLens={selectedLens}
-        />
+      {/* 카메라 프리뷰 — 둥근 모서리 사각형 안, 녹화 영상과 같은 16:9 비율로 고정.
+          previewArea가 상단 안전영역 아래 남는 공간 전체를 차지하고, 그 안에서
+          previewWrapper를 수직 중앙 정렬합니다. */}
+      <View style={[styles.previewArea, { paddingTop: insets.top + 8 }]}>
+        <View style={styles.previewWrapper}>
+          <CameraView
+            ref={cameraRef}
+            style={StyleSheet.absoluteFill}
+            facing={facing}
+            mode="video"
+            zoom={ZOOM_LEVELS[zoomIndex].value}
+            videoQuality="720p"
+            enableTorch={flashEnabled}
+            selectedLens={selectedLens}
+          />
 
-        <CompositionGrid />
+          <CompositionGrid />
 
-        <View pointerEvents="none" style={styles.guideArea}>
-          <CenterGuide shootingStyle={shootingStyle} />
+          <View pointerEvents="none" style={styles.guideArea}>
+            <CenterGuide shootingStyle={shootingStyle} />
+          </View>
+
+          <Pressable
+            hitSlop={16}
+            onPress={handleClose}
+            style={styles.closeButton}
+          >
+            <Ionicons name="close" size={22} color={COLORS.white} />
+          </Pressable>
         </View>
-
-        <Pressable
-          hitSlop={16}
-          onPress={handleClose}
-          style={styles.closeButton}
-        >
-          <Ionicons name="close" size={22} color={COLORS.white} />
-        </Pressable>
       </View>
 
       {/* 플래시(왼쪽) + 줌 선택(중앙 정렬) + 카메라 전환(오른쪽) — 셋 다 같은 높이.
@@ -431,31 +447,31 @@ export default function CameraScreen() {
           ]}
         >
           <Svg
-            width={90}
-            height={90}
-            style={StyleSheet.absoluteFillObject}
+            width={SHUTTER_RING_SIZE}
+            height={SHUTTER_RING_SIZE}
+            style={{ position: 'absolute', top: 0, left: SHUTTER_RING_OFFSET_X }}
           >
             <Circle
-              cx={45}
-              cy={45}
-              r={41.25}
+              cx={SHUTTER_RING_CENTER}
+              cy={SHUTTER_RING_CENTER}
+              r={SHUTTER_RING_RADIUS}
               stroke={COLORS.ring}
-              strokeWidth={3.75}
+              strokeWidth={SHUTTER_RING_STROKE}
               fill="none"
             />
             {isRecording && (
               <Circle
-                cx={45}
-                cy={45}
-                r={41.25}
+                cx={SHUTTER_RING_CENTER}
+                cy={SHUTTER_RING_CENTER}
+                r={SHUTTER_RING_RADIUS}
                 stroke={COLORS.accent}
-                strokeWidth={3.75}
+                strokeWidth={SHUTTER_RING_STROKE}
                 fill="none"
-                strokeDasharray={`${2 * Math.PI * 41.25} ${2 * Math.PI * 41.25}`}
-                strokeDashoffset={2 * Math.PI * 41.25 * (1 - progress)}
+                strokeDasharray={`${SHUTTER_RING_CIRCUMFERENCE} ${SHUTTER_RING_CIRCUMFERENCE}`}
+                strokeDashoffset={SHUTTER_RING_CIRCUMFERENCE * (1 - progress)}
                 strokeLinecap="round"
                 rotation={-90}
-                origin="45, 45"
+                origin={`${SHUTTER_RING_CENTER}, ${SHUTTER_RING_CENTER}`}
               />
             )}
           </Svg>
@@ -476,9 +492,15 @@ const styles = StyleSheet.create({
     backgroundColor: '#FAF8F1',
   },
 
-  previewWrapper: {
+  // 상단 안전영역 아래 남는 공간 전체를 차지하면서, 그 안에서 previewWrapper를
+  // 수직으로 가운데 정렬합니다.
+  previewArea: {
     flex: 1,
-    marginHorizontal: 16,
+    justifyContent: 'center',
+  },
+  previewWrapper: {
+    aspectRatio: 9 / 16, // 녹화 영상(videoQuality="720p" → 1280×720, 16:9)과 프리뷰 비율을 맞춤
+    marginHorizontal: 10,
     borderRadius: 24,
     backgroundColor: '#000000',
     position: 'relative',
@@ -517,7 +539,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingTop: 12,
+    paddingTop: 26,
     paddingBottom: 4,
   },
   // 줌 배율 pill 그룹을 화면 중앙에 두기 위한 좌우 spacer. 오른쪽 spacer 안에만
@@ -536,7 +558,7 @@ const styles = StyleSheet.create({
   zoomPill: {
     paddingHorizontal: 12,
     paddingVertical: 3,
-    borderRadius: 16,
+    borderRadius: 20,
   },
   zoomPillSelected: {
     backgroundColor: COLORS.white,
@@ -563,12 +585,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 28,
     paddingTop: 0,
   },
-  // 셔터 버튼을 108→90으로 1.2배 축소 (안쪽 원/링도 비례해서 축소).
-  // 버튼이 차지하던 높이가 줄어든 만큼은 previewWrapper가 flex:1이라
-  // 자동으로 그 공간을 흡수해서 카메라 화면이 더 커집니다.
+  // width/height는 위쪽 SHUTTER_BUTTON_WIDTH/HEIGHT 상수와 반드시 같은 값을
+  // 유지해야 진행률 링이 버튼 중앙에 정확히 맞습니다.
   shutterButton: {
-    width: 90,
-    height: 80,
+    width: SHUTTER_BUTTON_WIDTH,
+    height: SHUTTER_BUTTON_HEIGHT,
     alignItems: 'center',
     justifyContent: 'center',
   },
