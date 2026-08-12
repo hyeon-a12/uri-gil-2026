@@ -17,9 +17,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { setActiveFolder, clearActiveFolder, getActiveFolder } from '@/services/activeFolderService';
 import { getAllFolders, saveFolder, deleteFolder as deleteFolderFromStorage, FolderItem } from '@/services/folderService';
 import { getRecordingsByFolder } from '@/services/recordingService';
-import { selectCurrentTrip, useTripStore } from '@/store/useTripStore';
+import { useTripStore } from '@/store/useTripStore';
 import NewTripModal from '@/components/NewTripModal';
-import { getRecordingsByFolder } from '@/services/recordingService';
 
 const COLORS = {
   background: '#FFFFFF',

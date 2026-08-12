@@ -297,7 +297,7 @@ export default function LocationConfirmScreen() {
         // TODO: expo-video-thumbnails 등으로 실제 썸네일을 만들기 전까지는 영상 자체를 썸네일로 재사용합니다.
         thumbnail: videoUri,
         durationMs: durationMs ? Number(durationMs) : 0,
-        folderId: activeFolderId,
+        folderId: targetFolderId,
         // TODO: 로그인 연동 전까지 쓰는 임시 사용자 ID입니다.
         userId: 'guest',
         location: {

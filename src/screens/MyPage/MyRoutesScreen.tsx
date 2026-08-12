@@ -160,7 +160,6 @@ export default function MyRoutesScreen() {
         trip.startDate,
         trip.endDate,
       ),
-      clipCount: 0,
       thumbnail: '',
       region: trip.region,
       memo: trip.memo,

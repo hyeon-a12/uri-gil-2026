@@ -97,7 +97,6 @@ export function TripSwitchSheet({ visible, onClose }: Props) {
       id: `folder-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       title: trip.name.trim(),
       dateRange: `${formatDate(trip.startDate)} ~ ${formatDate(trip.endDate)}`,
-      clipCount: 0,
       thumbnail: '',
       region: trip.region,
       memo: trip.memo,

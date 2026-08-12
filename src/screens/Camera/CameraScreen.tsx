@@ -188,6 +188,9 @@ export default function CameraScreen() {
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [flashEnabled, setFlashEnabled] = useState(false);
   const [availableLenses, setAvailableLenses] = useState<string[]>([]);
+  // 여행(폴더)이 하나도 없으면 저장할 곳이 없어 촬영을 막아야 합니다. 조회 전에는
+  // false로 잘못 막지 않도록 true로 시작합니다.
+  const [hasFolders, setHasFolders] = useState(true);
 
   const permissionsReady =
     cameraPermission?.granted === true &&
@@ -245,6 +248,17 @@ export default function CameraScreen() {
       cancelled = true;
     };
   }, [permissionsReady]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const folders = await getAllFolders();
+      if (!cancelled) setHasFolders(folders.length > 0);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (!isRecording) return;
