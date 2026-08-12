@@ -7,6 +7,16 @@ const FOLDERS_KEY = '@folders/all';
 export type ShootingStyleId = 'basic' | 'grid' | 'doll' | 'withPerson';
 export type GridTemplateId = 'rows3' | 'rows2' | 'cols2' | 'grid4';
 
+// NewTripModal의 GRID_TEMPLATES 선택지와 슬롯 개수를 맞춰둔 값입니다. FolderItem엔
+// gridTemplateId만 저장되고 슬롯 개수는 안 저장되니, 필요한 곳(CameraScreen 등)에서
+// 이 매핑으로 개수를 구합니다.
+export const GRID_TEMPLATE_SLOT_COUNTS: Record<GridTemplateId, number> = {
+    rows3: 3,
+    rows2: 2,
+    cols2: 2,
+    grid4: 4,
+};
+
 export interface FolderItem {
     id: string;
     title: string;
