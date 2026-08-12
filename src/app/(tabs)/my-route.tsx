@@ -1,15 +1,12 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { router } from 'expo-router';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
 import {
-  getAllFolders,
-  saveFolder,
+  parseDateRange,
   type FolderItem,
 } from '@/services/folderService';
-import NewTripModal from '@/components/NewTripModal';
-import {
-  selectCurrentTrip,
-  useTripStore,
-} from '@/store/useTripStore';
+import { getRecordingsByFolder } from '@/services/recordingService';
+import type { RecordingData } from '@/types/recording';
+import { useTripStore } from '@/store/useTripStore';
 import {
   Alert,
   Modal,
@@ -79,16 +76,6 @@ interface RouteStop {
     thumbnail: string;
     duration: string;
   }[];
-}
-
-// 이동 중 기록 한 건 (사진 중심, GPS로 기존 장소에 자동 매칭)
-interface TravelLog {
-  id: string;
-  day: number;
-  time: string;
-  thumbnail: string;
-  matchedStopId: string | null;
-  matchedStopName: string | null;
 }
 
 const ROUTE_STOPS: RouteStop[] = [
@@ -204,43 +191,133 @@ const ROUTE_STOPS: RouteStop[] = [
   },
 ];
 
-// 데모용 목데이터: 실제로는 촬영 시 GPS 좌표와 ROUTE_STOPS 좌표를 비교해서
-// 반경 이내면 matchedStopId를 채우고, 아니면 null로 저장하면 됩니다.
-const TRAVEL_LOGS: TravelLog[] = [
-  {
-    id: 'log-1',
-    day: 1,
-    time: '14:38',
-    thumbnail:
-      'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=300',
-    matchedStopId: 'stop-1',
-    matchedStopName: '협재해변',
-  },
-  {
-    id: 'log-2',
-    day: 1,
-    time: '15:22',
-    thumbnail:
-      'https://images.unsplash.com/photo-1500534623283-312aade485b7?w=300',
-    matchedStopId: null,
-    matchedStopName: null,
-  },
-  {
-    id: 'log-3',
-    day: 1,
-    time: '16:15',
-    thumbnail:
-      'https://images.unsplash.com/photo-1509042239860-f550ce710b93?w=300',
-    matchedStopId: 'stop-2',
-    matchedStopName: '카페 이연',
-  },
-];
+// ─────────────────────────────────────────────────────────────
+// '일정' 탭(RoutePlanView) 전용 실데이터.
+//
+// 앱에 아직 "핑/경로 계획" 저장 모델이 없어서(위 ROUTE_STOPS는 지도 탭용
+// 목데이터), 실제로 트립별로 저장돼 있는 건 recordingService의 클립뿐입니다.
+// 그래서 '일정' 탭은 클립을 장소명 기준으로 묶어서 타임라인을 만듭니다 —
+// '지도' 탭은 당분간 위 목데이터를 그대로 씁니다.
+// ─────────────────────────────────────────────────────────────
 
-// 장소별 메모 초기값 (실제로는 서버/로컬 저장소에서 불러오면 됩니다)
-const INITIAL_STOP_MEMOS: Record<string, string> = {
-  'stop-1':
-    '노을이 예뻐서 한참 앉아있었다. 근처 포차에서 먹은 딱새우회가 진짜 맛있었음 🦐',
-};
+interface PlanStop {
+  id: string;
+  order: number;
+  name: string;
+  day: number;
+  time: string;
+  clips: {
+    id: string;
+    thumbnail: string;
+    duration: string;
+  }[];
+}
+
+interface PlanTravelLog {
+  id: string;
+  day: number;
+  time: string;
+  thumbnail: string;
+}
+
+function formatClipDuration(durationMs?: number): string {
+  const totalSeconds = Math.floor((durationMs ?? 0) / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+}
+
+function formatClipTime(recordedAt: string): string {
+  const date = new Date(recordedAt);
+  return `${String(date.getHours()).padStart(2, '0')}:${String(
+    date.getMinutes(),
+  ).padStart(2, '0')}`;
+}
+
+/** 여행 시작일 기준 며칠째인지 (1부터 시작). 기간을 못 읽으면 항상 1일차로 취급. */
+function dayIndexOf(recordedAt: string, tripStart: Date | null): number {
+  if (!tripStart) return 1;
+  const MS_PER_DAY = 24 * 60 * 60 * 1000;
+  const recordedDate = new Date(recordedAt);
+  const diff = Math.floor(
+    (new Date(
+      recordedDate.getFullYear(),
+      recordedDate.getMonth(),
+      recordedDate.getDate(),
+    ).getTime() -
+      new Date(
+        tripStart.getFullYear(),
+        tripStart.getMonth(),
+        tripStart.getDate(),
+      ).getTime()) /
+      MS_PER_DAY,
+  );
+  return Math.max(1, diff + 1);
+}
+
+/**
+ * 클립을 "같은 날 + 같은 장소명"끼리 묶어 일정 타임라인용 스톱으로 만듭니다.
+ * 장소명이 없는 클립(placeName 미입력)은 스톱으로 묶지 않고 '이동 중 기록'으로 뺍니다.
+ */
+function buildPlanData(
+  recordings: RecordingData[],
+  trip: FolderItem | null,
+): { stops: PlanStop[]; travelLogs: PlanTravelLog[]; dayNumbers: number[] } {
+  const tripStart = trip ? parseDateRange(trip.dateRange)?.start ?? null : null;
+
+  const sorted = [...recordings].sort((a, b) =>
+    a.recordedAt.localeCompare(b.recordedAt),
+  );
+
+  const stopOrder: string[] = []; // 그룹 키의 최초 등장 순서
+  const stopGroups = new Map<string, PlanStop>();
+  const travelLogs: PlanTravelLog[] = [];
+
+  for (const recording of sorted) {
+    const day = dayIndexOf(recording.recordedAt, tripStart);
+    const placeName = recording.location.placeName?.trim();
+
+    const clip = {
+      id: recording.id,
+      thumbnail: recording.thumbnail,
+      duration: formatClipDuration(recording.durationMs),
+    };
+
+    if (!placeName) {
+      travelLogs.push({
+        id: recording.id,
+        day,
+        time: formatClipTime(recording.recordedAt),
+        thumbnail: recording.thumbnail,
+      });
+      continue;
+    }
+
+    const groupKey = `${day}::${placeName}`;
+    const existing = stopGroups.get(groupKey);
+    if (existing) {
+      existing.clips.push(clip);
+      continue;
+    }
+
+    stopOrder.push(groupKey);
+    stopGroups.set(groupKey, {
+      id: groupKey,
+      order: stopOrder.length,
+      name: placeName,
+      day,
+      time: formatClipTime(recording.recordedAt),
+      clips: [clip],
+    });
+  }
+
+  const stops = stopOrder.map((key) => stopGroups.get(key)!);
+  const dayNumbers = Array.from(
+    new Set([...stops.map((s) => s.day), ...travelLogs.map((l) => l.day)]),
+  ).sort((a, b) => a - b);
+
+  return { stops, travelLogs, dayNumbers };
+}
 
 function MapDecoration() {
   return (
@@ -738,42 +815,55 @@ function MemoEditorModal({
   );
 }
 
-// '루트 정보' 탭 대신 들어가는 새 화면: day별 일정 타임라인 + 장소별 메모 + 이동 중 기록
-function RoutePlanView() {
-  const [selectedDay, setSelectedDay] = useState(1);
+type RoutePlanViewProps = {
+  hasTrip: boolean;
+  stops: PlanStop[];
+  travelLogs: PlanTravelLog[];
+  dayNumbers: number[];
+};
 
-  const [stopMemos, setStopMemos] = useState<Record<string, string>>(
-    INITIAL_STOP_MEMOS,
-  );
+// '루트 정보' 탭 대신 들어가는 새 화면: day별 일정 타임라인 + 장소별 메모 + 이동 중 기록
+//
+// stops/travelLogs/dayNumbers는 활성 여행의 실제 클립(recordingService)에서
+// 파생된 데이터입니다(부모인 MyRouteScreen이 buildPlanData()로 만들어 내려줌).
+// 메모는 아직 별도 저장소가 없어서 이전과 동일하게 화면 안에서만 유지됩니다.
+function RoutePlanView({ hasTrip, stops, travelLogs, dayNumbers }: RoutePlanViewProps) {
+  const [selectedDay, setSelectedDay] = useState(dayNumbers[0] ?? 1);
+
+  const [stopMemos, setStopMemos] = useState<Record<string, string>>({});
 
   const [memoModalVisible, setMemoModalVisible] = useState(false);
   const [activeStopId, setActiveStopId] = useState<string | null>(null);
   const [memoDraft, setMemoDraft] = useState('');
 
-  const dayNumbers = useMemo(() => {
-    const unique = new Set(ROUTE_STOPS.map((stop) => stop.day));
-    return Array.from(unique).sort((a, b) => a - b);
-  }, []);
+  // 여행을 전환해서 날짜 목록 자체가 바뀌면, 이전 여행의 day 선택이 남아있지
+  // 않도록 첫 번째 날로 되돌립니다.
+  useEffect(() => {
+    if (!dayNumbers.includes(selectedDay)) {
+      setSelectedDay(dayNumbers[0] ?? 1);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dayNumbers]);
 
   const dayStops = useMemo(
     () =>
-      ROUTE_STOPS.filter((stop) => stop.day === selectedDay).sort(
-        (a, b) => a.order - b.order,
-      ),
-    [selectedDay],
+      stops
+        .filter((stop) => stop.day === selectedDay)
+        .sort((a, b) => a.order - b.order),
+    [stops, selectedDay],
   );
 
   const dayLogs = useMemo(
-    () => TRAVEL_LOGS.filter((log) => log.day === selectedDay),
-    [selectedDay],
+    () => travelLogs.filter((log) => log.day === selectedDay),
+    [travelLogs, selectedDay],
   );
 
   const activeStop = useMemo(
-    () => ROUTE_STOPS.find((stop) => stop.id === activeStopId) ?? null,
-    [activeStopId],
+    () => stops.find((stop) => stop.id === activeStopId) ?? null,
+    [stops, activeStopId],
   );
 
-  const openMemoEditor = (stop: RouteStop) => {
+  const openMemoEditor = (stop: PlanStop) => {
     setActiveStopId(stop.id);
     setMemoDraft(stopMemos[stop.id] ?? '');
     setMemoModalVisible(true);
@@ -802,6 +892,34 @@ function RoutePlanView() {
 
     setMemoModalVisible(false);
   };
+
+  if (!hasTrip) {
+    return (
+      <View style={styles.planEmptyState}>
+        <Ionicons name="airplane-outline" size={32} color={COLORS.textTertiary} />
+        <Text allowFontScaling={false} style={styles.planEmptyTitle}>
+          선택된 여행이 없어요
+        </Text>
+        <Text allowFontScaling={false} style={styles.planEmptyDescription}>
+          홈 화면 상단에서 여행을 선택하거나 새로 만들어주세요.
+        </Text>
+      </View>
+    );
+  }
+
+  if (stops.length === 0 && travelLogs.length === 0) {
+    return (
+      <View style={styles.planEmptyState}>
+        <Ionicons name="videocam-outline" size={32} color={COLORS.textTertiary} />
+        <Text allowFontScaling={false} style={styles.planEmptyTitle}>
+          아직 촬영한 클립이 없어요
+        </Text>
+        <Text allowFontScaling={false} style={styles.planEmptyDescription}>
+          카메라로 이 여행의 첫 순간을 기록해보세요.
+        </Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.planScreen}>
@@ -860,17 +978,6 @@ function RoutePlanView() {
                   {index < dayStops.length - 1 ? (
                     <View style={styles.planTimelineLineArea}>
                       <View style={styles.planTimelineLine} />
-
-                      {stop.distanceToNext ? (
-                        <View style={styles.planDistanceBadge}>
-                          <Text
-                            allowFontScaling={false}
-                            style={styles.planDistanceBadgeText}
-                          >
-                            {stop.distanceToNext}
-                          </Text>
-                        </View>
-                      ) : null}
                     </View>
                   ) : null}
                 </View>
@@ -878,9 +985,11 @@ function RoutePlanView() {
                 <View style={styles.planStopCard}>
                   <View style={styles.planStopCardTop}>
                     <View style={styles.planStopStickerCircle}>
-                      <Text style={styles.planStopSticker}>
-                        {stop.sticker}
-                      </Text>
+                      <Ionicons
+                        name="location"
+                        size={18}
+                        color={COLORS.primary}
+                      />
                     </View>
 
                     <View style={styles.planStopTextArea}>
@@ -896,7 +1005,7 @@ function RoutePlanView() {
                         allowFontScaling={false}
                         style={styles.planStopMeta}
                       >
-                        {stop.time} · 클립 {stop.clipCount}개
+                        {stop.time} · 클립 {stop.clips.length}개
                       </Text>
                     </View>
 
@@ -1031,10 +1140,8 @@ function RoutePlanView() {
                 key={log.id}
                 onPress={() => {
                   Alert.alert(
-                    log.matchedStopName ?? '미분류 기록',
-                    log.matchedStopName
-                      ? `${log.matchedStopName}에 자동으로 연결됐어요.`
-                      : '근처에 등록된 장소가 없어서 미분류로 남겨뒀어요. 눌러서 장소로 등록할 수 있습니다.',
+                    '미분류 기록',
+                    '촬영 시 장소를 입력하지 않은 클립이에요. 눌러서 장소로 등록할 수 있습니다.',
                   );
                 }}
                 style={styles.travelLogItem}
@@ -1047,25 +1154,11 @@ function RoutePlanView() {
                     transition={150}
                   />
 
-                  <View
-                    style={[
-                      styles.travelLogBadge,
-                      !log.matchedStopId &&
-                        styles.travelLogBadgeUnmatched,
-                    ]}
-                  >
+                  <View style={[styles.travelLogBadge, styles.travelLogBadgeUnmatched]}>
                     <Ionicons
-                      name={
-                        log.matchedStopId
-                          ? 'location'
-                          : 'location-outline'
-                      }
+                      name="location-outline"
                       size={9}
-                      color={
-                        log.matchedStopId
-                          ? '#FFFFFF'
-                          : COLORS.textSecondary
-                      }
+                      color={COLORS.textSecondary}
                     />
                   </View>
                 </View>
@@ -1075,7 +1168,7 @@ function RoutePlanView() {
                   allowFontScaling={false}
                   style={styles.travelLogTime}
                 >
-                  {log.matchedStopName ?? '미분류'} · {log.time}
+                  미분류 · {log.time}
                 </Text>
               </Pressable>
             ))}
@@ -1152,235 +1245,53 @@ function getTripDisplayName(trip: FolderItem | null): string {
     : `여행 ${trip.id}`;
 }
 
-interface TripSelectorModalProps {
-  visible: boolean;
-  trips: FolderItem[];
-  currentTrip: FolderItem | null;
-  onSelect: (trip: FolderItem) => void;
-  onClose: () => void;
-  onCreateTrip: () => void;
-}
-
-function TripSelectorModal({
-  visible,
-  trips,
-  currentTrip,
-  onSelect,
-  onClose,
-  onCreateTrip,
-}: TripSelectorModalProps) {
-  return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="fade"
-      onRequestClose={onClose}
-    >
-      <Pressable
-        style={styles.tripModalBackdrop}
-        onPress={onClose}
-      >
-        <Pressable
-          style={styles.tripModalCard}
-          onPress={(event) => event.stopPropagation()}
-        >
-          <View style={styles.tripModalHandle} />
-
-          <View style={styles.tripModalHeader}>
-            <View>
-              <Text style={styles.tripModalTitle}>
-                여행 선택
-              </Text>
-
-              <Text style={styles.tripModalSubtitle}>
-                확인하거나 기록할 여행을 선택해주세요.
-              </Text>
-            </View>
-
-            <Pressable
-              hitSlop={10}
-              onPress={onClose}
-              style={styles.tripModalClose}
-            >
-              <Ionicons
-                name="close"
-                size={21}
-                color={COLORS.textSecondary}
-              />
-            </Pressable>
-          </View>
-
-          <ScrollView
-            showsVerticalScrollIndicator={false}
-            style={styles.tripModalList}
-          >
-            {trips.map((trip) => {
-              const selected =
-                currentTrip?.id === trip.id;
-
-              return (
-                <Pressable
-                  key={trip.id}
-                  onPress={() => onSelect(trip)}
-                  style={({ pressed }) => [
-                    styles.tripOption,
-                    selected &&
-                      styles.tripOptionSelected,
-                    pressed && styles.cardPressed,
-                  ]}
-                >
-                  <View
-                    style={[
-                      styles.tripOptionIcon,
-                      selected &&
-                        styles.tripOptionIconSelected,
-                    ]}
-                  >
-                    <Ionicons
-                      name="airplane"
-                      size={20}
-                      color={
-                        selected
-                          ? COLORS.primary
-                          : COLORS.textSecondary
-                      }
-                    />
-                  </View>
-
-                  <View style={styles.tripOptionTextArea}>
-                    <Text
-                      numberOfLines={1}
-                      style={[
-                        styles.tripOptionTitle,
-                        selected &&
-                          styles.tripOptionTitleSelected,
-                      ]}
-                    >
-                      {getTripDisplayName(trip)}
-                    </Text>
-
-                    <Text style={styles.tripOptionSubtitle}>
-                      여행 기록 보기
-                    </Text>
-                  </View>
-
-                  {selected ? (
-                    <Ionicons
-                      name="checkmark-circle"
-                      size={23}
-                      color={COLORS.primary}
-                    />
-                  ) : (
-                    <Ionicons
-                      name="chevron-forward"
-                      size={19}
-                      color={COLORS.textTertiary}
-                    />
-                  )}
-                </Pressable>
-              );
-            })}
-          </ScrollView>
-
-          <Pressable
-            style={({ pressed }) => [
-              styles.newTripButton,
-              pressed && styles.cardPressed,
-            ]}
-            onPress={onCreateTrip}
-          >
-            <View style={styles.newTripIcon}>
-              <Ionicons
-                name="add"
-                size={21}
-                color={COLORS.textSecondary}
-              />
-            </View>
-
-            <Text style={styles.newTripText}>
-              새 여행 만들기
-            </Text>
-          </Pressable>
-        </Pressable>
-      </Pressable>
-    </Modal>
-  );
-}
-
 export default function MyRouteScreen() {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
 
+  // 전환 UI는 홈 화면에만 있습니다 — 이 화면은 useTripStore의 currentTrip을
+  // 구독만 하고, 그 값이 바뀌면(홈에서 전환) 아래 클립 데이터를 다시 불러옵니다.
   const currentTrip = useTripStore((state) => state.currentTrip);
 
-  const [trips, setTrips] = useState<FolderItem[]>([]);
-  const [tripSelectorVisible, setTripSelectorVisible] = useState(false);
-  const [newTripModalVisible, setNewTripModalVisible] = useState(false);
+  const [recordings, setRecordings] = useState<RecordingData[]>([]);
 
-  const loadTrips = async () => {
-    try {
-      const folders = await getAllFolders();
-      setTrips(folders);
-    } catch (error) {
-      console.error('여행 목록을 불러오지 못했습니다.', error);
-    }
-  };
+  useFocusEffect(
+    useCallback(() => {
+      let isActive = true;
 
-  useEffect(() => {
-    void loadTrips();
-  }, []);
+      (async () => {
+        if (!currentTrip) {
+          if (isActive) setRecordings([]);
+          return;
+        }
 
-  const handleOpenNewTripModal = () => {
-    setTripSelectorVisible(false);
+        try {
+          const records = await getRecordingsByFolder(currentTrip.id);
+          if (isActive) setRecordings(records);
+        } catch (error) {
+          console.error('[MyRouteScreen] 클립을 불러오지 못했습니다.', error);
+          if (isActive) setRecordings([]);
+        }
+      })();
 
-    setTimeout(() => {
-      setNewTripModalVisible(true);
-    }, 350);
-  };
+      return () => {
+        isActive = false;
+      };
+    }, [currentTrip?.id]),
+  );
 
-  const handleCreatedTrip = async (trip: {
-    name: string;
-    region: string | null;
-    memo: string;
-    startDate: Date;
-    endDate: Date;
-    partySize: number;
-    themes: string[];
-    clipLengthSeconds: number;
-    shootingStyle: FolderItem['shootingStyle'];
-    gridTemplateId: FolderItem['gridTemplateId'];
-  }) => {
-    const formatDate = (date: Date) => {
-      const year = date.getFullYear();
-      const month = String(date.getMonth() + 1).padStart(2, '0');
-      const day = String(date.getDate()).padStart(2, '0');
-      return `${year}.${month}.${day}.`;
-    };
+  const planData = useMemo(
+    () => buildPlanData(recordings, currentTrip),
+    [recordings, currentTrip],
+  );
 
-    const folder: FolderItem = {
-      id: `folder-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      title: trip.name.trim(),
-      dateRange: `${formatDate(trip.startDate)} ~ ${formatDate(trip.endDate)}`,
-      clipCount: 0,
-      thumbnail: '',
-      region: trip.region,
-      memo: trip.memo,
-      partySize: trip.partySize,
-      themes: trip.themes,
-      clipLengthSeconds: trip.clipLengthSeconds,
-      shootingStyle: trip.shootingStyle,
-      gridTemplateId: trip.gridTemplateId,
-    };
-
-    try {
-      await saveFolder(folder);
-      await selectCurrentTrip(folder);
-      await loadTrips();
-    } catch (error) {
-      console.error('새 여행 저장에 실패했습니다.', error);
-      Alert.alert('여행 생성 실패', '새 여행을 저장하지 못했습니다.');
-    }
-  };
+  const nights = useMemo(() => {
+    if (!currentTrip) return null;
+    const range = parseDateRange(currentTrip.dateRange);
+    if (!range) return null;
+    const MS_PER_DAY = 24 * 60 * 60 * 1000;
+    return Math.round((range.end.getTime() - range.start.getTime()) / MS_PER_DAY);
+  }, [currentTrip]);
 
   const [selectedMode, setSelectedMode] =
     useState<RouteViewMode>('info');
@@ -1415,28 +1326,13 @@ export default function MyRouteScreen() {
           },
         ]}
       >
-        <Pressable
-          hitSlop={12}
-          onPress={() => router.back()}
-          style={({ pressed }) => [
-            styles.headerButton,
-            pressed && styles.headerButtonPressed,
-          ]}
-        >
-          <Ionicons
-            name="chevron-back"
-            size={25}
-            color={COLORS.textPrimary}
-          />
-        </Pressable>
+        {/* 탭 루트 화면이라 뒤로가기 개념이 없어서 버튼을 없앴습니다.
+            오른쪽 공유 버튼과의 좌우 균형을 위해 같은 폭의 빈 자리만 남겨둡니다. */}
+        <View style={styles.headerButtonSpacer} />
 
-        <Pressable
-          onPress={() => setTripSelectorVisible(true)}
-          style={({ pressed }) => [
-            styles.headerTitleArea,
-            pressed && styles.headerTripPressed,
-          ]}
-        >
+        {/* 여행 전환 트리거는 홈 화면에만 있습니다 — 여기는 currentTrip을
+            구독해서 이름만 보여줍니다(탭해도 아무 일도 일어나지 않음). */}
+        <View style={styles.headerTitleArea}>
           <View style={styles.headerTripTitleRow}>
             <Text
               numberOfLines={1}
@@ -1445,12 +1341,6 @@ export default function MyRouteScreen() {
             >
               {getTripDisplayName(currentTrip)}
             </Text>
-
-            <Ionicons
-              name="chevron-down"
-              size={16}
-              color={COLORS.textSecondary}
-            />
           </View>
 
           <Text
@@ -1458,9 +1348,11 @@ export default function MyRouteScreen() {
             allowFontScaling={false}
             style={styles.headerSubtitle}
           >
-            2박 3일 · 장소 {ROUTE_STOPS.length}곳
+            {currentTrip
+              ? `${nights !== null ? `${nights}박 ${nights + 1}일 · ` : ''}장소 ${planData.stops.length}곳`
+              : '여행을 선택해주세요'}
           </Text>
-        </Pressable>
+        </View>
 
         <Pressable
           hitSlop={12}
@@ -1511,7 +1403,12 @@ export default function MyRouteScreen() {
             </View>
           </ScrollView>
         ) : (
-          <RoutePlanView />
+          <RoutePlanView
+            hasTrip={!!currentTrip}
+            stops={planData.stops}
+            travelLogs={planData.travelLogs}
+            dayNumbers={planData.dayNumbers}
+          />
         )}
       </View>
 
@@ -1528,29 +1425,6 @@ export default function MyRouteScreen() {
           onChange={setSelectedMode}
         />
       </View>
-
-      <TripSelectorModal
-        visible={tripSelectorVisible}
-        trips={trips}
-        currentTrip={currentTrip}
-        onClose={() => setTripSelectorVisible(false)}
-        onSelect={async (trip) => {
-          try {
-            await selectCurrentTrip(trip);
-            setTripSelectorVisible(false);
-          } catch (error) {
-            console.error('여행 변경에 실패했습니다.', error);
-            Alert.alert('여행 변경 실패', '여행을 변경하지 못했습니다.');
-          }
-        }}
-        onCreateTrip={handleOpenNewTripModal}
-      />
-
-      <NewTripModal
-        visible={newTripModalVisible}
-        onClose={() => setNewTripModalVisible(false)}
-        onCreated={handleCreatedTrip}
-      />
     </View>
   );
 }
@@ -1588,6 +1462,13 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
   },
 
+  // 뒤로가기 버튼이 있던 자리에 남겨두는 빈 공간 — headerButton과 같은 너비로
+  // 오른쪽 공유 버튼과 좌우 균형은 맞추되, 원형 배경/테두리는 없앤 순수 여백입니다.
+  headerButtonSpacer: {
+    width: 46,
+    height: 46,
+  },
+
   headerButtonPressed: {
     opacity: 0.68,
     transform: [{ scale: 0.96 }],
@@ -1608,10 +1489,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
 
     gap: 4,
-  },
-
-  headerTripPressed: {
-    opacity: 0.68,
   },
 
   headerTitle: {
@@ -2218,6 +2095,31 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 
+  planEmptyState: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 40,
+    paddingBottom: 120,
+    gap: 8,
+  },
+
+  planEmptyTitle: {
+    marginTop: 6,
+    color: COLORS.textPrimary,
+    fontSize: 15,
+    lineHeight: 21,
+    fontWeight: '800',
+  },
+
+  planEmptyDescription: {
+    color: COLORS.textSecondary,
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: '500',
+    textAlign: 'center',
+  },
+
   planContent: {
     paddingHorizontal: 20,
     paddingTop: 18,
@@ -2710,151 +2612,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 17,
     fontWeight: '800',
-  },
-
-  tripModalBackdrop: {
-    flex: 1,
-    justifyContent: 'flex-end',
-    backgroundColor: 'rgba(20,20,18,0.35)',
-  },
-
-  tripModalCard: {
-    maxHeight: '72%',
-    paddingHorizontal: 20,
-    paddingTop: 10,
-    paddingBottom: 28,
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    backgroundColor: COLORS.background,
-  },
-
-  tripModalHandle: {
-    alignSelf: 'center',
-    width: 42,
-    height: 5,
-    marginBottom: 20,
-    borderRadius: 3,
-    backgroundColor: '#D7D7D7',
-  },
-
-  tripModalHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    marginBottom: 18,
-  },
-
-  tripModalTitle: {
-    color: COLORS.textPrimary,
-    fontSize: 20,
-    lineHeight: 27,
-    fontWeight: '800',
-  },
-
-  tripModalSubtitle: {
-    marginTop: 4,
-    color: COLORS.textSecondary,
-    fontSize: 12,
-    lineHeight: 17,
-    fontWeight: '500',
-  },
-
-  tripModalClose: {
-    width: 36,
-    height: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 18,
-    backgroundColor: '#F6F6F6',
-  },
-
-  tripModalList: {
-    maxHeight: 350,
-  },
-
-  tripOption: {
-    minHeight: 74,
-    paddingHorizontal: 13,
-    paddingVertical: 11,
-    marginBottom: 9,
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: 17,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    backgroundColor: COLORS.card,
-  },
-
-  tripOptionSelected: {
-    borderColor: COLORS.primary,
-    backgroundColor: COLORS.primarySoft,
-  },
-
-  tripOptionIcon: {
-    width: 44,
-    height: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-    borderRadius: 22,
-    backgroundColor: '#F5F5F5',
-  },
-
-  tripOptionIconSelected: {
-    backgroundColor: '#FFFFFF',
-  },
-
-  tripOptionTextArea: {
-    flex: 1,
-  },
-
-  tripOptionTitle: {
-    color: COLORS.textPrimary,
-    fontSize: 14,
-    lineHeight: 20,
-    fontWeight: '700',
-  },
-
-  tripOptionTitleSelected: {
-    color: COLORS.primaryDark,
-    fontWeight: '800',
-  },
-
-  tripOptionSubtitle: {
-    marginTop: 3,
-    color: COLORS.textSecondary,
-    fontSize: 11,
-    lineHeight: 15,
-    fontWeight: '500',
-  },
-
-  newTripButton: {
-    height: 56,
-    marginTop: 8,
-    paddingHorizontal: 13,
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: 17,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderStyle: 'dashed',
-  },
-
-  newTripIcon: {
-    width: 36,
-    height: 36,
-    marginRight: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 18,
-    backgroundColor: '#F5F5F5',
-  },
-
-  newTripText: {
-    color: COLORS.textSecondary,
-    fontSize: 13,
-    lineHeight: 18,
-    fontWeight: '700',
   },
 
   // === '일정' 탭 스타일 끝 ===

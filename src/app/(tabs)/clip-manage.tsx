@@ -17,7 +17,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { setActiveFolder, clearActiveFolder } from '@/services/activeFolderService';
 import { getAllFolders, saveFolder, deleteFolder as deleteFolderFromStorage, FolderItem } from '@/services/folderService';
 import { getRecordingsByFolder } from '@/services/recordingService';
-import { useTripStore } from '@/store/useTripStore';
+import { selectCurrentTrip, useTripStore } from '@/store/useTripStore';
 import NewTripModal from '@/components/NewTripModal';
 
 const COLORS = {
@@ -128,6 +128,10 @@ export default function ClipManageScreen() {
 
     try {
       await saveFolder(newFolder);
+      // my-route.tsx의 새 여행 만들기와 동일하게, 생성과 동시에 활성 여행으로
+      // 지정합니다 — 안 그러면 여기서 만든 여행이 홈/내 루트에 바로 반영되지
+      // 않고 이전 활성 여행이 그대로 남는 어긋남이 생깁니다.
+      await selectCurrentTrip(newFolder);
       setFolders((prev) => [newFolder, ...prev]);
     } catch (error) {
       console.error('[handleTripCreated] 저장 실패:', error);
@@ -211,13 +215,9 @@ export default function ClipManageScreen() {
   return (
     <View style={styles.screen}>
       <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
-        <Pressable
-          hitSlop={12}
-          onPress={() => router.back()}
-          style={styles.headerButton}
-        >
-          <Ionicons name="chevron-back" size={25} color={COLORS.textPrimary} />
-        </Pressable>
+        {/* 탭 루트 화면이라 뒤로가기 개념이 없어서 버튼을 없앴습니다.
+            오른쪽 빈 자리와의 좌우 균형을 위해 같은 폭의 빈 자리만 남겨둡니다. */}
+        <View style={styles.headerButton} />
 
         <Text allowFontScaling={false} style={styles.headerTitle}>
           클립 관리

@@ -1,8 +1,7 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   ScrollView,
   StyleSheet,
@@ -10,13 +9,17 @@ import {
   PanResponder,
   Dimensions,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
+import { useFocusEffect } from 'expo-router';
 import KakaoMapView, {
   KakaoMapPin,
   KakaoMapCurrentLocation,
 } from '@/components/KakaoMapView';
+import { TripSelector } from '@/components/common';
+import { useTripStore } from '@/store/useTripStore';
+import { getRecordingsByFolder } from '@/services/recordingService';
+import type { RecordingData } from '@/types/recording';
 
 const COLORS = {
   accent: '#FF7F5C', // Point/Accent — 메인 CTA, 강조 액션
@@ -40,33 +43,35 @@ const MAP_HEIGHT = SCREEN_HEIGHT * 0.58;
 const SHEET_PEEK_HEIGHT = SCREEN_HEIGHT * 0.46;
 const SHEET_EXPANDED_TOP_OFFSET = 90;
 
-// ── 사용자의 실제 여행 경로(핀) ─────────────────────────────
-// order대로 점선으로 이어집니다. 좌표는 전주 한옥마을 일대의 대략적인
-// 값이라, 실제 서비스에 쓰기 전에 정확한 GPS/지오코딩 값으로 교체하세요.
-const ROUTE_PINS: KakaoMapPin[] = [
-  { id: 'start', label: '1', lat: 35.8127, lng: 127.1518 },
-  { id: 'photo', label: '2', lat: 35.8153, lng: 127.1528 },
-  { id: 'charge', label: '3', lat: 35.8172, lng: 127.1559 },
-  { id: 'end', label: '4', lat: 35.8168, lng: 127.158 },
-];
+/** 활성 여행의 클립 중 실제 GPS 좌표가 찍힌 것만 지도 핀으로 씁니다.
+ * (좌표 미기록 클립은 location이 (0,0) 더미값이라 지도에 올리면 왜곡됩니다.) */
+function buildRoutePins(recordings: RecordingData[]): KakaoMapPin[] {
+  return recordings
+    .filter((r) => r.location.latitude !== 0 || r.location.longitude !== 0)
+    .sort((a, b) => a.recordedAt.localeCompare(b.recordedAt))
+    .map((r, index) => ({
+      id: r.id,
+      label: String(index + 1),
+      lat: r.location.latitude,
+      lng: r.location.longitude,
+    }));
+}
 
-function SearchBar() {
-  const insets = useSafeAreaInsets();
+function isToday(isoString: string): boolean {
+  const date = new Date(isoString);
+  const now = new Date();
   return (
-    <View style={[styles.searchBarWrapper, { top: insets.top + 12 }]}>
-      <View style={styles.searchBar}>
-        <Ionicons name="search" size={18} color={COLORS.textSecondary} />
-        <TextInput
-          style={styles.searchInput}
-          placeholder="어디로 떠나볼까요?"
-          placeholderTextColor={COLORS.textSecondary}
-        />
-        <TouchableOpacity hitSlop={8}>
-          <Ionicons name="options-outline" size={20} color={COLORS.textPrimary} />
-        </TouchableOpacity>
-      </View>
-    </View>
+    date.getFullYear() === now.getFullYear() &&
+    date.getMonth() === now.getMonth() &&
+    date.getDate() === now.getDate()
   );
+}
+
+function formatClipDuration(durationMs?: number): string {
+  const totalSeconds = Math.floor((durationMs ?? 0) / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 }
 
 type TripProgressCardProps = {
@@ -117,12 +122,19 @@ interface ClipMoment {
   isNew?: boolean; // REC 배지가 붙는, 방금 찍은 클립
 }
 
-const TODAY_MOMENTS: ClipMoment[] = [
-  { id: '1', durationLabel: '00:06', caption: '엠제 캐빈' },
-  { id: '2', durationLabel: '00:12', caption: '카페 여진' },
-  { id: '3', durationLabel: '00:08', caption: '전주 한옥마을', isNew: true },
-  { id: '4', durationLabel: '00:09', caption: '오목오항' },
-];
+/** 활성 여행의 클립 중 오늘 촬영된 것만 "오늘의 순간들"에 올립니다. */
+function buildTodayMoments(recordings: RecordingData[]): ClipMoment[] {
+  const todayRecordings = recordings
+    .filter((r) => isToday(r.recordedAt))
+    .sort((a, b) => b.recordedAt.localeCompare(a.recordedAt)); // 최신 촬영이 맨 앞
+
+  return todayRecordings.map((r, index) => ({
+    id: r.id,
+    durationLabel: formatClipDuration(r.durationMs),
+    caption: r.location.placeName ?? '장소 미지정',
+    isNew: index === 0,
+  }));
+}
 
 interface RecommendedPlace {
   id: string;
@@ -188,7 +200,7 @@ function RecommendedPlaceCard({ place }: { place: RecommendedPlace }) {
  * ScrollView가 스크롤을 그대로 처리합니다. 이렇게 해야 핸들의 좁은 영역만
  * 잡았을 때뿐 아니라, 콘텐츠 아무 곳이나 아래로 끌어도 시트를 내릴 수 있어요.
  */
-function PullUpSheet() {
+function PullUpSheet({ moments }: { moments: ClipMoment[] }) {
   const DRAG_RANGE = SHEET_PEEK_HEIGHT - SHEET_EXPANDED_TOP_OFFSET;
 
   const translateY = useRef(new Animated.Value(DRAG_RANGE)).current; // 기본값: 접힌 상태
@@ -292,9 +304,15 @@ function PullUpSheet() {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.momentRow}
           >
-            {TODAY_MOMENTS.map((moment) => (
-              <MomentThumbnail key={moment.id} moment={moment} />
-            ))}
+            {moments.length > 0 ? (
+              moments.map((moment) => (
+                <MomentThumbnail key={moment.id} moment={moment} />
+              ))
+            ) : (
+              <Text style={styles.emptyMomentsText}>
+                오늘 촬영한 클립이 아직 없어요
+              </Text>
+            )}
           </ScrollView>
 
           <View style={[styles.sectionHeaderRow, { marginTop: 24 }]}>
@@ -321,9 +339,42 @@ function clamp(value: number, min: number, max: number) {
 }
 
 export default function TripHomeScreen() {
+  const currentTrip = useTripStore((state) => state.currentTrip);
+
   const [elapsedSeconds] = useState(204); // 00:03:24 예시 값. 실제로는 타이머 state로 관리.
   const [currentLocation, setCurrentLocation] =
     useState<KakaoMapCurrentLocation | null>(null);
+  const [recordings, setRecordings] = useState<RecordingData[]>([]);
+
+  // 활성 여행이 바뀔 때마다(전환/새 여행 생성 포함) 지도 핀·오늘의 순간들을
+  // 그 여행의 실제 클립 데이터로 다시 채웁니다.
+  useFocusEffect(
+    useCallback(() => {
+      let isActive = true;
+
+      (async () => {
+        if (!currentTrip) {
+          if (isActive) setRecordings([]);
+          return;
+        }
+
+        try {
+          const records = await getRecordingsByFolder(currentTrip.id);
+          if (isActive) setRecordings(records);
+        } catch (error) {
+          console.error('[HomeScreen] 클립을 불러오지 못했습니다.', error);
+          if (isActive) setRecordings([]);
+        }
+      })();
+
+      return () => {
+        isActive = false;
+      };
+    }, [currentTrip?.id]),
+  );
+
+  const routePins = buildRoutePins(recordings);
+  const todayMoments = buildTodayMoments(recordings);
 
   useEffect(() => {
     let isMounted = true;
@@ -365,26 +416,28 @@ export default function TripHomeScreen() {
           검색바/진행 카드/시트는 전부 그 위에 떠 있는 오버레이예요. */}
       <View style={styles.map}>
         <KakaoMapView
-          pins={ROUTE_PINS}
+          pins={routePins}
           currentLocation={currentLocation}
           height={MAP_HEIGHT}
           pathColor={COLORS.accent}
         />
       </View>
 
-      <SearchBar />
+      <TripSelector />
 
       <View style={styles.progressCardWrapper}>
-        <TripProgressCard
-          tripTitle="전주 한옥마을을 여행 중"
-          elapsedLabel={elapsedLabel}
-          onStop={() => {
-            // TODO: 여행 종료 확인 다이얼로그 + 실제 종료 처리 연결
-          }}
-        />
+        {currentTrip ? (
+          <TripProgressCard
+            tripTitle={`${currentTrip.title}을(를) 여행 중`}
+            elapsedLabel={elapsedLabel}
+            onStop={() => {
+              // TODO: 여행 종료 확인 다이얼로그 + 실제 종료 처리 연결
+            }}
+          />
+        ) : null}
       </View>
 
-      <PullUpSheet />
+      <PullUpSheet moments={todayMoments} />
     </View>
   );
 }
@@ -404,32 +457,6 @@ const styles = StyleSheet.create({
     height: MAP_HEIGHT,
     backgroundColor: COLORS.surface,
     overflow: 'hidden',
-  },
-
-  // 검색바
-  searchBarWrapper: {
-    position: 'absolute',
-    left: 20,
-    right: 20,
-  },
-  searchBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    backgroundColor: COLORS.white,
-    borderRadius: 24,
-    paddingHorizontal: 16,
-    height: 48,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 10,
-    elevation: 4,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 14,
-    color: COLORS.textPrimary,
   },
 
   // 여행 진행 카드
@@ -626,6 +653,11 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     textAlign: 'center',
     width: 84,
+  },
+  emptyMomentsText: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    paddingVertical: 20,
   },
 
   // 추천 장소
