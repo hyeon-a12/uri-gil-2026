@@ -24,7 +24,6 @@ import { navigateToLocationConfirm } from '@/navigation/recordingNavigation';
 import { useTripStore } from '@/store/useTripStore';
 import { type ShootingStyleId } from '@/services/folderService';
 import CameraChangeIcon from '@/assets/images/camera_change.svg';
-import { getAllFolders } from '@/services/folderService';
 
 const MAX_CLIPS = 15;
 const DEFAULT_CLIP_SECONDS = 10;
@@ -188,9 +187,6 @@ export default function CameraScreen() {
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [flashEnabled, setFlashEnabled] = useState(false);
   const [availableLenses, setAvailableLenses] = useState<string[]>([]);
-  // 여행(폴더)이 하나도 없으면 저장할 곳이 없어 촬영을 막아야 합니다. 조회 전에는
-  // false로 잘못 막지 않도록 true로 시작합니다.
-  const [hasFolders, setHasFolders] = useState(true);
 
   const permissionsReady =
     cameraPermission?.granted === true &&
@@ -250,17 +246,6 @@ export default function CameraScreen() {
   }, [permissionsReady]);
 
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const folders = await getAllFolders();
-      if (!cancelled) setHasFolders(folders.length > 0);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
     if (!isRecording) return;
 
     const interval = setInterval(() => {
@@ -300,10 +285,10 @@ export default function CameraScreen() {
   const handleRecordPress = async () => {
     if (isRecording) return; // 자동 정지 방식이라 탭으로 중지 불가
 
-    if (hasFolders === false) {
+    if (!currentTrip) {
       Alert.alert(
-        '저장할 여행이 없습니다.',
-        '클립 관리에서 여행을 생성하세요.',
+        '진행 중인 여행이 없습니다',
+        '촬영한 클립을 저장할 여행을 먼저 선택하거나 만들어주세요.',
       );
       return;
     }

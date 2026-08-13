@@ -3,8 +3,7 @@ import {
   router,
   useLocalSearchParams,
 } from 'expo-router';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useFocusEffect } from 'expo-router';
+import { useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Animated,
@@ -26,7 +25,6 @@ import { VideoPreview } from '@/components/location-confirm/VideoPreview';
 import { MOCK_LOCATION_SUGGESTIONS } from '@/constants/mockLocations';
 import { COLORS as APP_COLORS } from '@/constants/color';
 import { saveRecording } from '@/services/recordingService';
-import { getAllFolders, FolderItem } from '@/services/folderService';
 import { useTripStore } from '@/store/useTripStore';
 
 // 이 화면 안에서만 쓰는 색상 별칭. 값 자체는 앱 공통 팔레트(src/constants/color.js)를
@@ -61,112 +59,20 @@ const MIN_SHEET_HEIGHT = SCREEN_HEIGHT * 0.42;
 const MAX_SHEET_HEIGHT = SCREEN_HEIGHT * 0.88;
 const DEFAULT_SHEET_HEIGHT = SCREEN_HEIGHT * 0.56;
 
-type ConfirmStep =
-  | 'location'
-  | 'trip';
-
-function TripOptionCard({
-  trip,
-  selected,
-  onPress,
-}: {
-  trip: FolderItem;
-  selected: boolean;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.tripCard,
-        selected && styles.tripCardSelected,
-        pressed && styles.cardPressed,
-      ]}
-    >
-      <View style={styles.tripCardContent}>
-        <View style={styles.tripTextArea}>
-          <Text
-            numberOfLines={1}
-            allowFontScaling={false}
-            style={[
-              styles.tripTitle,
-              selected && styles.tripTitleSelected,
-            ]}
-          >
-            {trip.title}
-          </Text>
-
-          <Text
-            allowFontScaling={false}
-            style={[
-              styles.tripDate,
-              selected && styles.tripDateSelected,
-            ]}
-          >
-            생성일 {trip.dateRange}
-          </Text>
-        </View>
-
-        <View
-          style={[
-            styles.radioButton,
-            selected && styles.radioButtonSelected,
-          ]}
-        >
-          {selected ? (
-            <View style={styles.radioButtonInner} />
-          ) : null}
-        </View>
-      </View>
-    </Pressable>
-  );
-}
-
 /**
- * 촬영 후 장소 및 여행 선택 화면
+ * 촬영 후 장소 확인 화면
  *
  * 1. 촬영 장소 선택
- * 2. 영상을 추가할 여행 선택
- * 3. 선택 완료 후 클립 관리 화면으로 이동
+ * 2. 홈 화면에서 미리 선택해둔 활성 여행(currentTrip)에 자동 저장 후 클립 관리 화면으로 이동
  */
 export default function LocationConfirmScreen() {
-  const [trips, setTrips] = useState<FolderItem[]>([]);
-
-  useFocusEffect(
-    useCallback(() => {
-      (async () => {
-        try {
-          const folders = await getAllFolders();
-          setTrips(folders);
-
-          // "카메라 연결하기"로 미리 지정해둔 활성 폴더가 있으면 기본으로 미리 선택해둡니다.
-          // 사용자가 다른 여행을 직접 고르면 그 선택이 우선하고(덮어쓰지 않음), 이미
-          // 고른 게 있으면 다시 초기화하지 않습니다.
-          const currentTrip = useTripStore.getState().currentTrip;
-          if (currentTrip) {
-            setSelectedTripId((prev) => prev ?? currentTrip.id);
-          }
-        } catch (error) {
-          console.warn('[LocationConfirm] 폴더 로드 실패:', error);
-          setTrips([]);
-        }
-      })();
-    }, []),
-  );
-
   const { videoUri, durationMs } =
     useLocalSearchParams<{
       videoUri?: string;
       durationMs?: string;
     }>();
 
-  const [step, setStep] =
-    useState<ConfirmStep>('location');
-
   const [selectedLocationId, setSelectedLocationId] =
-    useState<string | null>(null);
-
-  const [selectedTripId, setSelectedTripId] =
     useState<string | null>(null);
 
   const [manualInputFocused, setManualInputFocused] =
@@ -231,26 +137,10 @@ export default function LocationConfirmScreen() {
     selectedLocationId,
   ]);
 
-  const selectedTrip = useMemo(
-    () =>
-      trips.find(
-        (trip) => trip.id === selectedTripId,
-      ),
-    [selectedTripId],
-  );
-
   const hasLocationSelection =
     selectedLocationId !== null || hasManualLocation;
 
-  const hasTripSelection =
-    selectedTripId !== null;
-
   const handleBackStep = () => {
-    if (step === 'trip') {
-      setStep('location');
-      return;
-    }
-
     router.back();
   };
 
@@ -260,18 +150,6 @@ export default function LocationConfirmScreen() {
     setManualLocation('');
     setManualInputFocused(false);
     setSelectedLocationId(locationId);
-  };
-
-  const handleNext = () => {
-    if (!hasLocationSelection) {
-      return;
-    }
-
-    setStep('trip');
-  };
-
-  const handleCreateNewTrip = () => {
-    router.push('/my-route');
   };
 
   const handleComplete = async () => {
@@ -285,10 +163,18 @@ export default function LocationConfirmScreen() {
       return;
     }
 
-    // hasTripSelection 체크를 이미 통과했으므로 selectedTripId는 항상 값이 있습니다.
-    // ("카메라 연결하기"로 지정된 활성 폴더는 위 useFocusEffect에서 기본값으로만 미리
-    // 선택해둔 것이라, 사용자가 다른 여행을 골랐다면 그 선택이 그대로 반영됩니다.)
-    const targetFolderId = selectedTripId!;
+    // 홈 화면에서 미리 골라둔 활성 여행에 자동으로 저장합니다. 카메라 진입 자체를
+    // 활성 여행이 있을 때만 허용하므로(CameraScreen, (tabs)/_layout.tsx) 정상 흐름에서는
+    // 항상 값이 있지만, 그 사이 활성 여행이 삭제되는 등의 예외 상황을 대비해 방어적으로 확인합니다.
+    const currentTrip = useTripStore.getState().currentTrip;
+    if (!currentTrip) {
+      Alert.alert(
+        '진행 중인 여행이 없습니다',
+        '홈 화면에서 여행을 다시 선택해주세요.',
+      );
+      return;
+    }
+    const targetFolderId = currentTrip.id;
 
     try {
       await saveRecording({
@@ -362,9 +248,7 @@ export default function LocationConfirmScreen() {
                 allowFontScaling={false}
                 style={styles.backLabel}
               >
-                {step === 'location'
-                  ? '다시 촬영하기'
-                  : '장소 다시 선택'}
+                다시 촬영하기
               </Text>
             </Pressable>
 
@@ -850,208 +734,4 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
 
-  tripCard: {
-    minHeight: 74,
-
-    paddingHorizontal: 16,
-    paddingVertical: 13,
-
-    borderRadius: 16,
-
-    backgroundColor: COLORS.card,
-
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-
-  tripCardSelected: {
-    backgroundColor: COLORS.primary,
-    borderColor: COLORS.primary,
-
-    shadowColor: COLORS.primary,
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-
-    elevation: 4,
-  },
-
-  tripCardContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-
-  tripTextArea: {
-    flex: 1,
-  },
-
-  tripTitle: {
-    color: COLORS.textPrimary,
-
-    fontSize: 15,
-    lineHeight: 21,
-    fontWeight: '800',
-  },
-
-  tripTitleSelected: {
-    color: '#FFFFFF',
-  },
-
-  tripDate: {
-    marginTop: 4,
-
-    color: COLORS.textSecondary,
-
-    fontSize: 12,
-    lineHeight: 17,
-    fontWeight: '500',
-  },
-
-  tripDateSelected: {
-    color: 'rgba(255,255,255,0.82)',
-  },
-
-  radioButton: {
-    width: 22,
-    height: 22,
-
-    borderRadius: 11,
-
-    alignItems: 'center',
-    justifyContent: 'center',
-
-    borderWidth: 2,
-    borderColor: COLORS.textTertiary,
-  },
-
-  radioButtonSelected: {
-    borderColor: '#FFFFFF',
-  },
-
-  radioButtonInner: {
-    width: 10,
-    height: 10,
-
-    borderRadius: 5,
-
-    backgroundColor: '#FFFFFF',
-  },
-
-  selectedLocationSummary: {
-    minHeight: 66,
-
-    marginBottom: 14,
-    paddingHorizontal: 14,
-
-    flexDirection: 'row',
-    alignItems: 'center',
-
-    borderRadius: 16,
-
-    backgroundColor: COLORS.primarySoft,
-
-    borderWidth: 1,
-    borderColor: '#FFD9B6',
-  },
-
-  selectedLocationIcon: {
-    width: 38,
-    height: 38,
-
-    borderRadius: 19,
-
-    alignItems: 'center',
-    justifyContent: 'center',
-
-    backgroundColor: '#FFFFFF',
-  },
-
-  selectedLocationTextArea: {
-    flex: 1,
-
-    marginLeft: 11,
-  },
-
-  selectedLocationLabel: {
-    color: COLORS.textSecondary,
-
-    fontSize: 11,
-    lineHeight: 15,
-    fontWeight: '600',
-  },
-
-  selectedLocationName: {
-    marginTop: 2,
-
-    color: COLORS.textPrimary,
-
-    fontSize: 14,
-    lineHeight: 19,
-    fontWeight: '800',
-  },
-
-  locationChangeText: {
-    color: COLORS.primary,
-
-    fontSize: 12,
-    lineHeight: 17,
-    fontWeight: '800',
-  },
-
-  createTripButton: {
-    minHeight: 72,
-
-    paddingHorizontal: 15,
-    paddingVertical: 12,
-
-    flexDirection: 'row',
-    alignItems: 'center',
-
-    borderRadius: 16,
-
-    backgroundColor: COLORS.card,
-
-    borderWidth: 1,
-    borderStyle: 'dashed',
-    borderColor: '#DCCFC2',
-  },
-
-  createTripIconContainer: {
-    width: 40,
-    height: 40,
-
-    borderRadius: 20,
-
-    alignItems: 'center',
-    justifyContent: 'center',
-
-    backgroundColor: COLORS.primarySoft,
-  },
-
-  createTripTextArea: {
-    flex: 1,
-
-    marginLeft: 11,
-  },
-
-  createTripTitle: {
-    color: COLORS.textPrimary,
-
-    fontSize: 14,
-    lineHeight: 19,
-    fontWeight: '800',
-  },
-
-  createTripDescription: {
-    marginTop: 3,
-
-    color: COLORS.textSecondary,
-
-    fontSize: 11,
-    lineHeight: 16,
-    fontWeight: '500',
-  },
 });

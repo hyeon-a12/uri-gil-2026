@@ -1,8 +1,9 @@
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { router, Tabs } from 'expo-router';
 import { Image } from 'expo-image';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, View } from 'react-native';
 import { AppText as Text } from '@/components/AppText';
+import { useTripStore } from '@/store/useTripStore';
 
 
   import HomeIcon from "@/assets/images/tabIcons/home.svg";
@@ -60,8 +61,29 @@ function TabItem({
 }
 
 function CameraTabButton() {
+  const handlePress = () => {
+    const currentTrip = useTripStore.getState().currentTrip;
+
+    if (!currentTrip) {
+      Alert.alert(
+        '진행 중인 여행이 없습니다',
+        '촬영한 클립을 저장할 여행을 먼저 선택하거나 만들어주세요.',
+        [
+          { text: '취소', style: 'cancel' },
+          {
+            text: '여행 만들러 가기',
+            onPress: () => router.push('/(tabs)/home'),
+          },
+        ],
+      );
+      return;
+    }
+
+    router.push('/camera');
+  };
+
   return (
-    <Pressable onPress={() => router.push('/camera')} style={styles.cameraButtonWrap}>
+    <Pressable onPress={handlePress} style={styles.cameraButtonWrap}>
       <View style={styles.cameraButton}>
         <CameraIcon
           width={27}

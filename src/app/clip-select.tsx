@@ -159,7 +159,7 @@ function ClipSelectionCard({
           <View style={styles.durationRow}>
             <Ionicons
               name="time-outline"
-              size={15}
+              size={13}
               color={COLORS.textSecondary}
             />
 
@@ -262,8 +262,6 @@ export default function ClipSelectScreen() {
     [clips, selectedIds],
   );
 
-  const totalCount = clips.length;
-  const totalSeconds = sumSeconds(clips);
   const selectedSeconds = sumSeconds(selectedClips);
 
   const renderClipItem = ({ item }: { item: ClipItem }) => {
@@ -318,7 +316,7 @@ export default function ClipSelectScreen() {
               setSelectedClipForMenu(item);
             }}
           >
-            <Feather name="menu" size={20} color={COLORS.textTertiary} />
+            <Feather name="more-vertical" size={20} color={COLORS.textTertiary} />
           </TouchableOpacity>
         </TouchableOpacity>
       </View>
@@ -522,30 +520,33 @@ export default function ClipSelectScreen() {
         }
       />
 
-      <View style={[styles.footer, { bottom: insets.bottom }]}>
-        <View style={styles.footerInfo}>
-          <View style={styles.footerRow}>
-            <Text style={styles.footerLabel}>클립 개수</Text>
-            <Text style={styles.footerValue}>
-              {selectedCount} / {totalCount} 개
-            </Text>
-          </View>
-          <View style={styles.footerRow}>
-            <Text style={styles.footerLabel}>총 영상 길이</Text>
-            <Text style={styles.footerValue}>
-              {selectedSeconds} / {totalSeconds} 초
-            </Text>
-          </View>
-        </View>
+      <View style={[styles.footer, { paddingBottom: insets.bottom }]}>
+        <View style={styles.footerContent}>
+          <View style={styles.footerLeft}>
+            {selectedCount > 0 ? (
+              <View style={styles.footerInfo}>
+                <Ionicons name="film-outline" size={18} color={COLORS.textSecondary} />
+                <Text style={styles.footerStatText}>{selectedCount}개</Text>
 
-        <TouchableOpacity
-          style={[
-            styles.createButton,
-            selectedCount === 0 && styles.createButtonDisabled,
-          ]}
-          disabled={selectedCount === 0}>
-            <Text style={styles.createButtonText}>영상 생성</Text>
-          </TouchableOpacity>
+                <Text style={styles.footerDivider}>·</Text>
+
+                <Ionicons name="time-outline" size={15} color={COLORS.textSecondary} />
+                <Text style={styles.footerStatText}>{formatDuration(selectedSeconds)}</Text>
+              </View>
+            ) : (
+              <Text style={styles.footerEmptyText}>클립을 선택해주세요</Text>
+            )}
+          </View>
+
+          <TouchableOpacity
+            style={[
+              styles.createButton,
+              selectedCount === 0 && styles.createButtonDisabled,
+            ]}
+            disabled={selectedCount === 0}>
+              <Text style={styles.createButtonText}>영상 생성</Text>
+            </TouchableOpacity>
+        </View>
       </View>
 
       <Modal
@@ -1086,37 +1087,53 @@ const styles = StyleSheet.create({
     color: '#C7C7CC',
     marginTop: 4,
   },
+  // 화면 맨 아래(bottom: 0)에 딱 붙이고, 홈 인디케이터 등 안전 영역만큼은
+  // paddingBottom(인라인 스타일의 insets.bottom)으로 배경을 그대로 확장해서 채웁니다.
+  // 예전처럼 bottom: insets.bottom로 띄우면 그 아래에 아무것도 없는 흰 여백이 남아
+  // 바가 화면 끝에서 들떠 보였습니다.
   footer: {
     position: 'absolute',
     left: 0,
     right: 0,
-    height: FOOTER_HEIGHT,
+    bottom: -15,
     backgroundColor: '#FFFFFF',
     borderTopWidth: 1,
     borderTopColor: '#F2F2F7',
+  },
+  footerContent: {
+    height: FOOTER_HEIGHT,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: 95,
     paddingHorizontal: 20,
   },
-  footerInfo: {
+  // 선택/미선택 상태마다 이 안에 들어가는 텍스트 길이가 달라지는데(footerInfo ↔
+  // footerEmptyText), flex: 1 + justifyContent: 'flex-end'로 항상 버튼 쪽 끝에
+  // 붙여 정렬해서 버튼과의 간격(위 footer의 gap)이 상태와 무관하게 고정되도록 합니다.
+  footerLeft: {
     flex: 1,
-    gap: 4,
-  },
-  footerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    justifyContent: 'flex-end',
   },
-  footerLabel: {
-    fontSize: 13,
-    color: '#8E8E93',
-    width: 72,
+  footerInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
-  footerValue: {
-    fontSize: 13,
+  footerStatText: {
+    fontSize: 18,
     color: '#1C1C1E',
-    fontWeight: '600',
+    fontWeight: '700',
+  },
+  footerDivider: {
+    fontSize: 18,
+    color: '#C7C7CC',
+    marginHorizontal: 3,
+  },
+  footerEmptyText: {
+    fontSize: 17,
+    color: '#8E8E93',
   },
   createButton: {
     backgroundColor: COLORS.primary,
@@ -1129,7 +1146,7 @@ const styles = StyleSheet.create({
   },
   createButtonText: {
     color: '#FFFFFF',
-    fontSize: 15,
+    fontSize: 17,
     fontWeight: '700',
   },
   modalOverlay: {
