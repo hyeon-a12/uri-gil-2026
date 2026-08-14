@@ -297,7 +297,7 @@ export default function LocationConfirmScreen() {
                   여기가 맞나요?
                 </Text>
 
-                {/* 인라인 "다음" 버튼 - 제목 오른쪽 */}
+                {/* 인라인 "완료" 버튼 - 제목 오른쪽 */}
                 <Pressable
                   onPress={handleComplete}
                   disabled={!hasLocationSelection}
@@ -316,7 +316,7 @@ export default function LocationConfirmScreen() {
                       styles.inlineNextButtonText
                     }
                   >
-                    다음
+                    완료
                   </Text>
 
                   <Ionicons

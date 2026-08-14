@@ -6,23 +6,23 @@ import {
   ScrollView,
   TouchableOpacity,
   Pressable,
-  Switch,
   Animated,
   StyleSheet,
   Dimensions,
   Alert,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS as SHARED_COLORS } from '@/constants/color';
 
 const COLORS = {
-  background: SHARED_COLORS.backgroundIvory,
+  background: SHARED_COLORS.background,
   card: SHARED_COLORS.background,
   white: SHARED_COLORS.background,
   accent: SHARED_COLORS.accent,
+  primarySoft: SHARED_COLORS.main, // 연한 메인테마색
   black: SHARED_COLORS.textPrimary,
   gray500: SHARED_COLORS.textSecondary,
   gray200: SHARED_COLORS.borderIvory,
@@ -83,16 +83,65 @@ type InfoContentType = 'location' | 'time' | 'both';
 const INFO_CONTENT_OPTIONS: { id: InfoContentType; label: string }[] = [
   { id: 'location', label: '위치' },
   { id: 'time', label: '시간' },
-  { id: 'both', label: '위치 + 시간' },
+  { id: 'both', label: '시간 + 위치' },
 ];
 
-type FontId = 'handwriting' | 'baemin' | 'myeongjo';
+type InfoTextAlign = 'left' | 'center' | 'right';
+
+const ALIGN_OPTIONS: {
+  id: InfoTextAlign;
+  label: string;
+  icon: keyof typeof MaterialCommunityIcons.glyphMap;
+}[] = [
+  { id: 'left', label: '왼쪽 정렬', icon: 'format-align-left' },
+  { id: 'center', label: '중앙 정렬', icon: 'format-align-center' },
+  { id: 'right', label: '오른쪽 정렬', icon: 'format-align-right' },
+];
+
+type FontId =
+  | 'pretendard'
+  | 'maruburi'
+  | 'keriskedu'
+  | 'hakgyoansimnadeuri'
+  | 'hakgyoansimbyeolbichhaneul';
 
 const FONT_OPTIONS: { id: FontId; label: string }[] = [
-  { id: 'handwriting', label: '손글씨체' },
-  { id: 'baemin', label: '배민체' },
-  { id: 'myeongjo', label: '조선명조체' },
+  { id: 'pretendard', label: 'Pretendard' },
+  { id: 'maruburi', label: '마루 부리' },
+  { id: 'keriskedu', label: '케리스 케듀체' },
+  { id: 'hakgyoansimnadeuri', label: '학교안심 나들이' },
+  { id: 'hakgyoansimbyeolbichhaneul', label: '학교안심 별빛하늘' },
 ];
+
+// 미리보기·글꼴 선택 칩에서 실제로 적용할 폰트 패밀리 이름.
+// _layout.tsx의 useFonts에 등록된 이름과 반드시 일치해야 해요.
+const FONT_FAMILY_MAP: Record<FontId, { regular: string; bold: string }> = {
+  pretendard: { regular: 'Pretendard-Regular', bold: 'Pretendard-Bold' },
+  maruburi: { regular: 'MaruBuri-Regular', bold: 'MaruBuri-Bold' },
+  keriskedu: { regular: 'KERISKEDU-Regular', bold: 'KERISKEDU-Bold' },
+  // 학교안심 나들이/별빛하늘은 Regular 웨이트가 없어서 Light를 기본(비볼드)으로 씀
+  hakgyoansimnadeuri: {
+    regular: 'HakgyoansimNadeuri-Light',
+    bold: 'HakgyoansimNadeuri-Bold',
+  },
+  hakgyoansimbyeolbichhaneul: {
+    regular: 'HakgyoansimByeolbichhaneul-Light',
+    bold: 'HakgyoansimByeolbichhaneul-Bold',
+  },
+};
+
+function getFontFamily(fontId: FontId, bold: boolean): string {
+  return bold ? FONT_FAMILY_MAP[fontId].bold : FONT_FAMILY_MAP[fontId].regular;
+}
+
+const TEXT_COLOR_OPTIONS = ['#FFFFFF', '#222222', '#FF7F5C', '#FFD54F', '#7EC8E3'];
+
+const MIN_TEXT_FONT_SIZE = 10;
+const MAX_TEXT_FONT_SIZE = 28;
+
+function clampFontSize(size: number): number {
+  return Math.min(MAX_TEXT_FONT_SIZE, Math.max(MIN_TEXT_FONT_SIZE, size));
+}
 
 // 3×3 그리드. 화면에 그릴 때도 이 순서 그대로 3개씩 끊어서 3행으로 배치해요.
 type TextPosition =
@@ -118,60 +167,88 @@ const TEXT_POSITION_GRID: TextPosition[] = [
   'bottomRight',
 ];
 
-const DEFAULT_TEXT_POSITION: TextPosition = 'bottomLeft';
+const DEFAULT_TEXT_POSITION: TextPosition = 'center';
 
-// ── 클립별 편집 상태 ─────────────────────────────────────────
-// 예전엔 텍스트/위치/폰트/음소거를 화면 전체에서 하나로 관리했는데,
-// 그러면 클립 1에 텍스트를 넣었을 때 클립 2에도 똑같이 보이는 버그가
-// 생겨요. 그래서 clipId를 키로 쓰는 객체로 바꿔서, 클립마다 독립적인
-// 설정을 갖게 했습니다.
-interface ClipEditState {
+// ── 편집 상태 ────────────────────────────────────────────────
+// "정보"(infoContentType)/"위치"(textPosition)/"정렬"(textAlign)/시간·장소
+// 각각의 글꼴·색상·크기(timeStyle/placeStyle)는 클립마다 다르게 두면 오히려
+// 헷갈려서 영상 전체에 하나만 적용되는 전역 설정으로 뺐습니다. 음소거는
+// 클립마다 다르게 쓰는 게 자연스러워서 clipId를 키로 쓰는 객체로 클립별
+// 독립 설정을 유지합니다.
+interface TextElementStyle {
+  fontId: FontId;
+  bold: boolean;
+  color: string;
+  fontSize: number;
+}
+
+const DEFAULT_TEXT_ELEMENT_STYLE: TextElementStyle = {
+  fontId: 'pretendard',
+  bold: false,
+  color: '#FFFFFF',
+  fontSize: 15,
+};
+
+function isDefaultTextElementStyle(style: TextElementStyle): boolean {
+  return (
+    style.fontId === DEFAULT_TEXT_ELEMENT_STYLE.fontId &&
+    style.bold === DEFAULT_TEXT_ELEMENT_STYLE.bold &&
+    style.color === DEFAULT_TEXT_ELEMENT_STYLE.color &&
+    style.fontSize === DEFAULT_TEXT_ELEMENT_STYLE.fontSize
+  );
+}
+
+interface GlobalEditState {
   infoContentType: InfoContentType | null;
   textPosition: TextPosition;
-  fontId: FontId;
+  textAlign: InfoTextAlign;
+  timeStyle: TextElementStyle;
+  placeStyle: TextElementStyle;
+}
+
+const DEFAULT_GLOBAL_EDIT_STATE: GlobalEditState = {
+  infoContentType: null,
+  textPosition: DEFAULT_TEXT_POSITION,
+  textAlign: 'left',
+  timeStyle: { ...DEFAULT_TEXT_ELEMENT_STYLE },
+  placeStyle: { ...DEFAULT_TEXT_ELEMENT_STYLE },
+};
+
+function isDefaultGlobalEditState(state: GlobalEditState): boolean {
+  return (
+    state.infoContentType === DEFAULT_GLOBAL_EDIT_STATE.infoContentType &&
+    state.textPosition === DEFAULT_GLOBAL_EDIT_STATE.textPosition &&
+    state.textAlign === DEFAULT_GLOBAL_EDIT_STATE.textAlign &&
+    isDefaultTextElementStyle(state.timeStyle) &&
+    isDefaultTextElementStyle(state.placeStyle)
+  );
+}
+
+interface ClipEditState {
   isMuted: boolean;
 }
 
 const DEFAULT_CLIP_EDIT_STATE: ClipEditState = {
-  infoContentType: null,
-  textPosition: DEFAULT_TEXT_POSITION,
-  fontId: 'handwriting',
   isMuted: false,
 };
 
-function isDefaultEditState(state: ClipEditState): boolean {
+function isDefaultClipEditState(state: ClipEditState): boolean {
   return (
-    state.infoContentType === DEFAULT_CLIP_EDIT_STATE.infoContentType &&
-    state.textPosition === DEFAULT_CLIP_EDIT_STATE.textPosition &&
-    state.fontId === DEFAULT_CLIP_EDIT_STATE.fontId &&
     state.isMuted === DEFAULT_CLIP_EDIT_STATE.isMuted
   );
 }
 
-/** 선택된 정보 조합(위치/시간/위치+시간)에 맞춰 실제 표시 문자열을 만들어요. */
-function formatClipInfo(
-  clip: EditableClip | null,
-  contentType: InfoContentType,
-): string {
-  if (!clip) return '-';
+function getTimeLabel(clip: EditableClip | null): string {
+  if (!clip?.recordedAt) return '-';
+  return new Date(clip.recordedAt).toLocaleTimeString('ko-KR', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+}
 
-  const timeLabel = clip.recordedAt
-    ? new Date(clip.recordedAt).toLocaleTimeString('ko-KR', {
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false,
-      })
-    : '-';
-  const placeLabel = clip.placeName ?? '-';
-
-  switch (contentType) {
-    case 'location':
-      return placeLabel;
-    case 'time':
-      return timeLabel;
-    case 'both':
-      return `${placeLabel} · ${timeLabel}`;
-  }
+function getPlaceLabel(clip: EditableClip | null): string {
+  return clip?.placeName ?? '-';
 }
 
 function formatTimer(seconds: number) {
@@ -182,6 +259,11 @@ function formatTimer(seconds: number) {
 
 export default function VideoEditScreen() {
   const insets = useSafeAreaInsets();
+
+  // 프리뷰 박스 하단이 화면 맨 위에서 몇 px 떨어져 있는지 실측한 값. 헤더 높이는
+  // safe area(insets.top)에 따라 기기마다 달라져서 고정 숫자로 계산할 수 없어,
+  // onLayout으로 실제 위치를 재서 바텀시트 높이를 거기 맞춰 늘립니다.
+  const [previewBottomY, setPreviewBottomY] = useState<number | null>(null);
 
   const [clips] = useState<EditableClip[]>(MOCK_CLIPS);
   const totalDurationSeconds = useMemo(
@@ -206,6 +288,29 @@ export default function VideoEditScreen() {
   );
   const editingClip = clips.find((c) => c.id === editingClipId) ?? null;
 
+  // 정보 종류/위치/정렬/시간·장소 스타일은 영상 전체에 하나만 적용되는 전역 설정입니다.
+  const [globalEditState, setGlobalEditState] = useState<GlobalEditState>(
+    DEFAULT_GLOBAL_EDIT_STATE,
+  );
+
+  function updateGlobalEditState(patch: Partial<GlobalEditState>) {
+    setGlobalEditState((prev) => ({ ...prev, ...patch }));
+  }
+
+  function updateTextElementStyle(
+    target: 'time' | 'place',
+    patch: Partial<TextElementStyle>,
+  ) {
+    setGlobalEditState((prev) => ({
+      ...prev,
+      [target === 'time' ? 'timeStyle' : 'placeStyle']: {
+        ...(target === 'time' ? prev.timeStyle : prev.placeStyle),
+        ...patch,
+      },
+    }));
+  }
+
+  // 음소거는 클립마다 따로 관리합니다.
   const [editStates, setEditStates] = useState<Record<string, ClipEditState>>(
     {},
   );
@@ -226,11 +331,13 @@ export default function VideoEditScreen() {
     }));
   }
 
-  const editingState = getEditState(editingClipId);
+  // 화면 렌더링 쪽에서 전역 설정 + 지금 편집 중인 클립의 설정을 한 번에 쓰기
+  // 편하도록 합쳐둔 값이에요. 실제 저장은 위 두 state에 분리해서 합니다.
+  const editingState = { ...globalEditState, ...getEditState(editingClipId) };
 
-  const hasUnsavedChanges = Object.values(editStates).some(
-    (state) => !isDefaultEditState(state),
-  );
+  const hasUnsavedChanges =
+    !isDefaultGlobalEditState(globalEditState) ||
+    Object.values(editStates).some((state) => !isDefaultClipEditState(state));
 
   // ── 재생 ────────────────────────────────────────────────
   // 클립이 선택돼 있으면(editingClipId) 그 클립 하나만 재생하고 끝나면 멈춰요.
@@ -302,21 +409,104 @@ export default function VideoEditScreen() {
   // ── 도구 패널 ────────────────────────────────────────────
   const [activeTool, setActiveTool] = useState<ToolId | null>(null);
 
+  // "텍스트" 시트 안의 서브탭: 표시(정보 종류·정렬) / 스타일(시간·장소 글꼴·색상·크기)
+  const [sheetTab, setSheetTab] = useState<'display' | 'style'>('display');
+  // 스타일 탭 안에서 지금 편집 중인 대상(시간 또는 장소)
+  const [styleTarget, setStyleTarget] = useState<'time' | 'place'>('time');
+
+  // 정보 종류에서 시간/장소 중 하나만 골랐으면 스타일 탭도 그 하나만 보여줍니다.
+  const showTimeStyle = editingState.infoContentType !== 'location';
+  const showPlaceStyle = editingState.infoContentType !== 'time';
+  const effectiveStyleTarget: 'time' | 'place' =
+    !showTimeStyle && showPlaceStyle
+      ? 'place'
+      : showTimeStyle && !showPlaceStyle
+        ? 'time'
+        : styleTarget;
+  const currentTextStyle =
+    effectiveStyleTarget === 'time'
+      ? editingState.timeStyle
+      : editingState.placeStyle;
+
+  // 프리뷰에 떠 있는 시간/장소 텍스트를 직접 탭하면 그 요소를 스타일 편집
+  // 대상으로 고르고, 텍스트 시트의 스타일 탭을 바로 엽니다.
+  function handlePreviewTextTap(target: 'time' | 'place') {
+    setStyleTarget(target);
+    setSheetTab('style');
+    setActiveTool('text');
+  }
+
+  // 시트 안 내용이 길어져서 스크롤될 때, 오른쪽에 지금 스크롤 위치를 보여주는
+  // 얇은 바를 직접 그리기 위한 값들이에요(네이티브 스크롤바는 커스텀 스타일을
+  // 줄 수 없어서 showsVerticalScrollIndicator를 끄고 이걸로 대체했습니다).
+  // 스크롤 위치 자체는 매 프레임 setState로 리렌더하면 뚝뚝 끊기고 과하게
+  // 움직여 보여서, 네이티브 드라이버로 도는 Animated.Value로 따로 뺐습니다.
+  const [sheetScrollViewportHeight, setSheetScrollViewportHeight] =
+    useState(0);
+  const [sheetScrollContentHeight, setSheetScrollContentHeight] = useState(0);
+  const sheetScrollY = useRef(new Animated.Value(0)).current;
+  // Animated.event를 JSX 안에서 매 렌더 새로 만들면 "Changing onScroll listener
+  // at runtime is not supported" 에러가 나서, ref로 한 번만 만들어 재사용합니다.
+  // useNativeDriver: true로 두면 여기 ScrollView 조합에서 onScroll이 함수가
+  // 아니라 이벤트 객체로 넘어가면서 크래시가 나서(TypeError: onScroll is not
+  // a function), JS 드라이버로 돌립니다 — 조금 덜 매끄럽지만 안전합니다.
+  const handleSheetScroll = useRef(
+    Animated.event(
+      [{ nativeEvent: { contentOffset: { y: sheetScrollY } } }],
+      { useNativeDriver: false },
+    ),
+  ).current;
+
+  // 스크롤할 내용이 실제로 뷰포트보다 길 때만 바를 보여줍니다.
+  const isSheetScrollable =
+    sheetScrollContentHeight > sheetScrollViewportHeight;
+  const SHEET_SCROLLBAR_MIN_THUMB = 24;
+  const sheetScrollThumbHeight = isSheetScrollable
+    ? Math.max(
+        SHEET_SCROLLBAR_MIN_THUMB,
+        (sheetScrollViewportHeight / sheetScrollContentHeight) *
+          sheetScrollViewportHeight,
+      )
+    : 0;
+  const sheetScrollThumbTranslateY = sheetScrollY.interpolate({
+    inputRange: [
+      0,
+      Math.max(1, sheetScrollContentHeight - sheetScrollViewportHeight),
+    ],
+    outputRange: [
+      0,
+      Math.max(0, sheetScrollViewportHeight - sheetScrollThumbHeight),
+    ],
+    extrapolate: 'clamp',
+  });
+
   // Text/Position 패널은 백드롭 + 아래에서 올라오는 시트예요.
   // Mute는 그런 "화면"이 아니라 바로 토글되는 가벼운 동작이라
   // sheetTranslateY 애니메이션 대상에서 제외했습니다.
   const isSheetTool = activeTool === 'text' || activeTool === 'position';
   const sheetTranslateY = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
 
+  // 시트를 실제로 화면에 그릴지 여부. isSheetTool이 꺼지자마자 바로 언마운트해버리면
+  // 내려가는 애니메이션이 재생될 틈도 없이 사라져서, 닫히는 애니메이션이 끝난
+  // 뒤에야(onAnimationEnd 콜백) false로 바꿔줍니다.
+  const [isSheetMounted, setIsSheetMounted] = useState(false);
+
   useEffect(() => {
     if (isSheetTool) {
+      setIsSheetMounted(true);
       Animated.spring(sheetTranslateY, {
         toValue: 0,
         useNativeDriver: true,
         bounciness: 4,
       }).start();
     } else {
-      sheetTranslateY.setValue(SCREEN_HEIGHT);
+      Animated.timing(sheetTranslateY, {
+        toValue: SCREEN_HEIGHT,
+        duration: 220,
+        useNativeDriver: true,
+      }).start(() => {
+        setIsSheetMounted(false);
+      });
     }
   }, [isSheetTool, sheetTranslateY]);
 
@@ -325,8 +515,12 @@ export default function VideoEditScreen() {
   }
 
   function handleToolPress(toolId: ToolId) {
-    // 버튼을 누르면 켜져있던 값을 바로 뒤집는 게 아니라, 다른 도구들처럼
-    // 선택 영역(뮤트는 스위치)을 열어서 사용자가 직접 켜고 끄게 합니다.
+    if (toolId === 'mute') {
+      // 클립이 선택돼 있을 때만 그 클립의 음소거를 바로 뒤집습니다. 선택된
+      // 클립이 없으면 updateEditingClipState가 아무 동작도 하지 않습니다.
+      updateEditingClipState({ isMuted: !editingState.isMuted });
+      return;
+    }
     setActiveTool((prev) => (prev === toolId ? null : toolId));
   }
 
@@ -362,15 +556,6 @@ export default function VideoEditScreen() {
           <Ionicons name="chevron-back" size={22} color={COLORS.black} />
         </TouchableOpacity>
 
-        <View style={styles.headerTitleBlock}>
-          <Text allowFontScaling={false} style={styles.headerTitle}>
-            Uri-Gil
-          </Text>
-          <Text allowFontScaling={false} style={styles.headerSubtitle}>
-            VIDEO EDITOR
-          </Text>
-        </View>
-
         <TouchableOpacity
           style={styles.exportButton}
           activeOpacity={0.85}
@@ -383,7 +568,14 @@ export default function VideoEditScreen() {
       </View>
 
       {/* 프리뷰 — 빈 배경을 탭하면 선택된 클립을 해제합니다 */}
-      <Pressable style={styles.previewWrapper} onPress={deselectClip}>
+      <Pressable
+        style={styles.previewWrapper}
+        onPress={deselectClip}
+        onLayout={(e) => {
+          const { y, height } = e.nativeEvent.layout;
+          setPreviewBottomY(y + height);
+        }}
+      >
         {isPlaying && playingClip?.videoUri ? (
           <VideoView
             player={player}
@@ -402,18 +594,78 @@ export default function VideoEditScreen() {
           </View>
         )}
 
-        {/* 편집 대상 클립에 실제로 설정된 정보 배지 미리보기 */}
+        {/* 편집 대상 클립에 실제로 설정된 정보 배지 미리보기 —
+            시간/장소 텍스트를 직접 탭하면 그 요소의 스타일 편집 화면이 열립니다. */}
         {editingState.infoContentType && (
           <View
-            pointerEvents="none"
+            pointerEvents="box-none"
             style={[
               styles.infoOverlay,
               TEXT_POSITION_STYLE[editingState.textPosition],
             ]}
           >
-            <Text allowFontScaling={false} style={styles.infoOverlayText}>
-              {formatClipInfo(editingClip, editingState.infoContentType)}
-            </Text>
+            {(editingState.infoContentType === 'time' ||
+              editingState.infoContentType === 'both') && (
+              <Pressable
+                onPress={() => handlePreviewTextTap('time')}
+                style={
+                  activeTool === 'text' &&
+                  sheetTab === 'style' &&
+                  effectiveStyleTarget === 'time'
+                    ? styles.previewTextTapTargetActive
+                    : styles.previewTextTapTarget
+                }
+              >
+                <Text
+                  allowFontScaling={false}
+                  style={[
+                    styles.infoOverlayText,
+                    {
+                      textAlign: editingState.textAlign,
+                      color: editingState.timeStyle.color,
+                      fontSize: editingState.timeStyle.fontSize,
+                      fontFamily: getFontFamily(
+                        editingState.timeStyle.fontId,
+                        editingState.timeStyle.bold,
+                      ),
+                    },
+                  ]}
+                >
+                  {getTimeLabel(editingClip)}
+                </Text>
+              </Pressable>
+            )}
+            {(editingState.infoContentType === 'location' ||
+              editingState.infoContentType === 'both') && (
+              <Pressable
+                onPress={() => handlePreviewTextTap('place')}
+                style={
+                  activeTool === 'text' &&
+                  sheetTab === 'style' &&
+                  effectiveStyleTarget === 'place'
+                    ? styles.previewTextTapTargetActive
+                    : styles.previewTextTapTarget
+                }
+              >
+                <Text
+                  allowFontScaling={false}
+                  style={[
+                    styles.infoOverlayText,
+                    {
+                      textAlign: editingState.textAlign,
+                      color: editingState.placeStyle.color,
+                      fontSize: editingState.placeStyle.fontSize,
+                      fontFamily: getFontFamily(
+                        editingState.placeStyle.fontId,
+                        editingState.placeStyle.bold,
+                      ),
+                    },
+                  ]}
+                >
+                  {getPlaceLabel(editingClip)}
+                </Text>
+              </Pressable>
+            )}
           </View>
         )}
 
@@ -570,22 +822,8 @@ export default function VideoEditScreen() {
         })}
       </View>
 
-      {/* 뮤트: 백드롭 없는 가벼운 인라인 영역 */}
-      {activeTool === 'mute' && (
-        <View style={[styles.muteInlineRow, { paddingBottom: insets.bottom || 16 }]}>
-          <Text allowFontScaling={false} style={styles.muteInlineLabel}>
-            이 클립 음소거
-          </Text>
-          <Switch
-            value={editingState.isMuted}
-            onValueChange={(value) => updateEditingClipState({ isMuted: value })}
-            trackColor={{ true: COLORS.accent, false: COLORS.gray200 }}
-          />
-        </View>
-      )}
-
       {/* Text/Position: 백드롭 + 아래에서 올라오는 시트 */}
-      {isSheetTool && (
+      {isSheetMounted && (
         <>
           <Pressable style={styles.backdrop} onPress={closeSheet} />
           <Animated.View
@@ -593,6 +831,13 @@ export default function VideoEditScreen() {
               styles.sheet,
               {
                 paddingBottom: insets.bottom || 16,
+                // 시트 상단이 프리뷰 하단과 정확히 맞닿도록, 화면 전체 높이에서
+                // 실측한 프리뷰 하단 위치를 뺀 만큼을 시트 높이로 쓰되, 프리뷰와
+                // 딱 붙지 않도록 3px 간격을 남깁니다.
+                height:
+                  previewBottomY !== null
+                    ? SCREEN_HEIGHT - previewBottomY - 5
+                    : undefined,
                 transform: [{ translateY: sheetTranslateY }],
               },
             ]}
@@ -610,78 +855,344 @@ export default function VideoEditScreen() {
               </TouchableOpacity>
             </View>
 
+            {/* 표시 / 스타일 서브탭 — 스크롤 영역 밖에 고정해서, 내용을 스크롤해도
+                안 움직이고 오른쪽 스크롤바도 이 아래부터만 표시됩니다. */}
+            {activeTool === 'text' && (
+              <View style={styles.sheetTabRow}>
+                <TouchableOpacity
+                  onPress={() => setSheetTab('display')}
+                  style={[
+                    styles.sheetTabButton,
+                    sheetTab === 'display' && styles.sheetTabButtonActive,
+                  ]}
+                >
+                  <Text
+                    allowFontScaling={false}
+                    style={[
+                      styles.sheetTabButtonText,
+                      sheetTab === 'display' &&
+                        styles.sheetTabButtonTextActive,
+                    ]}
+                  >
+                    표시
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => setSheetTab('style')}
+                  style={[
+                    styles.sheetTabButton,
+                    sheetTab === 'style' && styles.sheetTabButtonActive,
+                  ]}
+                >
+                  <Text
+                    allowFontScaling={false}
+                    style={[
+                      styles.sheetTabButtonText,
+                      sheetTab === 'style' &&
+                        styles.sheetTabButtonTextActive,
+                    ]}
+                  >
+                    스타일
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            <View style={styles.sheetScrollWrapper}>
+              <ScrollView
+                style={styles.sheetScroll}
+                contentContainerStyle={styles.sheetScrollContent}
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+                scrollEventThrottle={16}
+                onLayout={(e) =>
+                  setSheetScrollViewportHeight(e.nativeEvent.layout.height)
+                }
+                onContentSizeChange={(_w, h) => setSheetScrollContentHeight(h)}
+                onScroll={handleSheetScroll}
+              >
             {activeTool === 'text' && (
               <View>
-                <Text allowFontScaling={false} style={styles.sheetSectionLabel}>
-                  어떤 정보를 보여줄까요?
-                </Text>
-                <View style={styles.infoChipRow}>
-                  {INFO_CONTENT_OPTIONS.map((option) => {
-                    const isSelected = editingState.infoContentType === option.id;
-                    return (
+                {sheetTab === 'display' && (
+                  <View style={{ marginTop: 18 }}>
+                    <Text
+                      allowFontScaling={false}
+                      style={styles.sheetSectionLabel}
+                    >
+                      정보
+                    </Text>
+                    <View style={styles.infoChipRow}>
+                      {INFO_CONTENT_OPTIONS.map((option) => {
+                        const isSelected =
+                          editingState.infoContentType === option.id;
+                        return (
+                          <TouchableOpacity
+                            key={option.id}
+                            onPress={() =>
+                              // 이미 선택된 걸 다시 누르면 꺼짐(off). 모든 클립에 공통으로 적용됩니다.
+                              updateGlobalEditState({
+                                infoContentType:
+                                  editingState.infoContentType === option.id
+                                    ? null
+                                    : option.id,
+                              })
+                            }
+                            style={[
+                              styles.infoChip,
+                              isSelected && styles.infoChipSelected,
+                            ]}
+                          >
+                            <Text
+                              allowFontScaling={false}
+                              style={[
+                                styles.infoChipText,
+                                isSelected && styles.infoChipTextSelected,
+                              ]}
+                            >
+                              {option.label}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+
+                    <Text
+                      allowFontScaling={false}
+                      style={[styles.sheetSectionLabel, { marginTop: 20 }]}
+                    >
+                      정렬
+                    </Text>
+                    <View style={styles.alignChipRow}>
+                      {ALIGN_OPTIONS.map((align) => {
+                        const isSelected = editingState.textAlign === align.id;
+                        return (
+                          <TouchableOpacity
+                            key={align.id}
+                            onPress={() =>
+                              updateGlobalEditState({ textAlign: align.id })
+                            }
+                            style={[
+                              styles.alignChip,
+                              isSelected && styles.alignChipSelected,
+                            ]}
+                            accessibilityLabel={align.label}
+                          >
+                            {isSelected && (
+                              <View style={styles.fontChipCheckBadge}>
+                                <Ionicons
+                                  name="checkmark"
+                                  size={10}
+                                  color={COLORS.white}
+                                />
+                              </View>
+                            )}
+                            <MaterialCommunityIcons
+                              name={align.icon}
+                              size={18}
+                              color={isSelected ? COLORS.accent : COLORS.gray500}
+                            />
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </View>
+                )}
+
+                {sheetTab === 'style' && (
+                  <View style={{ marginTop: 18 }}>
+                    {/* 편집 대상 라디오 — 시간/장소를 하나만 보여줄 땐 고를 게
+                        없어서 숨깁니다. 프리뷰의 텍스트를 직접 탭해도 바뀝니다. */}
+                    {showTimeStyle && showPlaceStyle && (
+                      <View style={styles.styleTargetRadioRow}>
+                        {(
+                          [
+                            { id: 'time' as const, label: '시간' },
+                            { id: 'place' as const, label: '장소' },
+                          ]
+                        ).map((option) => {
+                          const isSelected = styleTarget === option.id;
+                          return (
+                            <TouchableOpacity
+                              key={option.id}
+                              style={styles.styleTargetRadioOption}
+                              onPress={() => setStyleTarget(option.id)}
+                            >
+                              <View
+                                style={[
+                                  styles.styleTargetRadioCircle,
+                                  isSelected &&
+                                    styles.styleTargetRadioCircleSelected,
+                                ]}
+                              >
+                                {isSelected && (
+                                  <View style={styles.styleTargetRadioDot} />
+                                )}
+                              </View>
+                              <Text
+                                allowFontScaling={false}
+                                style={[
+                                  styles.styleTargetRadioLabel,
+                                  isSelected &&
+                                    styles.styleTargetRadioLabelSelected,
+                                ]}
+                              >
+                                {option.label}
+                              </Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
+                    )}
+
+                    <Text
+                      allowFontScaling={false}
+                      style={styles.sheetSectionLabel}
+                    >
+                      글꼴 선택
+                    </Text>
+                    <View style={styles.fontSelectRow}>
                       <TouchableOpacity
-                        key={option.id}
+                        hitSlop={8}
                         onPress={() =>
-                          // 이미 선택된 걸 다시 누르면 꺼짐(off)
-                          updateEditingClipState({
-                            infoContentType:
-                              editingState.infoContentType === option.id
-                                ? null
-                                : option.id,
+                          updateTextElementStyle(effectiveStyleTarget, {
+                            bold: !currentTextStyle.bold,
                           })
                         }
                         style={[
-                          styles.infoChip,
-                          isSelected && styles.infoChipSelected,
+                          styles.boldToggleButton,
+                          currentTextStyle.bold && styles.boldToggleButtonActive,
                         ]}
                       >
                         <Text
                           allowFontScaling={false}
                           style={[
-                            styles.infoChipText,
-                            isSelected && styles.infoChipTextSelected,
+                            styles.boldToggleButtonText,
+                            currentTextStyle.bold &&
+                              styles.boldToggleButtonTextActive,
                           ]}
                         >
-                          {option.label}
+                          B
                         </Text>
                       </TouchableOpacity>
-                    );
-                  })}
-                </View>
+                      {/* 폰트가 늘어나도 볼드 버튼은 고정, 칩들만 가로 스크롤 */}
+                      <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        contentContainerStyle={styles.fontChipRow}
+                      >
+                        {FONT_OPTIONS.map((font) => {
+                          const isSelected =
+                            currentTextStyle.fontId === font.id;
+                          return (
+                            <TouchableOpacity
+                              key={font.id}
+                              onPress={() =>
+                                updateTextElementStyle(effectiveStyleTarget, {
+                                  fontId: font.id,
+                                })
+                              }
+                              style={[
+                                styles.fontChip,
+                                isSelected && styles.fontChipSelected,
+                              ]}
+                            >
+                              {isSelected && (
+                                <View style={styles.fontChipCheckBadge}>
+                                  <Ionicons
+                                    name="checkmark"
+                                    size={10}
+                                    color={COLORS.white}
+                                  />
+                                </View>
+                              )}
+                              <Text
+                                allowFontScaling={false}
+                                style={[
+                                  styles.fontChipText,
+                                  {
+                                    fontFamily: getFontFamily(
+                                      font.id,
+                                      currentTextStyle.bold,
+                                    ),
+                                  },
+                                  isSelected && styles.fontChipTextSelected,
+                                ]}
+                              >
+                                {font.label}
+                              </Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </ScrollView>
+                    </View>
 
-                <Text
-                  allowFontScaling={false}
-                  style={[styles.sheetSectionLabel, { marginTop: 20 }]}
-                >
-                  글꼴 선택
-                </Text>
-                <View style={styles.fontChipRow}>
-                  {FONT_OPTIONS.map((font) => {
-                    const isSelected = editingState.fontId === font.id;
-                    return (
+                    <Text
+                      allowFontScaling={false}
+                      style={[styles.sheetSectionLabel, { marginTop: 20 }]}
+                    >
+                      색상
+                    </Text>
+                    <View style={styles.colorSwatchRow}>
+                      {TEXT_COLOR_OPTIONS.map((color) => {
+                        const isSelected = currentTextStyle.color === color;
+                        return (
+                          <TouchableOpacity
+                            key={color}
+                            onPress={() =>
+                              updateTextElementStyle(effectiveStyleTarget, {
+                                color,
+                              })
+                            }
+                            style={[
+                              styles.colorSwatch,
+                              { backgroundColor: color },
+                              isSelected && styles.colorSwatchSelected,
+                            ]}
+                          />
+                        );
+                      })}
+                    </View>
+
+                    <Text
+                      allowFontScaling={false}
+                      style={[styles.sheetSectionLabel, { marginTop: 20 }]}
+                    >
+                      크기
+                    </Text>
+                    <View style={styles.sizeStepperRow}>
                       <TouchableOpacity
-                        key={font.id}
+                        style={styles.sizeStepButton}
                         onPress={() =>
-                          updateEditingClipState({ fontId: font.id })
+                          updateTextElementStyle(effectiveStyleTarget, {
+                            fontSize: clampFontSize(
+                              currentTextStyle.fontSize - 1,
+                            ),
+                          })
                         }
-                        style={[
-                          styles.fontChip,
-                          isSelected && styles.fontChipSelected,
-                        ]}
                       >
-                        <Text
-                          allowFontScaling={false}
-                          style={[
-                            styles.fontChipText,
-                            isSelected && styles.fontChipTextSelected,
-                          ]}
-                        >
-                          {font.label}
-                        </Text>
+                        <Ionicons name="remove" size={16} color={COLORS.black} />
                       </TouchableOpacity>
-                    );
-                  })}
-                </View>
+                      <Text
+                        allowFontScaling={false}
+                        style={styles.sizeValueText}
+                      >
+                        {currentTextStyle.fontSize}px
+                      </Text>
+                      <TouchableOpacity
+                        style={styles.sizeStepButton}
+                        onPress={() =>
+                          updateTextElementStyle(effectiveStyleTarget, {
+                            fontSize: clampFontSize(
+                              currentTextStyle.fontSize + 1,
+                            ),
+                          })
+                        }
+                      >
+                        <Ionicons name="add" size={16} color={COLORS.black} />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                )}
               </View>
             )}
 
@@ -697,7 +1208,7 @@ export default function VideoEditScreen() {
                       <TouchableOpacity
                         key={positionId}
                         onPress={() =>
-                          updateEditingClipState({ textPosition: positionId })
+                          updateGlobalEditState({ textPosition: positionId })
                         }
                         style={styles.positionGridCell}
                       >
@@ -713,6 +1224,22 @@ export default function VideoEditScreen() {
                 </View>
               </View>
             )}
+              </ScrollView>
+
+              {isSheetScrollable && (
+                <View style={styles.sheetScrollTrack} pointerEvents="none">
+                  <Animated.View
+                    style={[
+                      styles.sheetScrollThumb,
+                      {
+                        height: sheetScrollThumbHeight,
+                        transform: [{ translateY: sheetScrollThumbTranslateY }],
+                      },
+                    ]}
+                  />
+                </View>
+              )}
+            </View>
           </Animated.View>
         </>
       )}
@@ -753,22 +1280,6 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     justifyContent: 'center',
   },
-  headerTitleBlock: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  headerTitle: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: COLORS.black,
-  },
-  headerSubtitle: {
-    fontSize: 9,
-    fontWeight: '600',
-    letterSpacing: 1,
-    color: COLORS.gray500,
-    marginTop: 1,
-  },
   exportButton: {
     backgroundColor: COLORS.accent,
     paddingHorizontal: 16,
@@ -802,7 +1313,6 @@ const styles = StyleSheet.create({
   },
   infoOverlay: {
     position: 'absolute',
-    backgroundColor: 'rgba(0,0,0,0.4)',
     borderRadius: 10,
     paddingHorizontal: 10,
     paddingVertical: 6,
@@ -812,6 +1322,19 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 13,
     fontWeight: '600',
+  },
+  // 프리뷰의 시간/장소 텍스트를 감싸는 탭 영역. 지금 스타일 편집 중인
+  // 요소는 점선 테두리로 표시해서 어떤 걸 만지고 있는지 알 수 있게 합니다.
+  previewTextTapTarget: {
+    borderRadius: 4,
+    padding: 2,
+  },
+  previewTextTapTargetActive: {
+    borderRadius: 4,
+    padding: 2,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: COLORS.accent,
   },
   mutedBadge: {
     position: 'absolute',
@@ -966,48 +1489,65 @@ const styles = StyleSheet.create({
     color: COLORS.black,
   },
 
-  // 뮤트 인라인 영역 (백드롭 없음)
-  muteInlineRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    borderTopWidth: 1,
-    borderTopColor: COLORS.divider,
-    backgroundColor: COLORS.card,
-    paddingHorizontal: 20,
-    paddingTop: 14,
-  },
-  muteInlineLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: COLORS.black,
-  },
-
   // 백드롭 + 바텀시트 (Text/Position)
+  // 뒷배경을 반투명하게 덮지 않고, 시트 바깥을 탭하면 닫히는 투명한 탭 영역으로만 씁니다.
   backdrop: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.4)',
   },
+  // 배경(backgroundIvory)과 시트 색이 같아서, 테두리+그림자로 경계를 만듭니다.
   sheet: {
     position: 'absolute',
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: COLORS.card,
+    backgroundColor: COLORS.background, // backgroundIvory
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     paddingHorizontal: 20,
     paddingTop: 16,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 6,
   },
   sheetHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 18,
+    marginBottom: 12,
+  },
+  // 시트 높이가 고정이라(프리뷰 하단에 맞춤) 안의 내용이 넘칠 수 있어
+  // 스크롤 가능하게 감쌉니다. 헤더(제목+완료 버튼)는 이 밖에 있어서 안 움직여요.
+  sheetScrollWrapper: {
+    flex: 1,
+    flexDirection: 'row',
+  },
+  sheetScroll: {
+    flex: 1,
+  },
+  sheetScrollContent: {
+    paddingBottom: 12,
+    paddingRight: 10,
+  },
+  // 오른쪽에 떠 있는 커스텀 스크롤 바 — 네이티브 스크롤바는 색/두께를 바꿀 수
+  // 없어서 직접 그렸습니다. 스크롤할 내용이 있을 때만(isSheetScrollable) 보여요.
+  sheetScrollTrack: {
+    width: 3,
+    marginLeft: 4,
+    borderRadius: 2,
+  },
+  sheetScrollThumb: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    borderRadius: 2,
+    backgroundColor: COLORS.gray200, // 프리뷰 박스(previewWrapper)와 같은 색
   },
   sheetHeaderTitle: {
     fontSize: 15,
@@ -1028,6 +1568,146 @@ const styles = StyleSheet.create({
     color: COLORS.black,
     marginBottom: 10,
   },
+  // 볼드 버튼(고정)과 글꼴 칩 가로 스크롤을 한 줄에 배치
+  fontSelectRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  boldToggleButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: COLORS.gray200,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  boldToggleButtonActive: {
+    borderColor: COLORS.accent,
+    backgroundColor: COLORS.primarySoft,
+  },
+  boldToggleButtonText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.black,
+  },
+  boldToggleButtonTextActive: {
+    color: COLORS.accent,
+  },
+
+  // "표시 / 스타일" 서브탭 — 알약 모양 세그먼트 컨트롤
+  sheetTabRow: {
+    flexDirection: 'row',
+    alignSelf: 'center',
+    width: '90%',
+    backgroundColor: COLORS.gray200,
+    borderRadius: 10,
+    padding: 3,
+    gap: 3,
+  },
+  sheetTabButton: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  sheetTabButtonActive: {
+    backgroundColor: COLORS.background,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  sheetTabButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: COLORS.gray500,
+  },
+  sheetTabButtonTextActive: {
+    color: COLORS.black,
+  },
+
+  // 지금 스타일 편집 중인 대상(시간/장소) 안내 배지 — 탭이 아니라 정보 표시용.
+  // 실제 대상 변경은 프리뷰의 텍스트를 직접 탭해서 합니다.
+  // 시간/장소 중 지금 스타일 편집 대상을 고르는 라디오 버튼.
+  styleTargetRadioRow: {
+    flexDirection: 'row',
+    gap: 20,
+    marginBottom: 18,
+  },
+  styleTargetRadioOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  styleTargetRadioCircle: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 1.5,
+    borderColor: COLORS.gray500,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  styleTargetRadioCircleSelected: {
+    borderColor: COLORS.accent,
+  },
+  styleTargetRadioDot: {
+    width: 9,
+    height: 9,
+    borderRadius: 4.5,
+    backgroundColor: COLORS.accent,
+  },
+  styleTargetRadioLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: COLORS.gray500,
+  },
+  styleTargetRadioLabelSelected: {
+    color: COLORS.black,
+  },
+
+  colorSwatchRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  colorSwatch: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 2,
+    borderColor: COLORS.divider,
+  },
+  colorSwatchSelected: {
+    borderColor: COLORS.accent,
+  },
+
+  sizeStepperRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+  },
+  sizeStepButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 9,
+    borderWidth: 1,
+    borderColor: COLORS.divider,
+    backgroundColor: COLORS.background,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sizeValueText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: COLORS.black,
+    minWidth: 40,
+    textAlign: 'center',
+    fontVariant: ['tabular-nums'],
+  },
 
   infoChipRow: {
     flexDirection: 'row',
@@ -1036,11 +1716,14 @@ const styles = StyleSheet.create({
   infoChip: {
     paddingHorizontal: 14,
     paddingVertical: 9,
-    borderRadius: 18,
-    backgroundColor: COLORS.gray200,
+    borderRadius: 9, 
+    backgroundColor: COLORS.background, // 바텀시트와 같은 색
+    borderWidth: 1,
+    borderColor: COLORS.divider,
   },
   infoChipSelected: {
-    backgroundColor: COLORS.accent,
+    backgroundColor: COLORS.primarySoft,
+    borderColor: COLORS.accent,
   },
   infoChipText: {
     fontSize: 13,
@@ -1049,22 +1732,60 @@ const styles = StyleSheet.create({
   infoChipTextSelected: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: COLORS.accent,
   },
 
-  fontChipRow: {
+  alignChipRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
   },
+  // 글꼴 칩과 같은 테두리/선택 스타일이지만, 텍스트 대신 아이콘 하나만 담는
+  // 정사각형에 가까운 버튼이라 크기를 따로 둡니다.
+  alignChip: {
+    width: 44,
+    height: 40,
+    borderRadius: 9,
+    backgroundColor: COLORS.background,
+    borderWidth: 1,
+    borderColor: COLORS.divider,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative', // 체크 배지 위치 기준
+  },
+  alignChipSelected: {
+    borderColor: COLORS.accent,
+  },
+  fontChipRow: {
+    flexDirection: 'row',
+    gap: 8,
+    // 체크 배지가 칩 위/오른쪽으로 살짝 튀어나오는 만큼(top/right: -6) 여백을 줘서
+    // 가로 스크롤뷰 안에서 잘리지 않게 함
+    paddingTop: 6,
+    paddingRight: 10,
+  },
   fontChip: {
     paddingHorizontal: 14,
     paddingVertical: 9,
-    borderRadius: 18,
-    backgroundColor: COLORS.gray200,
+    borderRadius: 9, // 프리뷰 박스와 같은 둥근 정도
+    backgroundColor: COLORS.background, // 바텀시트와 같은 색
+    borderWidth: 1,
+    borderColor: COLORS.divider,
+    position: 'relative', // 체크 배지 위치 기준
   },
   fontChipSelected: {
-    backgroundColor: COLORS.black,
+    borderColor: COLORS.accent,
+  },
+  fontChipCheckBadge: {
+    position: 'absolute',
+    top: -6,
+    right: -6,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.accent,
   },
   fontChipText: {
     fontSize: 13,
@@ -1073,7 +1794,7 @@ const styles = StyleSheet.create({
   fontChipTextSelected: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: COLORS.black,
   },
 
   positionGridWrapper: {
