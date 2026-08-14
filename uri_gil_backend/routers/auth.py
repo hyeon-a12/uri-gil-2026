@@ -5,8 +5,20 @@ from database import get_db
 from models import User
 from schemas import UserCreate, UserLogin, UserResponse
 import bcrypt
+from fastapi.security import OAuth2PasswordBearer
+from jose import jwt, JWTError
+from datetime import datetime, timedelta, timezone
+import os
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+SECRET_KEY = os.getenv("JWT_SECRET_KEY", "임시로컬용시크릿키-반드시Railway환경변수로교체")
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7일
+
+def create_access_token(user_id: int):
+    expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    payload = {"sub": str(user_id), "exp": expire}
+    return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
 # 회원가입
 @router.post("/register", response_model=UserResponse)
@@ -42,4 +54,10 @@ def login(user: UserLogin, db: Session = Depends(get_db)):
     if not bcrypt.checkpw(user.password.encode("utf-8"), db_user.password.encode("utf-8")):
         raise HTTPException(status_code=401, detail="이메일 또는 비밀번호가 틀렸습니다")
 
-    return {"message": "로그인 성공", "user_id": db_user.id, "nickname": db_user.nickname}
+    token = create_access_token(db_user.id)
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "user_id": db_user.id,
+        "nickname": db_user.nickname,
+    }
