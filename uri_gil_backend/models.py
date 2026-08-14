@@ -18,6 +18,7 @@ class Route(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     title = Column(String, nullable=False)
+    region = Column(String)
     theme = Column(String)
     description = Column(Text)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))

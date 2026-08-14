@@ -24,6 +24,7 @@ class UserResponse(BaseModel):
 # ========== 여정 ==========
 class RouteCreate(BaseModel):
     title: str
+    region: Optional[str] = None
     theme: Optional[str] = None
     description: Optional[str] = None
 
@@ -31,6 +32,7 @@ class RouteResponse(BaseModel):
     id: int
     user_id: int
     title: str
+    region: Optional[str]
     theme: Optional[str]
     description: Optional[str]
     created_at: datetime
