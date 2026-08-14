@@ -15,6 +15,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import Svg, { Rect, Line, Circle, Path } from 'react-native-svg';
 import type { ShootingStyleId, GridTemplateId } from '@/services/folderService';
+import { COLORS as SHARED_COLORS } from '@/constants/color';
 
 /**
  * ─────────────────────────────────────────────────────────────
@@ -23,19 +24,20 @@ import type { ShootingStyleId, GridTemplateId } from '@/services/folderService';
  * 단색 #FF7F5C 버튼으로 통일하고 싶으시면
  * GRADIENT 배열을 안 쓰고 backgroundColor: COLORS.accent 하나로 바꾸시면 됩니다
  * (아래 PrimaryButton 컴포넌트 안에 분기 처리해뒀어요).
+ * 팔레트 v1에서 이 그라데이션은 공식적으로 사용 허용됐습니다.
  */
 const COLORS = {
-  accent: '#FF7F5C',
-  accentDark: '#E8663F',
+  accent: SHARED_COLORS.accent,
+  accentDark: SHARED_COLORS.accentPressed,
   dark: '#1E2128',
-  black: '#222222',
-  gray500: '#8A8A8A',
-  gray400: '#8A8A8A',
-  gray200: '#DDDDDD',
-  gray100: '#F5F5F5',
-  white: '#FFFFFF',
+  black: SHARED_COLORS.textPrimary,
+  gray500: SHARED_COLORS.textSecondary,
+  gray400: SHARED_COLORS.textSecondary,
+  gray200: SHARED_COLORS.border,
+  gray100: SHARED_COLORS.surface,
+  white: SHARED_COLORS.background,
 };
-const GRADIENT: [string, string] = ['#FFC364', '#FF7F5C'];
+const GRADIENT: [string, string] = [SHARED_COLORS.gradientStart, SHARED_COLORS.accent];
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 

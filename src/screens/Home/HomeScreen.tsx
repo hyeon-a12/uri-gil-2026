@@ -20,16 +20,17 @@ import { TripSelector } from '@/components/common';
 import { useTripStore } from '@/store/useTripStore';
 import { getRecordingsByFolder } from '@/services/recordingService';
 import type { RecordingData } from '@/types/recording';
+import { COLORS as SHARED_COLORS } from '@/constants/color';
 
 const COLORS = {
-  accent: '#FF7F5C', // Point/Accent — 메인 CTA, 강조 액션
-  accentTint: '#FFF3DF', // 프로모션 배지, 태그 배경
-  surface: '#F5F5F5', // 카드/섹션 구분용 연한 회색 배경
-  white: '#FFFFFF', // 앱 전체 배경
-  textPrimary: '#222222',
-  textSecondary: '#8A8A8A',
-  border: '#DDDDDD',
-  record: '#E14D3F',
+  accent: SHARED_COLORS.accent, // Point/Accent — 메인 CTA, 강조 액션
+  accentTint: SHARED_COLORS.main, // 프로모션 배지, 태그 배경
+  surface: SHARED_COLORS.surface, // 카드/섹션 구분용 연한 회색 배경
+  white: SHARED_COLORS.background, // 앱 전체 배경
+  textPrimary: SHARED_COLORS.textPrimary,
+  textSecondary: SHARED_COLORS.textSecondary,
+  border: SHARED_COLORS.border,
+  record: SHARED_COLORS.danger,
 };
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');

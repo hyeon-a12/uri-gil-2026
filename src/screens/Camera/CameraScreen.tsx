@@ -24,6 +24,7 @@ import { navigateToLocationConfirm } from '@/navigation/recordingNavigation';
 import { useTripStore } from '@/store/useTripStore';
 import { type ShootingStyleId } from '@/services/folderService';
 import CameraChangeIcon from '@/assets/images/camera_change.svg';
+import { COLORS as SHARED_COLORS } from '@/constants/color';
 
 const MAX_CLIPS = 15;
 const DEFAULT_CLIP_SECONDS = 10;
@@ -47,13 +48,14 @@ const SHUTTER_RING_OFFSET_X = (SHUTTER_BUTTON_WIDTH - SHUTTER_RING_SIZE) / 2;
 const SHUTTER_RING_CIRCUMFERENCE = 2 * Math.PI * SHUTTER_RING_RADIUS;
 
 const COLORS = {
-  accent: '#FF7F5C',
-  white: '#FFFFFF',
-  black: '#222222',
+  accent: SHARED_COLORS.accent,
+  white: SHARED_COLORS.background,
+  black: SHARED_COLORS.textPrimary,
+  backgroundIvory: SHARED_COLORS.backgroundIvory,
   gridLine: 'rgba(255,255,255,0.45)',
   ring: 'rgba(255,255,255,0.4)',
   pillBg: 'var(--placeholder)', // 아래 실제 스타일에서 rgba로 대체
-  textSecondary: '#8A8A8A',
+  textSecondary: SHARED_COLORS.textSecondary,
 };
 
 // 0.5×는 selectedLens로 초광각 렌즈("Back Ultra Wide Camera")로 물리적으로
@@ -505,7 +507,7 @@ export default function CameraScreen() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#FAF8F1',
+    backgroundColor: COLORS.backgroundIvory,
   },
 
   // 상단 안전영역 아래 남는 공간 전체를 차지하면서, 그 안에서 previewWrapper를
@@ -629,7 +631,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 28,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FAF8F1',
+    backgroundColor: COLORS.backgroundIvory,
   },
   permissionIconContainer: {
     width: 76,

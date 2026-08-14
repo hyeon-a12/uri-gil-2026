@@ -1,54 +1,154 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
   Image,
   ScrollView,
   TouchableOpacity,
+  Pressable,
+  Switch,
+  Animated,
   StyleSheet,
   Dimensions,
   Alert,
-  ViewStyle,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { COLORS as SHARED_COLORS } from '@/constants/color';
 
 const COLORS = {
-  background: '#FAF8F1',
-  card: '#FFFFFF',
-  white: '#FFFFFF',
-  accent: '#FF7F5C',
-  black: '#222222',
-  gray500: '#8A8A8A',
-  gray200: '#EDEAE2',
-  divider: '#E4E0D2',
+  background: SHARED_COLORS.backgroundIvory,
+  card: SHARED_COLORS.background,
+  white: SHARED_COLORS.background,
+  accent: SHARED_COLORS.accent,
+  black: SHARED_COLORS.textPrimary,
+  gray500: SHARED_COLORS.textSecondary,
+  gray200: SHARED_COLORS.borderIvory,
+  divider: SHARED_COLORS.borderIvory,
 };
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const PREVIEW_HORIZONTAL_MARGIN = 40;
 const PREVIEW_WIDTH = SCREEN_WIDTH - PREVIEW_HORIZONTAL_MARGIN * 2;
 
+// ── 클립 데이터 ──────────────────────────────────────────────
 interface EditableClip {
   id: string;
   thumbnailUri?: string;
-  videoUri?: string; // 실제 재생 가능한 영상 경로. mock 데이터엔 없어서 재생 버튼이 비활성화됩니다.
-  placeName?: string; // 촬영 장소명 (LocationConfirmScreen에서 저장된 값)
-  recordedAt?: string; // ISO 문자열
+  videoUri?: string; // mock엔 없어서 재생 버튼이 비활성화됩니다.
+  placeName?: string;
+  recordedAt?: string; // ISO
+  durationSeconds: number;
 }
 
 // TODO: 클립 관리 화면에서 넘어온 실제 클립 목록(순서 포함)으로 교체
 const MOCK_CLIPS: EditableClip[] = [
-  { id: '1', placeName: '전주 한옥마을', recordedAt: '2026-07-24T14:30:00' },
-  { id: '2', placeName: '전주 남부시장', recordedAt: '2026-07-24T15:05:00' },
-  { id: '3', placeName: '전주 방수 맛집', recordedAt: '2026-07-24T17:20:00' },
+  {
+    id: '1',
+    placeName: '전주 한옥마을',
+    recordedAt: '2026-07-24T14:30:00',
+    durationSeconds: 6,
+  },
+  {
+    id: '2',
+    placeName: '전주 남부시장',
+    recordedAt: '2026-07-24T15:05:00',
+    durationSeconds: 8,
+  },
+  {
+    id: '3',
+    placeName: '전주 방수 맛집',
+    recordedAt: '2026-07-24T17:20:00',
+    durationSeconds: 5,
+  },
 ];
 
-/** 선택된 정보 조합(위치/시간/위치+시간)에 맞춰 실제 표시 문자열을 만들어요.
- * 사용자가 직접 입력하는 값이 아니라 클립 메타데이터를 그대로 조합한
- * 거라, 이 함수 하나만 클립 데이터 형태가 바뀔 때 고치면 나머지는
- * 안 건드려도 됩니다. */
+// ── 도구바 ───────────────────────────────────────────────────
+type ToolId = 'text' | 'position' | 'mute';
+
+const TOOLS: { id: ToolId; label: string; icon: keyof typeof Ionicons.glyphMap }[] =
+  [
+
+    { id: 'text', label: '정보', icon: 'text-outline' },
+    { id: 'position', label: '위치', icon: 'move-outline' },
+    { id: 'mute', label: '음소거', icon: 'volume-high-outline' },
+  ];
+
+// "Aa" 도구 = 자유 텍스트가 아니라, 클립에 이미 있는 정보(장소/시간) 중
+// 뭘 보여줄지 고르는 도구예요.
+type InfoContentType = 'location' | 'time' | 'both';
+
+const INFO_CONTENT_OPTIONS: { id: InfoContentType; label: string }[] = [
+  { id: 'location', label: '위치' },
+  { id: 'time', label: '시간' },
+  { id: 'both', label: '위치 + 시간' },
+];
+
+type FontId = 'handwriting' | 'baemin' | 'myeongjo';
+
+const FONT_OPTIONS: { id: FontId; label: string }[] = [
+  { id: 'handwriting', label: '손글씨체' },
+  { id: 'baemin', label: '배민체' },
+  { id: 'myeongjo', label: '조선명조체' },
+];
+
+// 3×3 그리드. 화면에 그릴 때도 이 순서 그대로 3개씩 끊어서 3행으로 배치해요.
+type TextPosition =
+  | 'topLeft'
+  | 'topCenter'
+  | 'topRight'
+  | 'middleLeft'
+  | 'center'
+  | 'middleRight'
+  | 'bottomLeft'
+  | 'bottomCenter'
+  | 'bottomRight';
+
+const TEXT_POSITION_GRID: TextPosition[] = [
+  'topLeft',
+  'topCenter',
+  'topRight',
+  'middleLeft',
+  'center',
+  'middleRight',
+  'bottomLeft',
+  'bottomCenter',
+  'bottomRight',
+];
+
+const DEFAULT_TEXT_POSITION: TextPosition = 'bottomLeft';
+
+// ── 클립별 편집 상태 ─────────────────────────────────────────
+// 예전엔 텍스트/위치/폰트/음소거를 화면 전체에서 하나로 관리했는데,
+// 그러면 클립 1에 텍스트를 넣었을 때 클립 2에도 똑같이 보이는 버그가
+// 생겨요. 그래서 clipId를 키로 쓰는 객체로 바꿔서, 클립마다 독립적인
+// 설정을 갖게 했습니다.
+interface ClipEditState {
+  infoContentType: InfoContentType | null;
+  textPosition: TextPosition;
+  fontId: FontId;
+  isMuted: boolean;
+}
+
+const DEFAULT_CLIP_EDIT_STATE: ClipEditState = {
+  infoContentType: null,
+  textPosition: DEFAULT_TEXT_POSITION,
+  fontId: 'handwriting',
+  isMuted: false,
+};
+
+function isDefaultEditState(state: ClipEditState): boolean {
+  return (
+    state.infoContentType === DEFAULT_CLIP_EDIT_STATE.infoContentType &&
+    state.textPosition === DEFAULT_CLIP_EDIT_STATE.textPosition &&
+    state.fontId === DEFAULT_CLIP_EDIT_STATE.fontId &&
+    state.isMuted === DEFAULT_CLIP_EDIT_STATE.isMuted
+  );
+}
+
+/** 선택된 정보 조합(위치/시간/위치+시간)에 맞춰 실제 표시 문자열을 만들어요. */
 function formatClipInfo(
   clip: EditableClip | null,
   contentType: InfoContentType,
@@ -74,92 +174,83 @@ function formatClipInfo(
   }
 }
 
-type ToolId = 'text' | 'position' | 'mute';
-
-const TOOLS: { id: ToolId; label: string; icon: keyof typeof Ionicons.glyphMap }[] =
-  [
-    { id: 'text', label: 'Text', icon: 'text-outline' },
-    { id: 'position', label: '위치', icon: 'move-outline' },
-    { id: 'mute', label: 'Mute', icon: 'volume-high-outline' },
-  ];
-
-// "Aa" 도구가 실제로 하는 일: 자유 텍스트 입력이 아니라, 클립에 이미
-// 있는 정보(장소명/촬영 시각) 중 뭘 화면에 배지로 보여줄지 고르는
-// 거예요. 그래서 사용자가 직접 타이핑할 값이 아니라, 클립 데이터에서
-// 그대로 끌어와 조합만 하면 됩니다.
-type InfoContentType = 'location' | 'time' | 'both';
-
-const INFO_CONTENT_OPTIONS: { id: InfoContentType; label: string }[] = [
-  { id: 'location', label: '위치' },
-  { id: 'time', label: '시간' },
-  { id: 'both', label: '위치 + 시간' },
-];
-
-type TextPosition = 'topLeft' | 'topRight' | 'bottomLeft' | 'bottomRight' | 'center';
-
-const DEFAULT_TEXT_POSITION: TextPosition = 'bottomLeft';
-
-const TEXT_POSITION_OPTIONS: { id: TextPosition; label: string }[] = [
-  { id: 'topLeft', label: '왼쪽 위' },
-  { id: 'topRight', label: '오른쪽 위' },
-  { id: 'center', label: '가운데' },
-  { id: 'bottomLeft', label: '왼쪽 아래' },
-  { id: 'bottomRight', label: '오른쪽 아래' },
-];
-
-// 미니 프레임(positionFrame) 안에서 각 위치가 정확히 어디에 앉을지.
-// StyleSheet.create 밖에 따로 둔 이유는, 이 값들이 TEXT_POSITION_OPTIONS의
-// id를 키로 쓰는 "매핑 테이블"이라 순수 스타일이라기보단 데이터에 가까워서예요.
-//
-// center는 top/left를 50%로 주는 것만으론 안 돼요 — 그러면 spot의
-// "왼쪽 위 모서리"가 프레임 정중앙에 오지, spot 자체가 정중앙에 오는 게
-// 아니거든요. spot 크기(POSITION_SPOT_SIZE)의 절반만큼 음수 margin으로
-// 당겨줘야 진짜 중앙에 옵니다. RN은 transform에 '%'를 못 써서(퍼센트
-// translate 미지원) margin으로 우회했어요.
-const POSITION_SPOT_SIZE = 32;
-const POSITION_SPOT_STYLE: Record<TextPosition, ViewStyle> = {
-  topLeft: { top: 10, left: 10 },
-  topRight: { top: 10, right: 10 },
-  center: {
-    top: '50%',
-    left: '50%',
-    marginTop: -POSITION_SPOT_SIZE / 2,
-    marginLeft: -POSITION_SPOT_SIZE / 2,
-  },
-  bottomLeft: { bottom: 10, left: 10 },
-  bottomRight: { bottom: 10, right: 10 },
-};
+function formatTimer(seconds: number) {
+  const m = Math.floor(seconds / 60);
+  const s = Math.round(seconds % 60);
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
 
 export default function VideoEditScreen() {
   const insets = useSafeAreaInsets();
 
   const [clips] = useState<EditableClip[]>(MOCK_CLIPS);
+  const totalDurationSeconds = useMemo(
+    () => clips.reduce((sum, c) => sum + c.durationSeconds, 0),
+    [clips],
+  );
 
-  // ── 편집 대상 클립 (타임라인 탭으로 바뀜) ──────────────────────
-  // 정지 상태의 프리뷰가 이 클립을 따라가고(위 프리뷰 렌더링 참고),
-  // "전체 재생" 여부와는 별개로 관리돼요 — 재생 중엔 재생 위치가
-  // 우선이고, 재생이 멈추면 다시 이 클립이 프리뷰에 보입니다.
+  // 눈금 간격은 전체 길이에 맞춰 자동으로 성깁니다 — 짧은 영상은 1초마다,
+  // 길어질수록 5초/10초 단위로 넘어가서 눈금이 서로 겹치지 않게 해요.
+  const rulerStepSeconds =
+    totalDurationSeconds > 60 ? 10 : totalDurationSeconds > 20 ? 5 : 1;
+  const rulerTicks = useMemo(() => {
+    const ticks: number[] = [];
+    for (let s = 0; s <= totalDurationSeconds; s += rulerStepSeconds) {
+      ticks.push(s);
+    }
+    return ticks;
+  }, [totalDurationSeconds, rulerStepSeconds]);
+
   const [editingClipId, setEditingClipId] = useState<string | null>(
     clips[0]?.id ?? null,
   );
   const editingClip = clips.find((c) => c.id === editingClipId) ?? null;
 
-  // ── 전체 재생 (프리뷰 아래 재생 버튼) ──────────────────────────
-  // 클립들을 순서대로 이어붙여 재생하는 상태예요. expo-video 플레이어
-  // 하나로, 클립이 끝날 때마다 다음 클립의 videoUri로 소스를 교체하는
-  // 방식입니다(서버에서 실제로 합쳐진 파일을 만드는 게 아니라, 클라이언트
-  // 에서 순서대로 이어 트는 방식 — MVP 단계에선 이걸로 충분해요).
+  const [editStates, setEditStates] = useState<Record<string, ClipEditState>>(
+    {},
+  );
+
+  function getEditState(clipId: string | null): ClipEditState {
+    if (!clipId) return DEFAULT_CLIP_EDIT_STATE;
+    return editStates[clipId] ?? DEFAULT_CLIP_EDIT_STATE;
+  }
+
+  function updateEditingClipState(patch: Partial<ClipEditState>) {
+    if (!editingClipId) return;
+    setEditStates((prev) => ({
+      ...prev,
+      [editingClipId]: {
+        ...getEditState(editingClipId),
+        ...patch,
+      },
+    }));
+  }
+
+  const editingState = getEditState(editingClipId);
+
+  const hasUnsavedChanges = Object.values(editStates).some(
+    (state) => !isDefaultEditState(state),
+  );
+
+  // ── 재생 ────────────────────────────────────────────────
+  // 클립이 선택돼 있으면(editingClipId) 그 클립 하나만 재생하고 끝나면 멈춰요.
+  // 선택된 클립이 없으면 전체 클립을 이어서(playIndex 순서대로) 재생합니다.
   const [playIndex, setPlayIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
+
+  const playingClip = editingClipId ? editingClip : clips[playIndex] ?? null;
 
   const player = useVideoPlayer(clips[playIndex]?.videoUri ?? null, (p) => {
     p.loop = false;
   });
 
-  // 클립 하나 재생이 끝나면 다음 클립으로. 마지막 클립까지 다 재생되면
-  // 처음(0번)으로 되돌리고 재생 상태를 끕니다.
   useEffect(() => {
     const subscription = player.addListener('playToEnd', () => {
+      if (editingClipId) {
+        // 단일 클립 모드: 다음 클립으로 안 넘어가고 그냥 멈춥니다.
+        setIsPlaying(false);
+        return;
+      }
       setPlayIndex((prevIndex) => {
         const nextIndex = prevIndex + 1;
         if (nextIndex < clips.length) {
@@ -170,54 +261,72 @@ export default function VideoEditScreen() {
       });
     });
     return () => subscription.remove();
-  }, [player, clips.length]);
+  }, [player, clips.length, editingClipId]);
 
-  // playIndex나 isPlaying이 바뀔 때마다 실제 플레이어에 반영.
   useEffect(() => {
-    const nextUri = clips[playIndex]?.videoUri;
-    if (!nextUri) return;
+    if (!playingClip?.videoUri) return;
 
     if (isPlaying) {
-      player.replace(nextUri);
+      // 재생 중인 클립이 음소거 설정돼 있으면 반영합니다.
+      player.muted = getEditState(playingClip.id).isMuted;
+      player.replace(playingClip.videoUri);
       player.play();
     } else {
       player.pause();
     }
-  }, [playIndex, isPlaying, clips, player]);
-
-  const [activeTool, setActiveTool] = useState<ToolId | null>(null);
-  const [isMuted, setIsMuted] = useState(false);
-  const [textPosition, setTextPosition] = useState<TextPosition>(
-    DEFAULT_TEXT_POSITION,
-  );
-  // null = 아직 아무것도 안 골라서 정보 배지 자체가 꺼져있는 상태.
-  const [infoContentType, setInfoContentType] =
-    useState<InfoContentType | null>(null);
-
-  const hasUnsavedChanges =
-    isMuted ||
-    textPosition !== DEFAULT_TEXT_POSITION ||
-    infoContentType !== null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playingClip, isPlaying, player]);
 
   const hasPlayableClips = clips.some((c) => !!c.videoUri);
 
   function handlePlayPress() {
-    if (!hasPlayableClips) return; // mock 데이터엔 실제 영상이 없어서 재생 불가
-
+    if (!hasPlayableClips) return;
     if (isPlaying) {
       setIsPlaying(false);
       return;
     }
-    // 처음부터 다시 재생 (재생 중 멈췄다가 이어보는 기능은 이번 범위 밖)
-    setPlayIndex(0);
+    if (!editingClipId) {
+      setPlayIndex(0);
+    }
     setIsPlaying(true);
   }
 
-  function handleToolPress(toolId: ToolId) {
-    if (toolId === 'mute') {
-      setIsMuted((prev) => !prev);
-      return;
+  // 클립 타일을 다시 누르거나(선택 해제) 클립 영역 바깥을 누르면 선택을
+  // 취소하고, 재생 모드도 전체 재생으로 되돌립니다.
+  function deselectClip() {
+    if (!editingClipId) return;
+    setEditingClipId(null);
+    setIsPlaying(false);
+  }
+
+  // ── 도구 패널 ────────────────────────────────────────────
+  const [activeTool, setActiveTool] = useState<ToolId | null>(null);
+
+  // Text/Position 패널은 백드롭 + 아래에서 올라오는 시트예요.
+  // Mute는 그런 "화면"이 아니라 바로 토글되는 가벼운 동작이라
+  // sheetTranslateY 애니메이션 대상에서 제외했습니다.
+  const isSheetTool = activeTool === 'text' || activeTool === 'position';
+  const sheetTranslateY = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
+
+  useEffect(() => {
+    if (isSheetTool) {
+      Animated.spring(sheetTranslateY, {
+        toValue: 0,
+        useNativeDriver: true,
+        bounciness: 4,
+      }).start();
+    } else {
+      sheetTranslateY.setValue(SCREEN_HEIGHT);
     }
+  }, [isSheetTool, sheetTranslateY]);
+
+  function closeSheet() {
+    setActiveTool(null);
+  }
+
+  function handleToolPress(toolId: ToolId) {
+    // 버튼을 누르면 켜져있던 값을 바로 뒤집는 게 아니라, 다른 도구들처럼
+    // 선택 영역(뮤트는 스위치)을 열어서 사용자가 직접 켜고 끄게 합니다.
     setActiveTool((prev) => (prev === toolId ? null : toolId));
   }
 
@@ -226,7 +335,6 @@ export default function VideoEditScreen() {
       router.back();
       return;
     }
-
     Alert.alert(
       '편집 내용이 사라져요',
       '지금 나가면 텍스트·위치·음소거 설정이 저장되지 않아요. 그래도 나가시겠어요?',
@@ -238,7 +346,8 @@ export default function VideoEditScreen() {
   }
 
   function handleExport() {
-    // TODO: 텍스트/위치/음소거 설정을 반영해서 실제 내보내기(기기 저장) 로직 연결
+    // TODO: editStates(클립별 텍스트/위치/폰트/음소거)를 반영해서
+    // 실제 내보내기(기기 저장) 로직 연결
   }
 
   return (
@@ -253,9 +362,14 @@ export default function VideoEditScreen() {
           <Ionicons name="chevron-back" size={22} color={COLORS.black} />
         </TouchableOpacity>
 
-        <Text allowFontScaling={false} style={styles.headerTitle}>
-          Uri-Gil
-        </Text>
+        <View style={styles.headerTitleBlock}>
+          <Text allowFontScaling={false} style={styles.headerTitle}>
+            Uri-Gil
+          </Text>
+          <Text allowFontScaling={false} style={styles.headerSubtitle}>
+            VIDEO EDITOR
+          </Text>
+        </View>
 
         <TouchableOpacity
           style={styles.exportButton}
@@ -268,12 +382,9 @@ export default function VideoEditScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* 프리뷰: 재생 중일 땐 이어붙인 전체 영상, 그 외엔 "지금 편집
-          중인 클립"(editingClipId)의 프레임을 보여줘요. 텍스트를 어느
-          클립에 넣는지 눈으로 보면서 작업해야 하니까, 타임라인에서
-          편집 대상을 바꾸면 여기도 같이 바뀌는 게 맞아요. */}
-      <View style={styles.previewWrapper}>
-        {isPlaying && clips[playIndex]?.videoUri ? (
+      {/* 프리뷰 — 빈 배경을 탭하면 선택된 클립을 해제합니다 */}
+      <Pressable style={styles.previewWrapper} onPress={deselectClip}>
+        {isPlaying && playingClip?.videoUri ? (
           <VideoView
             player={player}
             style={styles.previewImage}
@@ -291,16 +402,28 @@ export default function VideoEditScreen() {
           </View>
         )}
 
-        {isMuted && (
+        {/* 편집 대상 클립에 실제로 설정된 정보 배지 미리보기 */}
+        {editingState.infoContentType && (
+          <View
+            pointerEvents="none"
+            style={[
+              styles.infoOverlay,
+              TEXT_POSITION_STYLE[editingState.textPosition],
+            ]}
+          >
+            <Text allowFontScaling={false} style={styles.infoOverlayText}>
+              {formatClipInfo(editingClip, editingState.infoContentType)}
+            </Text>
+          </View>
+        )}
+
+        {editingState.isMuted && (
           <View style={styles.mutedBadge}>
             <Ionicons name="volume-mute" size={14} color={COLORS.white} />
           </View>
         )}
-      </View>
+      </Pressable>
 
-      {/* 재생 버튼: 프리뷰 "아래"에 별도로 둡니다 — 프리뷰 안에 얹으면
-          "탭한 위치가 재생 버튼인지 클립 선택인지" 헷갈릴 수 있어서,
-          역할을 공간적으로도 분리했어요. */}
       <TouchableOpacity
         style={[styles.playButton, !hasPlayableClips && { opacity: 0.4 }]}
         onPress={handlePlayPress}
@@ -309,15 +432,36 @@ export default function VideoEditScreen() {
       >
         <Ionicons
           name={isPlaying ? 'pause' : 'play'}
-          size={16}
-          color={COLORS.black}
+          size={20}
+          color={COLORS.accent}
         />
-        <Text allowFontScaling={false} style={styles.playButtonText}>
-          {isPlaying ? '일시정지' : '전체 재생'}
-        </Text>
       </TouchableOpacity>
 
-      {/* 클립 타임라인: 탭하면 "편집 대상"만 바뀝니다 (프리뷰/재생과 무관) */}
+      {/* 시간 표시 — 빈 배경을 탭하면 선택된 클립을 해제합니다 */}
+      <Pressable style={styles.timeRow} onPress={deselectClip}>
+        <Text allowFontScaling={false} style={styles.timeLabel}>
+          00:00
+        </Text>
+        <Text allowFontScaling={false} style={styles.timeLabel}>
+          {formatTimer(totalDurationSeconds)}
+        </Text>
+      </Pressable>
+
+      {/* 타임 룰러 — 빈 배경을 탭하면 선택된 클립을 해제합니다 */}
+      <Pressable style={styles.rulerRow} onPress={deselectClip}>
+        {rulerTicks.map((second) => {
+          const isMajor = rulerStepSeconds >= 5 || second % 5 === 0;
+          return (
+            <View key={second} style={styles.rulerTickWrapper}>
+              <View
+                style={[styles.rulerTick, isMajor && styles.rulerTickMajor]}
+              />
+            </View>
+          );
+        })}
+      </Pressable>
+
+      {/* 클립 타임라인 */}
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -325,57 +469,65 @@ export default function VideoEditScreen() {
       >
         {clips.map((clip, index) => {
           const isEditing = clip.id === editingClipId;
-          const isCurrentlyPlaying = isPlaying && index === playIndex;
+          const isCurrentlyPlaying = isPlaying && playingClip?.id === clip.id;
+          const clipState = getEditState(clip.id);
 
           return (
-            <React.Fragment key={clip.id}>
-              <TouchableOpacity
-                onPress={() => setEditingClipId(clip.id)}
-                style={[
-                  styles.timelineTile,
-                  isEditing && styles.timelineTileEditing,
-                ]}
-                activeOpacity={0.85}
-              >
-                {clip.thumbnailUri ? (
-                  <Image
-                    source={{ uri: clip.thumbnailUri }}
-                    style={styles.timelineThumb}
-                  />
-                ) : (
-                  <View style={styles.timelineThumbPlaceholder} />
-                )}
-
-                <View style={styles.timelineBadge}>
-                  <Text
-                    allowFontScaling={false}
-                    style={styles.timelineBadgeText}
-                  >
-                    {index + 1}
-                  </Text>
-                </View>
-
-                {isCurrentlyPlaying && (
-                  <View style={styles.nowPlayingBadge}>
-                    <Ionicons name="volume-high" size={10} color="#FFFFFF" />
-                  </View>
-                )}
-              </TouchableOpacity>
-
-              {index < clips.length - 1 && (
-                <View style={styles.timelineDivider} />
+            <TouchableOpacity
+              key={clip.id}
+              onPress={() => {
+                if (isEditing) {
+                  // 이미 선택된 클립을 다시 누르면 선택 해제
+                  deselectClip();
+                  return;
+                }
+                setEditingClipId(clip.id);
+                setIsPlaying(false);
+              }}
+              style={[
+                styles.timelineTile,
+                isEditing && styles.timelineTileEditing,
+              ]}
+              activeOpacity={0.85}
+            >
+              {clip.thumbnailUri ? (
+                <Image
+                  source={{ uri: clip.thumbnailUri }}
+                  style={styles.timelineThumb}
+                />
+              ) : (
+                <View style={styles.timelineThumbPlaceholder} />
               )}
-            </React.Fragment>
+
+              <View style={styles.timelineBadge}>
+                <Text allowFontScaling={false} style={styles.timelineBadgeText}>
+                  {index + 1}
+                </Text>
+              </View>
+
+              {clipState.isMuted && (
+                <View style={styles.timelineMuteBadge}>
+                  <Ionicons name="volume-mute" size={10} color="#FFFFFF" />
+                </View>
+              )}
+
+              {isCurrentlyPlaying && (
+                <View style={styles.nowPlayingBadge}>
+                  <Ionicons name="volume-high" size={10} color="#FFFFFF" />
+                </View>
+              )}
+            </TouchableOpacity>
           );
         })}
       </ScrollView>
 
-      {/* 도구바 — "Aa"를 누르면 editingClipId 클립의 장소명을 자동 채움
-          제안 칩을 보여주는 식으로 이어붙이면 됩니다 (패널 내용은 TODO) */}
-      <View style={styles.toolbarRow}>
+      {/* 도구바 — 화면 끝에 딱 붙지 않고 페이지 배경이 아래로 보이게 여백을
+          둬서 카드가 떠 있는 느낌을 줍니다. */}
+      <View style={[styles.toolbarRow, { marginBottom: insets.bottom || 16 }]}>
         {TOOLS.map((tool) => {
           const isActive =
-            activeTool === tool.id || (tool.id === 'mute' && isMuted);
+            activeTool === tool.id ||
+            (tool.id === 'mute' && editingState.isMuted);
           return (
             <TouchableOpacity
               key={tool.id}
@@ -396,7 +548,7 @@ export default function VideoEditScreen() {
               ) : (
                 <Ionicons
                   name={
-                    tool.id === 'mute' && isMuted
+                    tool.id === 'mute' && editingState.isMuted
                       ? 'volume-mute-outline'
                       : tool.icon
                   }
@@ -418,103 +570,169 @@ export default function VideoEditScreen() {
         })}
       </View>
 
-      {activeTool && (
-        <View
-          style={[styles.toolPanel, { paddingBottom: insets.bottom || 16 }]}
-        >
-          {activeTool === 'text' && (
-            <View style={styles.infoPickerWrapper}>
-              <Text allowFontScaling={false} style={styles.positionPickerLabel}>
-                어떤 정보를 보여줄까요?
-              </Text>
+      {/* 뮤트: 백드롭 없는 가벼운 인라인 영역 */}
+      {activeTool === 'mute' && (
+        <View style={[styles.muteInlineRow, { paddingBottom: insets.bottom || 16 }]}>
+          <Text allowFontScaling={false} style={styles.muteInlineLabel}>
+            이 클립 음소거
+          </Text>
+          <Switch
+            value={editingState.isMuted}
+            onValueChange={(value) => updateEditingClipState({ isMuted: value })}
+            trackColor={{ true: COLORS.accent, false: COLORS.gray200 }}
+          />
+        </View>
+      )}
 
-              <View style={styles.infoChipRow}>
-                {INFO_CONTENT_OPTIONS.map((option) => {
-                  const isSelected = infoContentType === option.id;
-                  return (
-                    <TouchableOpacity
-                      key={option.id}
-                      onPress={() =>
-                        // 이미 선택된 걸 다시 누르면 꺼짐(off) —
-                        // 정보 배지 자체를 안 보이게 하는 유일한 방법이에요.
-                        setInfoContentType((prev) =>
-                          prev === option.id ? null : option.id,
-                        )
-                      }
-                      style={[
-                        styles.infoChip,
-                        isSelected && styles.infoChipSelected,
-                      ]}
-                    >
-                      <Text
-                        allowFontScaling={false}
+      {/* Text/Position: 백드롭 + 아래에서 올라오는 시트 */}
+      {isSheetTool && (
+        <>
+          <Pressable style={styles.backdrop} onPress={closeSheet} />
+          <Animated.View
+            style={[
+              styles.sheet,
+              {
+                paddingBottom: insets.bottom || 16,
+                transform: [{ translateY: sheetTranslateY }],
+              },
+            ]}
+          >
+            <View style={styles.sheetHeader}>
+              <Text allowFontScaling={false} style={styles.sheetHeaderTitle}>
+                {activeTool === 'text' ? '텍스트' : '위치'}
+              </Text>
+              <TouchableOpacity
+                hitSlop={10}
+                onPress={closeSheet}
+                style={styles.sheetCheckButton}
+              >
+                <Ionicons name="checkmark" size={18} color={COLORS.white} />
+              </TouchableOpacity>
+            </View>
+
+            {activeTool === 'text' && (
+              <View>
+                <Text allowFontScaling={false} style={styles.sheetSectionLabel}>
+                  어떤 정보를 보여줄까요?
+                </Text>
+                <View style={styles.infoChipRow}>
+                  {INFO_CONTENT_OPTIONS.map((option) => {
+                    const isSelected = editingState.infoContentType === option.id;
+                    return (
+                      <TouchableOpacity
+                        key={option.id}
+                        onPress={() =>
+                          // 이미 선택된 걸 다시 누르면 꺼짐(off)
+                          updateEditingClipState({
+                            infoContentType:
+                              editingState.infoContentType === option.id
+                                ? null
+                                : option.id,
+                          })
+                        }
                         style={[
-                          styles.infoChipText,
-                          isSelected && styles.infoChipTextSelected,
+                          styles.infoChip,
+                          isSelected && styles.infoChipSelected,
                         ]}
                       >
-                        {option.label}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
+                        <Text
+                          allowFontScaling={false}
+                          style={[
+                            styles.infoChipText,
+                            isSelected && styles.infoChipTextSelected,
+                          ]}
+                        >
+                          {option.label}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
 
-              {/* 실제로 어떻게 보일지 미리 보여주는 자리. 사용자가 직접
-                  타이핑하는 게 아니라 클립 데이터를 그대로 조합한
-                  거라서, "이 값이 맞는지" 바로 확인시켜주는 게 중요해요. */}
-              {infoContentType && (
-                <Text allowFontScaling={false} style={styles.infoPreviewText}>
-                  {formatClipInfo(editingClip, infoContentType)}
+                <Text
+                  allowFontScaling={false}
+                  style={[styles.sheetSectionLabel, { marginTop: 20 }]}
+                >
+                  글꼴 선택
                 </Text>
-              )}
-            </View>
-          )}
-
-          {activeTool === 'position' && (
-            <View style={styles.positionPickerWrapper}>
-              <Text allowFontScaling={false} style={styles.positionPickerLabel}>
-                텍스트를 어디에 놓을까요?
-              </Text>
-
-              {/* 클립 비율(3:4)을 축소한 미니 프레임 안에, 실제 배치될
-                  자리 그대로 5개 지점을 겹쳐서 보여줘요. 목록보다 이렇게
-                  "실제 화면처럼 보이는 자리를 직접 탭"하는 게 훨씬
-                  직관적이에요. */}
-              <View style={styles.positionFrame}>
-                {TEXT_POSITION_OPTIONS.map((option) => {
-                  const isSelected = textPosition === option.id;
-                  return (
-                    <TouchableOpacity
-                      key={option.id}
-                      onPress={() => setTextPosition(option.id)}
-                      style={[
-                        styles.positionSpot,
-                        POSITION_SPOT_STYLE[option.id],
-                        isSelected && styles.positionSpotSelected,
-                      ]}
-                    >
-                      <View
+                <View style={styles.fontChipRow}>
+                  {FONT_OPTIONS.map((font) => {
+                    const isSelected = editingState.fontId === font.id;
+                    return (
+                      <TouchableOpacity
+                        key={font.id}
+                        onPress={() =>
+                          updateEditingClipState({ fontId: font.id })
+                        }
                         style={[
-                          styles.positionSpotDot,
-                          isSelected && styles.positionSpotDotSelected,
+                          styles.fontChip,
+                          isSelected && styles.fontChipSelected,
                         ]}
-                      />
-                    </TouchableOpacity>
-                  );
-                })}
+                      >
+                        <Text
+                          allowFontScaling={false}
+                          style={[
+                            styles.fontChipText,
+                            isSelected && styles.fontChipTextSelected,
+                          ]}
+                        >
+                          {font.label}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
               </View>
+            )}
 
-              <Text allowFontScaling={false} style={styles.positionSelectedLabel}>
-                {TEXT_POSITION_OPTIONS.find((o) => o.id === textPosition)?.label}
-              </Text>
-            </View>
-          )}
-        </View>
+            {activeTool === 'position' && (
+              <View style={styles.positionGridWrapper}>
+                <Text allowFontScaling={false} style={styles.sheetSectionLabel}>
+                  텍스트를 어디에 놓을까요?
+                </Text>
+                <View style={styles.positionGrid}>
+                  {TEXT_POSITION_GRID.map((positionId) => {
+                    const isSelected = editingState.textPosition === positionId;
+                    return (
+                      <TouchableOpacity
+                        key={positionId}
+                        onPress={() =>
+                          updateEditingClipState({ textPosition: positionId })
+                        }
+                        style={styles.positionGridCell}
+                      >
+                        <View
+                          style={[
+                            styles.positionDot,
+                            isSelected && styles.positionDotSelected,
+                          ]}
+                        />
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+            )}
+          </Animated.View>
+        </>
       )}
     </View>
   );
 }
+
+// 프리뷰 위에 정보 배지를 실제로 배치할 때 쓰는 스타일 매핑.
+// TEXT_POSITION_GRID 순서랑 무관하게 항상 9개 다 정의돼 있어야 해요.
+const TEXT_POSITION_STYLE: Record<TextPosition, object> = {
+  topLeft: { top: 12, left: 12 },
+  topCenter: { top: 12, alignSelf: 'center' },
+  topRight: { top: 12, right: 12 },
+  middleLeft: { top: '50%', left: 12, marginTop: -12 },
+  center: { top: '50%', alignSelf: 'center', marginTop: -12 },
+  middleRight: { top: '50%', right: 12, marginTop: -12 },
+  bottomLeft: { bottom: 12, left: 12 },
+  bottomCenter: { bottom: 12, alignSelf: 'center' },
+  bottomRight: { bottom: 12, right: 12 },
+};
 
 const styles = StyleSheet.create({
   screen: {
@@ -535,12 +753,21 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     justifyContent: 'center',
   },
-  headerTitle: {
+  headerTitleBlock: {
     flex: 1,
+    alignItems: 'center',
+  },
+  headerTitle: {
     fontSize: 17,
     fontWeight: '700',
     color: COLORS.black,
-    marginLeft: 4,
+  },
+  headerSubtitle: {
+    fontSize: 9,
+    fontWeight: '600',
+    letterSpacing: 1,
+    color: COLORS.gray500,
+    marginTop: 1,
   },
   exportButton: {
     backgroundColor: COLORS.accent,
@@ -573,6 +800,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  infoOverlay: {
+    position: 'absolute',
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    maxWidth: PREVIEW_WIDTH - 40,
+  },
+  infoOverlayText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '600',
+  },
   mutedBadge: {
     position: 'absolute',
     top: 10,
@@ -587,32 +827,58 @@ const styles = StyleSheet.create({
 
   playButton: {
     alignSelf: 'center',
-    flexDirection: 'row',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: 'center',
-    gap: 6,
-    backgroundColor: COLORS.card,
+    justifyContent: 'center',
+    backgroundColor: COLORS.white,
     borderWidth: 1,
     borderColor: COLORS.gray200,
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 9,
-    marginBottom: 18,
+    marginBottom: 7,
   },
-  playButtonText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: COLORS.black,
+
+  timeRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 24,
+    marginBottom: 4,
+  },
+  timeLabel: {
+    fontSize: 11,
+    color: COLORS.gray500,
+    fontVariant: ['tabular-nums'],
+  },
+
+  // 클립 타임라인 바로 위, 아래 클립 목록과 같은 가로 폭(paddingHorizontal 20)에
+  // 맞춰서 눈금이 클립 시작 위치와 나란히 보이도록 정렬했어요.
+  rulerRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 20,
+    marginBottom: 10,
+  },
+  rulerTickWrapper: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  rulerTick: {
+    width: 1,
+    height: 5,
+    backgroundColor: COLORS.divider,
+  },
+  rulerTickMajor: {
+    height: 9,
+    backgroundColor: COLORS.gray500,
   },
 
   timelineRow: {
     paddingHorizontal: 20,
-    alignItems: 'center',
-    gap: 8,
+    gap: 6,
   },
   timelineTile: {
-    width: 64,
-    height: 64,
-    borderRadius: 14,
+    width: 84,
+    aspectRatio: 3 / 4,
+    borderRadius: 12,
     overflow: 'hidden',
     position: 'relative',
     borderWidth: 2,
@@ -646,6 +912,17 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#FFFFFF',
   },
+  timelineMuteBadge: {
+    position: 'absolute',
+    bottom: 4,
+    left: 4,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   nowPlayingBadge: {
     position: 'absolute',
     bottom: 4,
@@ -657,20 +934,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  timelineDivider: {
-    width: 1,
-    height: 36,
-    backgroundColor: COLORS.divider,
-  },
 
   toolbarRow: {
     flexDirection: 'row',
     justifyContent: 'space-around',
-    borderTopWidth: 1,
-    borderTopColor: COLORS.divider,
-    marginTop: 20,
+    backgroundColor: COLORS.card,
+    borderRadius: 20,
+    marginHorizontal: 20,
+    // marginTop: 16,
+    paddingHorizontal: 12,
     paddingTop: 16,
     paddingBottom: 16,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 3,
+    elevation: 2,
   },
   toolButton: {
     alignItems: 'center',
@@ -687,66 +966,69 @@ const styles = StyleSheet.create({
     color: COLORS.black,
   },
 
-  toolPanel: {
+  // 뮤트 인라인 영역 (백드롭 없음)
+  muteInlineRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     borderTopWidth: 1,
     borderTopColor: COLORS.divider,
     backgroundColor: COLORS.card,
     paddingHorizontal: 20,
-    paddingTop: 16,
-    minHeight: 120,
+    paddingTop: 14,
   },
-
-  // 텍스트 위치 선택 패널
-  positionPickerWrapper: {
-    alignItems: 'center',
-  },
-  positionPickerLabel: {
-    fontSize: 13,
+  muteInlineLabel: {
+    fontSize: 14,
     fontWeight: '600',
     color: COLORS.black,
-    marginBottom: 14,
   },
-  positionFrame: {
-    width: 96,
-    height: 128,
-    borderRadius: 12,
-    backgroundColor: COLORS.gray200,
-    position: 'relative',
-  },
-  positionSpot: {
+
+  // 백드롭 + 바텀시트 (Text/Position)
+  backdrop: {
     position: 'absolute',
-    width: POSITION_SPOT_SIZE,
-    height: POSITION_SPOT_SIZE,
-    borderRadius: POSITION_SPOT_SIZE / 2,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+  },
+  sheet: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: COLORS.card,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+  },
+  sheetHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 18,
+  },
+  sheetHeaderTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: COLORS.black,
+  },
+  sheetCheckButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: COLORS.accent,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  positionSpotSelected: {
-    backgroundColor: 'rgba(255,127,92,0.18)',
-  },
-  positionSpotDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: COLORS.white,
-    borderWidth: 1.5,
-    borderColor: COLORS.gray500,
-  },
-  positionSpotDotSelected: {
-    backgroundColor: COLORS.accent,
-    borderColor: COLORS.accent,
-  },
-  positionSelectedLabel: {
-    marginTop: 10,
-    fontSize: 12,
+  sheetSectionLabel: {
+    fontSize: 13,
     fontWeight: '600',
-    color: COLORS.accent,
+    color: COLORS.black,
+    marginBottom: 10,
   },
 
-  // 위치/시간 정보 선택 패널
-  infoPickerWrapper: {
-    alignItems: 'center',
-  },
   infoChipRow: {
     flexDirection: 'row',
     gap: 8,
@@ -769,10 +1051,56 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#FFFFFF',
   },
-  infoPreviewText: {
-    marginTop: 14,
+
+  fontChipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  fontChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 18,
+    backgroundColor: COLORS.gray200,
+  },
+  fontChipSelected: {
+    backgroundColor: COLORS.black,
+  },
+  fontChipText: {
     fontSize: 13,
-    fontWeight: '600',
-    color: COLORS.black,
+    color: COLORS.gray500,
+  },
+  fontChipTextSelected: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+
+  positionGridWrapper: {
+    alignItems: 'center',
+    paddingBottom: 8,
+  },
+  positionGrid: {
+    width: 168,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  positionGridCell: {
+    width: 56,
+    height: 56,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  positionDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: COLORS.white,
+    borderWidth: 1.5,
+    borderColor: COLORS.gray500,
+  },
+  positionDotSelected: {
+    backgroundColor: COLORS.accent,
+    borderColor: COLORS.accent,
   },
 });

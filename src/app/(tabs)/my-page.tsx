@@ -6,21 +6,22 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { AppText as Text } from '@/components/AppText';
 import { getAllFolders, getFolderStatus } from '@/services/folderService';
 import { getAllRecordings } from '@/services/recordingService';
+import { COLORS as SHARED_COLORS } from '@/constants/color';
 const COLORS = {
-  background: '#FFFFFF',
-  card: '#FFFFFF',
+  background: SHARED_COLORS.background,
+  card: SHARED_COLORS.background,
 
-  primary: '#FF7F5C',
-  primaryDark: '#E97B1F',// 눌렸을 때나 강조할 때 쓸 어두운 오렌지
-  primarySoft: '#FFF3DF',// 아주 연한 오렌지 배경
+  primary: SHARED_COLORS.accent,
+  primaryDark: SHARED_COLORS.accentPressed,// 눌렸을 때나 강조할 때 쓸 어두운 오렌지
+  primarySoft: SHARED_COLORS.main,// 아주 연한 오렌지 배경
 
-  textPrimary: '#222222',
-  textSecondary: '#8A8A8A',// 중간 중요도의 텍스트 (본문 등)
-  textTertiary: '#8A8A8A',
+  textPrimary: SHARED_COLORS.textPrimary,
+  textSecondary: SHARED_COLORS.textSecondary,// 중간 중요도의 텍스트 (본문 등)
+  textTertiary: SHARED_COLORS.textSecondary,
 
-  border: '#DDDDDD',
+  border: SHARED_COLORS.border,
 
-  shadow: '#443A31',
+  shadow: SHARED_COLORS.shadow,
 };
 const MenuItem = ({
   title,

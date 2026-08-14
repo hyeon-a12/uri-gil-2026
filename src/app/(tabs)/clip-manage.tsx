@@ -19,26 +19,27 @@ import { getAllFolders, saveFolder, deleteFolder as deleteFolderFromStorage, Fol
 import { getRecordingsByFolder } from '@/services/recordingService';
 import { useTripStore } from '@/store/useTripStore';
 import NewTripModal from '@/components/NewTripModal';
+import { COLORS as SHARED_COLORS } from '@/constants/color';
 
 const COLORS = {
-  background: '#FFFFFF',
-  card: '#FFFFFF',
+  background: SHARED_COLORS.background,
+  card: SHARED_COLORS.background,
 
-  primary: '#FF7F5C',
-  primarySoft: '#FFF3DF',
+  primary: SHARED_COLORS.accent,
+  primarySoft: SHARED_COLORS.main,
 
-  accent: '#3182F6',
+  accent: SHARED_COLORS.statusTag, // "진행중" 태그 — 브랜드 accent와는 다른 파란색
 
-  textPrimary: '#222222',
-  textSecondary: '#8A8A8A',
-  textTertiary: '#8A8A8A',
+  textPrimary: SHARED_COLORS.textPrimary,
+  textSecondary: SHARED_COLORS.textSecondary,
+  textTertiary: SHARED_COLORS.textSecondary,
 
-  border: '#DDDDDD',
-  divider: '#DDDDDD',
+  border: SHARED_COLORS.border,
+  divider: SHARED_COLORS.border,
 
   handle: '#999A95',
-  shadow: '#4B4138',
-  delete: '#E46F61',
+  shadow: SHARED_COLORS.shadow,
+  delete: SHARED_COLORS.danger,
   disabled: '#D8D5CF',
 
   overlay: 'rgba(0,0,0,0.25)',

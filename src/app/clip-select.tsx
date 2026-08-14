@@ -2,7 +2,6 @@ import React, { useMemo, useState, useCallback } from 'react';
 import {
   Alert,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -12,33 +11,33 @@ import {
   Modal,
   TouchableWithoutFeedback,
 } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { Ionicons, Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as MediaLibrary from 'expo-media-library';
 
-import { navigateToCamera } from '@/navigation/recordingNavigation';
 import { deleteRecording, getRecordingsByFolder } from '@/services/recordingService';
 import { useTripStore } from '@/store/useTripStore';
+import { COLORS as SHARED_COLORS } from '@/constants/color';
 
 const COLORS = {
-  background: '#FFFFFF',
-  card: '#FFFFFF',
+  background: SHARED_COLORS.background,
+  card: SHARED_COLORS.background,
 
-  primary: '#FF7F5C',
-  primaryPressed: '#ED8A20',
-  primarySoft: '#FFF3DF',
+  primary: SHARED_COLORS.accent,
+  primaryPressed: SHARED_COLORS.accentPressed,
+  primarySoft: SHARED_COLORS.main,
 
-  textPrimary: '#222222',
-  textSecondary: '#8A8A8A',
-  textTertiary: '#8A8A8A',
+  textPrimary: SHARED_COLORS.textPrimary,
+  textSecondary: SHARED_COLORS.textSecondary,
+  textTertiary: SHARED_COLORS.textSecondary,
 
-  border: '#DDDDDD',
-  divider: '#DDDDDD',
+  border: SHARED_COLORS.border,
+  divider: SHARED_COLORS.border,
 
   unchecked: '#B5B5AF',
-  delete: '#E46F61',
-  shadow: '#4B4138',
+  delete: SHARED_COLORS.danger,
+  shadow: SHARED_COLORS.shadow,
   disabled: '#D8D5CF',
 
   overlay: 'rgba(0,0,0,0.25)',
@@ -64,130 +63,11 @@ function formatDuration(seconds: number) {
   ).padStart(2, '0')}`;
 }
 
-interface SelectionButtonProps {
-  selected: boolean;
-  onPress: () => void;
-}
-
-function SelectionButton({
-  selected,
-  onPress,
-}: SelectionButtonProps) {
-  return (
-    <Pressable
-      onPress={onPress}
-      hitSlop={10}
-      style={({ pressed }) => [
-        styles.selectionButton,
-        selected && styles.selectionButtonSelected,
-        pressed && styles.selectionButtonPressed,
-      ]}
-    >
-      {selected && (
-        <Ionicons
-          name="checkmark"
-          size={18}
-          color="#FFFFFF"
-        />
-      )}
-    </Pressable>
-  );
-}
-
-interface ClipSelectionCardProps {
-  clip: ClipItem;
-  selected: boolean;
-  onToggle: () => void;
-}
-
-function ClipSelectionCard({
-  clip,
-  selected,
-  onToggle,
-}: ClipSelectionCardProps) {
-  return (
-    <View style={styles.clipRow}>
-      <SelectionButton
-        selected={selected}
-        onPress={onToggle}
-      />
-
-      <Pressable
-        onPress={onToggle}
-        style={({ pressed }) => [
-          styles.clipCard,
-          selected && styles.clipCardSelected,
-          pressed && styles.clipCardPressed,
-        ]}
-      >
-        <View style={styles.thumbnailContainer}>
-          <Image
-            source={{ uri: clip.uri }}
-            style={styles.thumbnail}
-            resizeMode="cover"
-          />
-
-          <View style={styles.thumbnailDim} />
-
-          <View style={styles.playButton}>
-            <Ionicons
-              name="play"
-              size={18}
-              color="#FFFFFF"
-              style={styles.playIcon}
-            />
-          </View>
-        </View>
-
-        <View style={styles.clipInformation}>
-          <Text
-            numberOfLines={1}
-            allowFontScaling={false}
-            style={styles.clipTitle}
-          >
-            {clip.title}
-          </Text>
-
-          <Text
-            numberOfLines={1}
-            allowFontScaling={false}
-            style={styles.recordedAt}
-          >
-            {clip.recordedAt}
-          </Text>
-
-          <View style={styles.durationRow}>
-            <Ionicons
-              name="time-outline"
-              size={13}
-              color={COLORS.textSecondary}
-            />
-
-            <Text
-              allowFontScaling={false}
-              style={styles.durationText}
-            >
-              {formatDuration(clip.durationSeconds)}
-            </Text>
-          </View>
-        </View>
-
-        <Ionicons
-          name="reorder-three-outline"
-          size={28}
-          color={COLORS.textTertiary}
-        />
-      </Pressable>
-    </View>
-  );
-}
-
 export default function ClipSelectScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { id: paramFolderId, title: folderTitle } = useLocalSearchParams<{
+  const { id: paramFolderId } = useLocalSearchParams<{
     id?: string;
-    title?: string;
   }>();
 
   // 명시적 route param(clip-manage.tsx에서 폴더를 눌러 들어온 경우)이 있으면 그게
@@ -203,13 +83,7 @@ export default function ClipSelectScreen() {
   const selectedCount = selectedIds.size;
   const allSelected = clips.length > 0 && selectedCount === clips.length;
 
-  useFocusEffect(
-    useCallback(() => {
-      void loadClips();
-    }, [folderId]),
-  );
-
-  const loadClips = async () => {
+  const loadClips = useCallback(async () => {
     if (!folderId) {
       setClips([]);
       return;
@@ -230,7 +104,13 @@ export default function ClipSelectScreen() {
       console.error('[loadClips] 로딩 실패:', error);
       setClips([]);
     }
-  };
+  }, [folderId]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadClips();
+    }, [loadClips]),
+  );
 
   const toggleSelect = (id: string) => {
     setSelectedIds((prev) => {
@@ -386,7 +266,7 @@ export default function ClipSelectScreen() {
           text: '삭제', style: 'destructive', onPress: async () => {
             try {
               await deleteRecording(clip.id);
-              setClips((prev) => prev.filter((c) => c.id != clip.id));
+              setClips((prev) => prev.filter((c) => c.id !== clip.id));
               setSelectedIds((prev) => {
                 const next = new Set(prev);
                 next.delete(clip.id);
@@ -414,38 +294,22 @@ export default function ClipSelectScreen() {
       return;
     }
 
-    Alert.alert(
-      '클립 선택 완료',
-      `${selectedCount}개의 클립으로 영상을 만들까요?`,
-      [
-        {
-          text: '취소',
-          style: 'cancel',
-        },
-        {
-          text: '영상 만들기',
-          onPress: () => {
-            console.log(
-              '선택된 클립:',
-              selectedClips.map((clip) => clip.id),
-            );
-
-            Alert.alert(
-              '영상 만들기',
-              '영상 생성 화면으로 연결할 예정입니다.',
-            );
-
-            // 영상 생성 화면이 있으면 아래처럼 연결
-            // router.push({
-            //   pathname: '/video-create',
-            //   params: {
-            //     clipIds: selectedIds.join(','),
-            //   },
-            // });
-          },
-        },
-      ],
-    );
+    router.push({
+      pathname: '/video-edit',
+      params: {
+        // expo-router 파라미터는 문자열만 가능해서, 선택한 클립을
+        // video-edit.tsx의 EditableClip 형태에 맞춰 JSON으로 직렬화해 넘깁니다.
+        clips: JSON.stringify(
+          selectedClips.map((clip) => ({
+            id: clip.id,
+            thumbnailUri: clip.thumbnail,
+            videoUri: clip.uri,
+            placeName: clip.title,
+            recordedAt: clip.recordedAt,
+          })),
+        ),
+      },
+    });
   };
 
   return (
@@ -460,7 +324,7 @@ export default function ClipSelectScreen() {
       >
         <Pressable
           hitSlop={12}
-          onPress={() => router.back()}
+          onPress={handleCancel}
           style={styles.headerButton}
         >
           <Ionicons
@@ -514,7 +378,7 @@ export default function ClipSelectScreen() {
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyText}>추가된 영상이 없습니다.</Text>
             <Text style={styles.emptySubText}>
-              '+ 클립 추가하기'를 눌러 영상을 등록해보세요.
+              &lsquo;+ 클립 추가하기&rsquo;를 눌러 영상을 등록해보세요.
             </Text>
           </View>
         }
@@ -543,7 +407,8 @@ export default function ClipSelectScreen() {
               styles.createButton,
               selectedCount === 0 && styles.createButtonDisabled,
             ]}
-            disabled={selectedCount === 0}>
+            disabled={selectedCount === 0}
+            onPress={handleComplete}>
               <Text style={styles.createButtonText}>영상 생성</Text>
             </TouchableOpacity>
         </View>
@@ -659,127 +524,6 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: 20,
     paddingTop: 4,
-  },
-
-  clipRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-
-    marginBottom: 14,
-  },
-
-  selectionButton: {
-    width: 26,
-    height: 26,
-
-    marginRight: 12,
-
-    borderRadius: 13,
-
-    alignItems: 'center',
-    justifyContent: 'center',
-
-    backgroundColor: COLORS.card,
-
-    borderWidth: 1.5,
-    borderColor: COLORS.unchecked,
-  },
-
-  selectionButtonSelected: {
-    backgroundColor: COLORS.primary,
-    borderColor: COLORS.primary,
-  },
-
-  selectionButtonPressed: {
-    opacity: 0.7,
-    transform: [{ scale: 0.95 }],
-  },
-
-  clipCard: {
-    flex: 1,
-    minHeight: 132,
-
-    padding: 12,
-
-    flexDirection: 'row',
-    alignItems: 'center',
-
-    backgroundColor: COLORS.card,
-
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-
-    shadowColor: COLORS.shadow,
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.05,
-    shadowRadius: 9,
-
-    elevation: 2,
-  },
-
-  clipCardSelected: {
-    borderColor: COLORS.primary,
-
-    backgroundColor: '#FFFDFC',
-  },
-
-  clipCardPressed: {
-    opacity: 0.86,
-
-    transform: [{ scale: 0.995 }],
-  },
-
-  thumbnailDim: {
-    ...StyleSheet.absoluteFillObject,
-
-    backgroundColor: 'rgba(0,0,0,0.12)',
-  },
-
-  playButton: {
-    position: 'absolute',
-    top: '50%',
-    left: '50%',
-
-    width: 38,
-    height: 38,
-
-    marginTop: -19,
-    marginLeft: -19,
-
-    borderRadius: 19,
-
-    alignItems: 'center',
-    justifyContent: 'center',
-
-    backgroundColor: 'rgba(36,36,32,0.58)',
-
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.32)',
-  },
-
-  playIcon: {
-    marginLeft: 2,
-  },
-
-  clipInformation: {
-    flex: 1,
-
-    marginLeft: 14,
-    marginRight: 8,
-  },
-
-  recordedAt: {
-    marginTop: 8,
-
-    color: COLORS.textSecondary,
-
-    fontSize: 12,
-    lineHeight: 17,
-    fontWeight: '500',
   },
 
   emptyIconContainer: {

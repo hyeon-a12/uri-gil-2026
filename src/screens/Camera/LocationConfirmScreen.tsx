@@ -30,26 +30,26 @@ import { useTripStore } from '@/store/useTripStore';
 // 이 화면 안에서만 쓰는 색상 별칭. 값 자체는 앱 공통 팔레트(src/constants/color.js)를
 // 그대로 가져다 쓰고, 이 화면에서 쓰던 기존 스타일 코드(COLORS.xxx)는 그대로 유지합니다.
 const COLORS = {
-  background: APP_COLORS.white,
-  card: APP_COLORS.white,
+  background: APP_COLORS.background,
+  card: APP_COLORS.background,
 
-  primary: APP_COLORS.primary,
-  primaryDark: '#E97B1F', // my-page/my-route 등 다른 화면과 동일하게 쓰는 눌림 상태 색
-  primarySoft: APP_COLORS.primaryTint,
+  primary: APP_COLORS.accent,
+  primaryDark: APP_COLORS.accentPressed, // my-page/my-route 등 다른 화면과 동일하게 쓰는 눌림 상태 색
+  primarySoft: APP_COLORS.main,
 
-  textPrimary: APP_COLORS.text,
+  textPrimary: APP_COLORS.textPrimary,
   textSecondary: APP_COLORS.textSecondary,
-  textTertiary: APP_COLORS.textTertiary,
+  textTertiary: APP_COLORS.textSecondary,
 
   border: APP_COLORS.border,
   divider: APP_COLORS.border,
 
   // 장소 확인 화면 전용으로 Figma에서 정의된 색 — 앱 전역 팔레트에 이미 있던 걸 그대로 씀
-  sheet: APP_COLORS.locationSheet,
+  sheet: APP_COLORS.sheetBackground,
   disabled: APP_COLORS.locationButtonDisabled,
   dragHandle: APP_COLORS.locationDragHandle,
 
-  shadow: '#443A31', // 다른 화면들과 동일한 톤의 그림자 색
+  shadow: APP_COLORS.shadow, // 다른 화면들과 동일한 톤의 그림자 색
 };
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
