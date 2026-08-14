@@ -1,3 +1,4 @@
+import * as SecureStore from 'expo-secure-store';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { Image } from 'react-native';
@@ -19,7 +20,7 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
-  const handleLogin = () => {
+  const handleLogin = async () => {
     const trimmedEmail = email.trim();
 
     if (!trimmedEmail) {
@@ -42,13 +43,30 @@ export default function LoginScreen() {
       return;
     }
 
-    // TODO: 로그인 API 연결
-    console.log({
-      email: trimmedEmail,
-      password,
-    });
+    try {
+      const response = await fetch(`${API_URL}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: trimmedEmail, password }),
+      });
 
-    router.replace('/(tabs)/home');
+      const data = await response.json();
+
+      if (!response.ok) {
+        Alert.alert('로그인 실패', data.detail || '이메일 또는 비밀번호를 확인해주세요.');
+        return;
+      }
+
+      // 토큰이랑 유저 정보를 안전한 저장소에 저장
+      await SecureStore.setItemAsync('access_token', data.access_token);
+      await SecureStore.setItemAsync('user_id', String(data.user_id));
+      await SecureStore.setItemAsync('nickname', data.nickname);
+
+      router.replace('/(tabs)/home');
+    } catch (error) {
+      console.error(error);
+      Alert.alert('오류', '서버와 연결할 수 없습니다. 인터넷 연결을 확인해주세요.');
+    }
   };
 
   return (
@@ -151,6 +169,8 @@ export default function LoginScreen() {
     </SafeAreaView>
   );
 }
+
+const API_URL = 'https://uri-gil-2026-production.up.railway.app';
 
 const styles = StyleSheet.create({
   safeArea: {
