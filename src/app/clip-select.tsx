@@ -2,6 +2,7 @@ import React, { useMemo, useState, useCallback } from 'react';
 import {
   Alert,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -11,7 +12,7 @@ import {
   Modal,
   TouchableWithoutFeedback,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { Ionicons, Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as MediaLibrary from 'expo-media-library';
@@ -63,6 +64,124 @@ function formatDuration(seconds: number) {
   ).padStart(2, '0')}`;
 }
 
+interface SelectionButtonProps {
+  selected: boolean;
+  onPress: () => void;
+}
+
+function SelectionButton({
+  selected,
+  onPress,
+}: SelectionButtonProps) {
+  return (
+    <Pressable
+      onPress={onPress}
+      hitSlop={10}
+      style={({ pressed }) => [
+        styles.selectionButton,
+        selected && styles.selectionButtonSelected,
+        pressed && styles.selectionButtonPressed,
+      ]}
+    >
+      {selected && (
+        <Ionicons
+          name="checkmark"
+          size={18}
+          color="#FFFFFF"
+        />
+      )}
+    </Pressable>
+  );
+}
+
+interface ClipSelectionCardProps {
+  clip: ClipItem;
+  selected: boolean;
+  onToggle: () => void;
+}
+
+function ClipSelectionCard({
+  clip,
+  selected,
+  onToggle,
+}: ClipSelectionCardProps) {
+  return (
+    <View style={styles.clipRow}>
+      <SelectionButton
+        selected={selected}
+        onPress={onToggle}
+      />
+
+      <Pressable
+        onPress={onToggle}
+        style={({ pressed }) => [
+          styles.clipCard,
+          selected && styles.clipCardSelected,
+          pressed && styles.clipCardPressed,
+        ]}
+      >
+        <View style={styles.thumbnailContainer}>
+          <Image
+            source={{ uri: clip.uri }}
+            style={styles.thumbnail}
+            resizeMode="cover"
+          />
+
+          <View style={styles.thumbnailDim} />
+
+          <View style={styles.playButton}>
+            <Ionicons
+              name="play"
+              size={18}
+              color="#FFFFFF"
+              style={styles.playIcon}
+            />
+          </View>
+        </View>
+
+        <View style={styles.clipInformation}>
+          <Text
+            numberOfLines={1}
+            allowFontScaling={false}
+            style={styles.clipTitle}
+          >
+            {clip.title}
+          </Text>
+
+          <Text
+            numberOfLines={1}
+            allowFontScaling={false}
+            style={styles.recordedAt}
+          >
+            {clip.recordedAt}
+          </Text>
+
+          <View style={styles.durationRow}>
+            <Ionicons
+              name="time-outline"
+              size={15}
+              color={COLORS.textSecondary}
+            />
+
+            <Text
+              allowFontScaling={false}
+              style={styles.durationText}
+            >
+              {formatDuration(clip.durationSeconds)}
+            </Text>
+          </View>
+        </View>
+
+        <Ionicons
+          name="reorder-three-outline"
+          size={28}
+          color={COLORS.textTertiary}
+        />
+      </Pressable>
+    </View>
+  );
+}
+
 export default function ClipSelectScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -70,9 +189,6 @@ export default function ClipSelectScreen() {
     id?: string;
   }>();
 
-  // 명시적 route param(clip-manage.tsx에서 폴더를 눌러 들어온 경우)이 있으면 그게
-  // 우선이고, 파라미터 없이(예: navigateToClip() 호출부에서 folderId를 안 넘긴 경우)
-  // 들어온 경우엔 현재 활성 여행을 기본값으로 씁니다.
   const currentTrip = useTripStore((state) => state.currentTrip);
   const folderId = paramFolderId ?? currentTrip?.id;
 
@@ -112,6 +228,7 @@ export default function ClipSelectScreen() {
     }, [loadClips]),
   );
 
+
   const toggleSelect = (id: string) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
@@ -142,6 +259,8 @@ export default function ClipSelectScreen() {
     [clips, selectedIds],
   );
 
+  const totalCount = clips.length;
+  const totalSeconds = sumSeconds(clips);
   const selectedSeconds = sumSeconds(selectedClips);
 
   const renderClipItem = ({ item }: { item: ClipItem }) => {
@@ -196,7 +315,7 @@ export default function ClipSelectScreen() {
               setSelectedClipForMenu(item);
             }}
           >
-            <Feather name="more-vertical" size={20} color={COLORS.textTertiary} />
+            <Feather name="menu" size={20} color={COLORS.textTertiary} />
           </TouchableOpacity>
         </TouchableOpacity>
       </View>
@@ -266,7 +385,7 @@ export default function ClipSelectScreen() {
           text: '삭제', style: 'destructive', onPress: async () => {
             try {
               await deleteRecording(clip.id);
-              setClips((prev) => prev.filter((c) => c.id !== clip.id));
+              setClips((prev) => prev.filter((c) => c.id != clip.id));
               setSelectedIds((prev) => {
                 const next = new Set(prev);
                 next.delete(clip.id);
@@ -297,8 +416,6 @@ export default function ClipSelectScreen() {
     router.push({
       pathname: '/video-edit',
       params: {
-        // expo-router 파라미터는 문자열만 가능해서, 선택한 클립을
-        // video-edit.tsx의 EditableClip 형태에 맞춰 JSON으로 직렬화해 넘깁니다.
         clips: JSON.stringify(
           selectedClips.map((clip) => ({
             id: clip.id,
@@ -324,7 +441,7 @@ export default function ClipSelectScreen() {
       >
         <Pressable
           hitSlop={12}
-          onPress={handleCancel}
+          onPress={() => router.back()}
           style={styles.headerButton}
         >
           <Ionicons
@@ -378,40 +495,37 @@ export default function ClipSelectScreen() {
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyText}>추가된 영상이 없습니다.</Text>
             <Text style={styles.emptySubText}>
-              &lsquo;+ 클립 추가하기&rsquo;를 눌러 영상을 등록해보세요.
+              '+ 클립 추가하기'를 눌러 영상을 등록해보세요.
             </Text>
           </View>
         }
       />
 
-      <View style={[styles.footer, { paddingBottom: insets.bottom }]}>
-        <View style={styles.footerContent}>
-          <View style={styles.footerLeft}>
-            {selectedCount > 0 ? (
-              <View style={styles.footerInfo}>
-                <Ionicons name="film-outline" size={18} color={COLORS.textSecondary} />
-                <Text style={styles.footerStatText}>{selectedCount}개</Text>
-
-                <Text style={styles.footerDivider}>·</Text>
-
-                <Ionicons name="time-outline" size={15} color={COLORS.textSecondary} />
-                <Text style={styles.footerStatText}>{formatDuration(selectedSeconds)}</Text>
-              </View>
-            ) : (
-              <Text style={styles.footerEmptyText}>클립을 선택해주세요</Text>
-            )}
+      <View style={[styles.footer, { bottom: insets.bottom }]}>
+        <View style={styles.footerInfo}>
+          <View style={styles.footerRow}>
+            <Text style={styles.footerLabel}>클립 개수</Text>
+            <Text style={styles.footerValue}>
+              {selectedCount} / {totalCount} 개
+            </Text>
           </View>
-
-          <TouchableOpacity
-            style={[
-              styles.createButton,
-              selectedCount === 0 && styles.createButtonDisabled,
-            ]}
-            disabled={selectedCount === 0}
-            onPress={handleComplete}>
-              <Text style={styles.createButtonText}>영상 생성</Text>
-            </TouchableOpacity>
+          <View style={styles.footerRow}>
+            <Text style={styles.footerLabel}>총 영상 길이</Text>
+            <Text style={styles.footerValue}>
+              {selectedSeconds} / {totalSeconds} 초
+            </Text>
+          </View>
         </View>
+
+        <TouchableOpacity
+          style={[
+            styles.createButton,
+            selectedCount === 0 && styles.createButtonDisabled,
+          ]}
+          disabled={selectedCount === 0}
+          onPress={handleComplete}>
+            <Text style={styles.createButtonText}>영상 생성</Text>
+          </TouchableOpacity>
       </View>
 
       <Modal
@@ -524,6 +638,127 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: 20,
     paddingTop: 4,
+  },
+
+  clipRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+
+    marginBottom: 14,
+  },
+
+  selectionButton: {
+    width: 26,
+    height: 26,
+
+    marginRight: 12,
+
+    borderRadius: 13,
+
+    alignItems: 'center',
+    justifyContent: 'center',
+
+    backgroundColor: COLORS.card,
+
+    borderWidth: 1.5,
+    borderColor: COLORS.unchecked,
+  },
+
+  selectionButtonSelected: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+
+  selectionButtonPressed: {
+    opacity: 0.7,
+    transform: [{ scale: 0.95 }],
+  },
+
+  clipCard: {
+    flex: 1,
+    minHeight: 132,
+
+    padding: 12,
+
+    flexDirection: 'row',
+    alignItems: 'center',
+
+    backgroundColor: COLORS.card,
+
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+
+    shadowColor: COLORS.shadow,
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.05,
+    shadowRadius: 9,
+
+    elevation: 2,
+  },
+
+  clipCardSelected: {
+    borderColor: COLORS.primary,
+
+    backgroundColor: '#FFFDFC',
+  },
+
+  clipCardPressed: {
+    opacity: 0.86,
+
+    transform: [{ scale: 0.995 }],
+  },
+
+  thumbnailDim: {
+    ...StyleSheet.absoluteFillObject,
+
+    backgroundColor: 'rgba(0,0,0,0.12)',
+  },
+
+  playButton: {
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+
+    width: 38,
+    height: 38,
+
+    marginTop: -19,
+    marginLeft: -19,
+
+    borderRadius: 19,
+
+    alignItems: 'center',
+    justifyContent: 'center',
+
+    backgroundColor: 'rgba(36,36,32,0.58)',
+
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.32)',
+  },
+
+  playIcon: {
+    marginLeft: 2,
+  },
+
+  clipInformation: {
+    flex: 1,
+
+    marginLeft: 14,
+    marginRight: 8,
+  },
+
+  recordedAt: {
+    marginTop: 8,
+
+    color: COLORS.textSecondary,
+
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '500',
   },
 
   emptyIconContainer: {
@@ -831,53 +1066,37 @@ const styles = StyleSheet.create({
     color: '#C7C7CC',
     marginTop: 4,
   },
-  // 화면 맨 아래(bottom: 0)에 딱 붙이고, 홈 인디케이터 등 안전 영역만큼은
-  // paddingBottom(인라인 스타일의 insets.bottom)으로 배경을 그대로 확장해서 채웁니다.
-  // 예전처럼 bottom: insets.bottom로 띄우면 그 아래에 아무것도 없는 흰 여백이 남아
-  // 바가 화면 끝에서 들떠 보였습니다.
   footer: {
     position: 'absolute',
     left: 0,
     right: 0,
-    bottom: -15,
+    height: FOOTER_HEIGHT,
     backgroundColor: '#FFFFFF',
     borderTopWidth: 1,
     borderTopColor: '#F2F2F7',
-  },
-  footerContent: {
-    height: FOOTER_HEIGHT,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 95,
+    justifyContent: 'space-between',
     paddingHorizontal: 20,
   },
-  // 선택/미선택 상태마다 이 안에 들어가는 텍스트 길이가 달라지는데(footerInfo ↔
-  // footerEmptyText), flex: 1 + justifyContent: 'flex-end'로 항상 버튼 쪽 끝에
-  // 붙여 정렬해서 버튼과의 간격(위 footer의 gap)이 상태와 무관하게 고정되도록 합니다.
-  footerLeft: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-  },
   footerInfo: {
+    flex: 1,
+    gap: 4,
+  },
+  footerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 12,
   },
-  footerStatText: {
-    fontSize: 18,
-    color: '#1C1C1E',
-    fontWeight: '700',
-  },
-  footerDivider: {
-    fontSize: 18,
-    color: '#C7C7CC',
-    marginHorizontal: 3,
-  },
-  footerEmptyText: {
-    fontSize: 17,
+  footerLabel: {
+    fontSize: 13,
     color: '#8E8E93',
+    width: 72,
+  },
+  footerValue: {
+    fontSize: 13,
+    color: '#1C1C1E',
+    fontWeight: '600',
   },
   createButton: {
     backgroundColor: COLORS.primary,
@@ -890,7 +1109,7 @@ const styles = StyleSheet.create({
   },
   createButtonText: {
     color: '#FFFFFF',
-    fontSize: 17,
+    fontSize: 15,
     fontWeight: '700',
   },
   modalOverlay: {

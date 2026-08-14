@@ -29,7 +29,7 @@ const COLORS = {
   primary: SHARED_COLORS.accent,
   primarySoft: SHARED_COLORS.main,
 
-  accent: SHARED_COLORS.statusTag, // "진행중" 태그 — 브랜드 accent와는 다른 파란색
+  accent: SHARED_COLORS.statusTag,
 
   textPrimary: SHARED_COLORS.textPrimary,
   textSecondary: SHARED_COLORS.textSecondary,
