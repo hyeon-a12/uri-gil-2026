@@ -11,9 +11,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { AppText as Text } from '@/components/AppText';
 import { Image } from 'expo-image';
 
-import { getAllFolders, saveFolder, type FolderItem } from '@/services/folderService';
+import { getAllFolders, saveFolder, updateFolder, type FolderItem } from '@/services/folderService';
 import { selectCurrentTrip, useTripStore } from '@/store/useTripStore';
 import NewTripModal from '@/components/NewTripModal';
+import { apiFetch } from '@/services/api';
 
 const COLORS = {
   background: '#FFFFFF',
@@ -83,7 +84,7 @@ export function TripSwitchSheet({ visible, onClose }: Props) {
     }, 300);
   };
 
-  const handleCreatedTrip: React.ComponentProps<typeof NewTripModal>['onCreated'] = async (
+const handleCreatedTrip: React.ComponentProps<typeof NewTripModal>['onCreated'] = async (
     trip,
   ) => {
     const formatDate = (date: Date) => {
@@ -91,6 +92,14 @@ export function TripSwitchSheet({ visible, onClose }: Props) {
       const month = String(date.getMonth() + 1).padStart(2, '0');
       const day = String(date.getDate()).padStart(2, '0');
       return `${year}.${month}.${day}.`;
+    };
+
+    // 서버(Pydantic date 타입)로 보낼 땐 YYYY-MM-DD 형식이 필요함
+    const toIsoDate = (date: Date) => {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
     };
 
     const folder: FolderItem = {
@@ -108,11 +117,33 @@ export function TripSwitchSheet({ visible, onClose }: Props) {
     };
 
     try {
+      // 1. 로컬 저장 먼저 (오프라인이어도 여행 생성 자체는 항상 성공하도록)
       await saveFolder(folder);
-      // 생성과 동시에 활성 여행으로 지정합니다 — "여행을 만들었는데 활성 여행은
-      // 그대로"인 상태로 남으면 방금 만든 여행이 바로 눈에 반영되지 않습니다.
       await selectCurrentTrip(folder);
       await loadTrips();
+
+      // 2. 서버에도 저장 시도 (실패해도 로컬 흐름은 막지 않음)
+      try {
+        const serverRoute = await apiFetch('/routes/', {
+          method: 'POST',
+          body: JSON.stringify({
+            title: trip.name.trim(),
+            region: trip.region,
+            theme: trip.themes.join(','),
+            description: trip.memo || null,
+            start_date: toIsoDate(trip.startDate),
+            end_date: toIsoDate(trip.endDate),
+            member_count: trip.partySize,
+            clip_duration: trip.clipLengthSeconds,
+            shooting_style: trip.shootingStyle,
+          }),
+        });
+
+        // 서버가 발급한 route_id를 로컬 데이터에도 연결해둠
+        await updateFolder(folder.id, { routeId: serverRoute.id });
+      } catch (serverError) {
+        console.error('[TripSwitchSheet] 서버 저장 실패 (로컬은 저장됨):', serverError);
+      }
     } catch (error) {
       console.error('[TripSwitchSheet] 새 여행 저장에 실패했습니다.', error);
       Alert.alert('여행 생성 실패', '새 여행을 저장하지 못했습니다.');
