@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, ForeignKey, Text
+from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, Date, ForeignKey, Text
 from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
 from database import Base
@@ -22,6 +22,11 @@ class Route(Base):
     theme = Column(String)
     description = Column(Text)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    start_date = Column(Date)
+    end_date = Column(Date)
+    member_count = Column(Integer, default=1)
+    clip_duration = Column(Integer, default=10)
+    shooting_style = Column(String, default="기본 스타일")
 
 class RouteSpot(Base):
     __tablename__ = "route_spots"

@@ -1,5 +1,5 @@
 from pydantic import BaseModel, EmailStr
-from datetime import datetime
+from datetime import datetime, date
 from typing import Optional
 
 # ========== 회원 ==========
@@ -27,6 +27,11 @@ class RouteCreate(BaseModel):
     region: Optional[str] = None
     theme: Optional[str] = None
     description: Optional[str] = None
+    start_date: Optional[date] = None
+    end_date: Optional[date] = None
+    member_count: Optional[int] = 1
+    clip_duration: Optional[int] = 10
+    shooting_style: Optional[str] = "기본 스타일"
 
 class RouteResponse(BaseModel):
     id: int
@@ -35,7 +40,13 @@ class RouteResponse(BaseModel):
     region: Optional[str]
     theme: Optional[str]
     description: Optional[str]
+    start_date: Optional[date]
+    end_date: Optional[date]
+    member_count: Optional[int]
+    clip_duration: Optional[int]
+    shooting_style: Optional[str]
     created_at: datetime
+
 
     class Config:
         from_attributes = True
