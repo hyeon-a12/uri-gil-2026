@@ -1,5 +1,5 @@
 # 회원 API
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from database import get_db
 from models import User
@@ -14,6 +14,8 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 SECRET_KEY = os.getenv("JWT_SECRET_KEY", "임시로컬용시크릿키-반드시Railway환경변수로교체")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7일
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 
 def create_access_token(user_id: int):
     expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
@@ -61,3 +63,26 @@ def login(user: UserLogin, db: Session = Depends(get_db)):
         "user_id": db_user.id,
         "nickname": db_user.nickname,
     }
+
+def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> User:
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="인증 정보가 유효하지 않습니다",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id: str = payload.get("sub")
+        if user_id is None:
+            raise credentials_exception
+    except JWTError:
+        raise credentials_exception
+
+    user = db.query(User).filter(User.id == int(user_id)).first()
+    if user is None:
+        raise credentials_exception
+    return user
+
+@router.get("/me")
+def read_current_user(current_user: User = Depends(get_current_user)):
+    return {"id": current_user.id, "email": current_user.email, "nickname": current_user.nickname}
