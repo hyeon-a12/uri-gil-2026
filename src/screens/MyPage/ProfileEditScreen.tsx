@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import * as SecureStore from 'expo-secure-store';
 import { View, TextInput, Pressable, StyleSheet, Alert } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -7,15 +8,28 @@ import { colors } from '@/constants/menu-theme';
 import { cardShadow, ScreenHeader } from '@/components/common';
 
 export default function ProfileEditScreen() {
-  // TODO: 실제로는 서버 값으로 초기화하고, 저장 시 API 호출
-  const [nickname, setNickname] = useState('텅굴이');
-  const [bio, setBio] = useState('여행은 계획보다 발견');
+  const [nickname, setNickname] = useState('');
+  const [bio, setBio] = useState('여행은 계획보다 발견'); // TODO: bio는 아직 DB 컬럼이 없음
 
-  // TODO: 실제 로그아웃 처리(토큰 삭제, 로그인 화면 이동 등)는 인증 플로우가 생기면 연결합니다.
+  useEffect(() => {
+    SecureStore.getItemAsync('nickname').then((saved) => {
+      if (saved) setNickname(saved);
+    });
+  }, []);
+
   const handleLogout = () => {
     Alert.alert('로그아웃', '로그아웃 하시겠어요?', [
       { text: '취소', style: 'cancel' },
-      { text: '로그아웃', style: 'destructive', onPress: () => router.back() },
+      {
+        text: '로그아웃',
+        style: 'destructive',
+        onPress: async () => {
+          await SecureStore.deleteItemAsync('access_token');
+          await SecureStore.deleteItemAsync('user_id');
+          await SecureStore.deleteItemAsync('nickname');
+          router.replace('/login');
+        },
+      },
     ]);
   };
 

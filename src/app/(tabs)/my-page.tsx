@@ -6,6 +6,8 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { AppText as Text } from '@/components/AppText';
 import { getAllFolders, getFolderStatus } from '@/services/folderService';
 import { getAllRecordings } from '@/services/recordingService';
+import * as SecureStore from 'expo-secure-store';
+
 const COLORS = {
   background: '#FFFFFF',
   card: '#FFFFFF',
@@ -43,6 +45,7 @@ const MenuItem = ({
 
 export default function MyPageScreen() {
   const router = useRouter();
+  const [nickname, setNickname] = useState('');
   const [stats, setStats] = useState({
     completedRoutes: 0,
     recordedClips: 0,
@@ -51,6 +54,10 @@ export default function MyPageScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      SecureStore.getItemAsync('nickname').then((saved) => {
+        if (saved) setNickname(saved);
+      });
+
       (async () => {
         const [folders, recordings] = await Promise.all([
           getAllFolders(),
@@ -93,7 +100,7 @@ export default function MyPageScreen() {
             <Feather name="user" size={24} color={COLORS.textTertiary} />
           </View>
           <Text style={styles.greetingText}>
-            안녕하세요{'\n'}텅굴이님
+            안녕하세요{'\n'}{nickname}님
           </Text>
         </View>
 
@@ -102,7 +109,7 @@ export default function MyPageScreen() {
           <View style={styles.orderCard}>
             <View style={styles.orderCardHeader}>
               <Text style={styles.orderCardTitle}>
-                텅굴이님이 기록한 여행이에요
+                {nickname}님이 기록한 여행이에요
               </Text>
               <Feather name="chevron-right" size={18} color={COLORS.textSecondary} />
             </View>
