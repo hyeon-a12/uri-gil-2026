@@ -5,7 +5,8 @@ from database import get_db
 from models import User
 from schemas import UserCreate, UserLogin, UserResponse
 import bcrypt
-from fastapi.security import OAuth2PasswordBearer
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+
 from jose import jwt, JWTError
 from datetime import datetime, timedelta, timezone
 import os
@@ -15,7 +16,7 @@ SECRET_KEY = os.getenv("JWT_SECRET_KEY", "임시로컬용시크릿키-반드시R
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7일
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
+security = HTTPBearer()
 
 def create_access_token(user_id: int):
     expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
@@ -64,7 +65,8 @@ def login(user: UserLogin, db: Session = Depends(get_db)):
         "nickname": db_user.nickname,
     }
 
-def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> User:
+def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security), db: Session = Depends(get_db)) -> User:
+    token = credentials.credentials
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="인증 정보가 유효하지 않습니다",
