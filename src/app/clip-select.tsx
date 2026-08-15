@@ -4,7 +4,6 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Text,
   View,
   TouchableOpacity,
   FlatList,
@@ -12,11 +11,13 @@ import {
   Modal,
   TouchableWithoutFeedback,
 } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { AppText as Text } from '@/components/AppText';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { Ionicons, Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as MediaLibrary from 'expo-media-library';
 
+import { ClipPreviewModal } from '@/app/clip-preview'
 import { deleteRecording, getRecordingsByFolder } from '@/services/recordingService';
 import { useTripStore } from '@/store/useTripStore';
 import { COLORS as SHARED_COLORS } from '@/constants/color';
@@ -196,6 +197,8 @@ export default function ClipSelectScreen() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [selectedClipForMenu, setSelectedClipForMenu] = useState<ClipItem | null>(null);
 
+  const [previewClip, setPreviewClip] = useState<ClipItem | null>(null);
+
   const selectedCount = selectedIds.size;
   const allSelected = clips.length > 0 && selectedCount === clips.length;
 
@@ -283,12 +286,18 @@ export default function ClipSelectScreen() {
           activeOpacity={1}
           onPress={() => toggleSelect(item.id)}
         >
-          <View style={styles.thumbnailContainer}>
+          <Pressable
+            onPress={(e) => {
+              e.stopPropagation();
+              setPreviewClip(item);
+            }}
+            style={styles.thumbnailContainer}
+          >
             <Image source={{ uri: item.uri }} style={styles.thumbnail} />
             <View style={styles.playOverlay}>
               <Ionicons name="play" size={16} color="#FFFFFF" />
             </View>
-          </View>
+          </Pressable>
 
           <View style={styles.cardInfo}>
             <Text style={styles.clipTitle} numberOfLines={1}>
@@ -581,6 +590,11 @@ export default function ClipSelectScreen() {
           </View>
         </TouchableWithoutFeedback>
       </Modal>
+
+      <ClipPreviewModal
+        clip={previewClip}
+        onClose={() => setPreviewClip(null)}
+      />
     </View>
   );
 }
