@@ -10,6 +10,7 @@ import {
   StyleSheet,
   Dimensions,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -234,6 +235,36 @@ function formatTimer(seconds: number) {
   const m = Math.floor(seconds / 60);
   const s = Math.round(seconds % 60);
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
+
+async function renderVideo(exportData: {
+  clips: Array<{
+    id: string;
+    videoUri: string;
+    isMuted: boolean;
+  }>;
+  globalSetting: {
+    infoContentType: string | null;
+    textPosition: string;
+    textAlign: string;
+    timeStyle: TextElementStyle;
+    placeStyle: TextElementStyle;
+  };
+  folderId?: string;
+}): Promise<{ success: boolean; message?: string }> {
+  try {
+    console.log('[renderVideo] 렌더링 시작', exportData);
+    
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+    console.log('[renderVideo] 완료');
+    return { success: true};
+  } catch (error) {
+    console.error('[renderVideo] 실패:', error);
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : '알 수 없는 오류',
+    };
+  }
 }
 
 export default function VideoEditScreen() {
@@ -473,8 +504,7 @@ export default function VideoEditScreen() {
   // 줄 수 없어서 showsVerticalScrollIndicator를 끄고 이걸로 대체했습니다).
   // 스크롤 위치 자체는 매 프레임 setState로 리렌더하면 뚝뚝 끊기고 과하게
   // 움직여 보여서, 네이티브 드라이버로 도는 Animated.Value로 따로 뺐습니다.
-  const [sheetScrollViewportHeight, setSheetScrollViewportHeight] =
-    useState(0);
+  const [sheetScrollViewportHeight, setSheetScrollViewportHeight] = useState(0);
   const [sheetScrollContentHeight, setSheetScrollContentHeight] = useState(0);
   const sheetScrollY = useRef(new Animated.Value(0)).current;
   // Animated.event를 JSX 안에서 매 렌더 새로 만들면 "Changing onScroll listener
@@ -523,6 +553,8 @@ export default function VideoEditScreen() {
   // 뒤에야(onAnimationEnd 콜백) false로 바꿔줍니다.
   const [isSheetMounted, setIsSheetMounted] = useState(false);
 
+  const [isExporting, setIsExporting] = useState(false);
+
   useEffect(() => {
     if (isSheetTool) {
       setIsSheetMounted(true);
@@ -557,6 +589,14 @@ export default function VideoEditScreen() {
   }
 
   function handleBackPress() {
+    if (isExporting) {
+      Alert.alert(
+        '영상 생성 중이에요',
+        '완료될 때까지 기다려주세요.'
+      );
+      return;
+    }
+
     if (!hasUnsavedChanges) {
       router.back();
       return;
@@ -572,8 +612,72 @@ export default function VideoEditScreen() {
   }
 
   function handleExport() {
-    // TODO: editStates(클립별 텍스트/위치/폰트/음소거)를 반영해서
-    // 실제 내보내기(기기 저장) 로직 연결
+    if (clips.length === 0) {
+      Alert.alert(
+        '편집할 클립이 없어요.',
+        '클립을 선택해주세요.'
+      );
+      return;
+    }
+
+    if (isExporting) return;
+
+    Alert.alert(
+      '영상 생성하기',
+      `${clips.length}개의 클립으로 영상을 만들까요?\n예상 길이: ${formatTimer(totalDurationSeconds)}`,
+      [
+        { text: '취소', style: 'cancel'},
+        {
+          text: '만들기',
+          onPress: async () => {
+            setIsExporting(true);
+
+            const exportData = {
+              folderId,
+              clips: clips.map((clip) => ({
+                id: clip.id,
+                videoUri: clip.videoUri ?? '',
+                isMuted: getEditState(clip.id).isMuted,
+              })),
+              globalSetting: {
+                infoContentType: globalEditState.infoContentType,
+                textPosition: globalEditState.textPosition,
+                textAlign: globalEditState.textAlign,
+                timeStyle: globalEditState.timeStyle,
+                placeStyle: globalEditState.placeStyle,
+              },
+            };
+
+            const result = await renderVideo(exportData);
+
+            setIsExporting(false);
+
+            if (result.success) {
+              Alert.alert(
+                '완료',
+                '영상이 갤러리에 저장되었어요.',
+                [
+                  {
+                    text: '확인',
+                    onPress: () => {
+                      router.replace('/');
+                    },
+                  },
+                ],
+                { cancelable: false },
+              );
+            } else {
+              Alert.alert(
+                '영상 만들기 실패',
+                result.message ??
+                '영상을 만드는 중 문제가 발생했어요. 잠시 후 다시 시도해주세요.',
+                [{ text: '확인' }],
+              );
+            }
+          },
+        },
+      ],
+    );
   }
 
   return (
