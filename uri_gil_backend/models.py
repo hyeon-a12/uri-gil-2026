@@ -34,8 +34,8 @@ class RouteSpot(Base):
     id = Column(Integer, primary_key=True, index=True)
     route_id = Column(Integer, ForeignKey("routes.id"), nullable=False)
     spot_name = Column(String, nullable=False)
-    latitude = Column(Float, nullable=False)
-    longitude = Column(Float, nullable=False)
+    latitude = Column(Float, nullable=True)
+    longitude = Column(Float, nullable=True)
     visit_order = Column(Integer, nullable=False)
     visited_at = Column(DateTime)
 

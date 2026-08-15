@@ -54,7 +54,7 @@ class RouteResponse(BaseModel):
 # ========== 클립 ==========
 class ClipCreate(BaseModel):
     route_id: int
-    spot_id: Optional[int] = None
+    spot_name: Optional[str] = None
     clip_url: str
     latitude: Optional[float] = None
     longitude: Optional[float] = None
@@ -95,8 +95,8 @@ class VideoResponse(BaseModel):
 class RouteSpotCreate(BaseModel):
     route_id: int
     spot_name: str
-    latitude: float
-    longitude: float
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
     visit_order: int
     visited_at: Optional[datetime] = None
 
@@ -104,8 +104,8 @@ class RouteSpotResponse(BaseModel):
     id: int
     route_id: int
     spot_name: str
-    latitude: float
-    longitude: float
+    latitude: Optional[float]
+    longitude: Optional[float]
     visit_order: int
     visited_at: Optional[datetime]
 

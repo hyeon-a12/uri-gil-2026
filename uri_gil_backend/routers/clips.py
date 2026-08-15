@@ -17,10 +17,36 @@ def create_clip(
 ):
     get_owned_route(clip.route_id, db, current_user)
 
+    spot_id = None
+    if clip.spot_name:
+        # 같은 route 안에 같은 이름의 spot이 이미 있는지 확인
+        existing_spot = (
+            db.query(RouteSpot)
+            .filter(RouteSpot.route_id == clip.route_id, RouteSpot.spot_name == clip.spot_name)
+            .first()
+        )
+        if existing_spot:
+            spot_id = existing_spot.id
+        else:
+            # 없으면 새로 생성
+            spot_count = db.query(RouteSpot).filter(RouteSpot.route_id == clip.route_id).count()
+            new_spot = RouteSpot(
+                route_id=clip.route_id,
+                spot_name=clip.spot_name,
+                latitude=clip.latitude,
+                longitude=clip.longitude,
+                visit_order=spot_count + 1,
+                visited_at=clip.recorded_at,
+            )
+            db.add(new_spot)
+            db.commit()
+            db.refresh(new_spot)
+            spot_id = new_spot.id
+
     new_clip = Clip(
         route_id=clip.route_id,
         user_id=current_user.id,
-        spot_id=clip.spot_id,
+        spot_id=spot_id,
         clip_url=clip.clip_url,
         latitude=clip.latitude,
         longitude=clip.longitude,
@@ -30,8 +56,9 @@ def create_clip(
     db.add(new_clip)
     db.commit()
 
-    if clip.spot_id and clip.recorded_at:
-        spot = db.query(RouteSpot).filter(RouteSpot.id == clip.spot_id).first()
+    # 이미 있던 spot을 재사용한 경우, 방문 시간 최신화
+    if spot_id and clip.recorded_at:
+        spot = db.query(RouteSpot).filter(RouteSpot.id == spot_id).first()
         if spot:
             spot.visited_at = clip.recorded_at
             db.commit()
