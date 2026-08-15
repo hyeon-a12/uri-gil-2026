@@ -1,3 +1,16 @@
+export interface ClipItem {
+  id: string;
+  title?: string;
+  recordedAt: string;
+  durationSeconds?: number;
+  thumbnail: string;
+  uri: string;
+
+  durationLabel?: string;
+  caption?: string;
+  isNew?: boolean;
+}
+
 export interface RecentClip {
   id: string;
   location: string;

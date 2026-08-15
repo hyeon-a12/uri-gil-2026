@@ -20,6 +20,7 @@ import * as MediaLibrary from 'expo-media-library';
 import { ClipPreviewModal } from '@/app/clip-preview'
 import { deleteRecording, getRecordingsByFolder } from '@/services/recordingService';
 import { useTripStore } from '@/store/useTripStore';
+import { ClipItem } from '@/types/home';
 import { COLORS as SHARED_COLORS } from '@/constants/color';
 
 const COLORS = {
@@ -44,15 +45,6 @@ const COLORS = {
 
   overlay: 'rgba(0,0,0,0.25)',
 };
-
-interface ClipItem {
-  id: string;
-  title: string;
-  recordedAt: string;
-  durationSeconds: number;
-  thumbnail: string;
-  uri: string;
-}
 
 const FOOTER_HEIGHT = 88;
 
@@ -168,7 +160,7 @@ function ClipSelectionCard({
               allowFontScaling={false}
               style={styles.durationText}
             >
-              {formatDuration(clip.durationSeconds)}
+              {formatDuration(clip.durationSeconds ?? 0)}
             </Text>
           </View>
         </View>
@@ -311,7 +303,7 @@ export default function ClipSelectScreen() {
                 color={ COLORS?.textSecondary || '#8E8E93' }
               />
               <Text style={styles.durationText}>
-                {formatDuration(item.durationSeconds)}
+                {formatDuration(item.durationSeconds ?? 0)}
               </Text>
             </View>
           </View>

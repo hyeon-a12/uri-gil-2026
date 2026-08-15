@@ -1,7 +1,6 @@
 import React, { useCallback, useState } from 'react';
 import {
   Alert,
-  Pressable,
   StyleSheet,
   View,
   TouchableOpacity,

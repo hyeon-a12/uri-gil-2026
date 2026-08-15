@@ -11,6 +11,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
+import { ClipItem } from '@/types/home';
 import { useVideoPlayer, VideoView } from "expo-video";
 import { COLORS as SHARED_COLORS } from '@/constants/color';
 
@@ -38,15 +39,6 @@ const COLORS = {
 
   overlay: 'rgba(0,0,0,0.25)',
 };
-
-interface ClipItem {
-  id: string;
-  title: string;
-  recordedAt: string;
-  durationSeconds: number;
-  thumbnail: string;
-  uri: string;
-}
 
 interface ClipPreviewModalProps {
   clip: ClipItem | null;

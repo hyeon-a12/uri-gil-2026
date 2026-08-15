@@ -8,18 +8,22 @@ import {
   Animated,
   PanResponder,
   Dimensions,
+  Pressable,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
-import { useFocusEffect } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import KakaoMapView, {
   KakaoMapPin,
   KakaoMapCurrentLocation,
 } from '@/components/KakaoMapView';
+import { ClipPreviewModal } from '@/app/clip-preview'
 import { TripSelector } from '@/components/common';
 import { useTripStore } from '@/store/useTripStore';
 import { getRecordingsByFolder } from '@/services/recordingService';
 import type { RecordingData } from '@/types/recording';
+import { ClipItem } from '@/types/home';
 import { COLORS as SHARED_COLORS } from '@/constants/color';
 
 const COLORS = {
@@ -116,21 +120,18 @@ function TripProgressCard({
   );
 }
 
-interface ClipMoment {
-  id: string;
-  durationLabel: string;
-  caption: string;
-  isNew?: boolean; // REC 배지가 붙는, 방금 찍은 클립
-}
-
 /** 활성 여행의 클립 중 오늘 촬영된 것만 "오늘의 순간들"에 올립니다. */
-function buildTodayMoments(recordings: RecordingData[]): ClipMoment[] {
+function buildTodayMoments(recordings: RecordingData[]): ClipItem[] {
   const todayRecordings = recordings
     .filter((r) => isToday(r.recordedAt))
     .sort((a, b) => b.recordedAt.localeCompare(a.recordedAt)); // 최신 촬영이 맨 앞
 
   return todayRecordings.map((r, index) => ({
     id: r.id,
+    recordedAt: r.recordedAt ?? new Date().toISOString(),
+    thumbnail: r.thumbnail ?? r.thumbnail,
+    uri: r.videoUri ?? '',
+
     durationLabel: formatClipDuration(r.durationMs),
     caption: r.location.placeName ?? '장소 미지정',
     isNew: index === 0,
@@ -150,10 +151,29 @@ const RECOMMENDED_PLACES: RecommendedPlace[] = [
 /** "오늘의 순간들" 가로 스크롤에 들어가는 클립 하나. 실제 썸네일 이미지가
  * 없어서 지금은 색상 placeholder로 대체했어요 — 나중에
  * <Image source={{ uri: clip.thumbnailUrl }} /> 로 바꿔주시면 됩니다. */
-function MomentThumbnail({ moment }: { moment: ClipMoment }) {
+function MomentThumbnail({
+  moment,
+  onSelect,
+}: {
+  moment: ClipItem;
+  onSelect: (moment: ClipItem) => void; }) {
   return (
-    <View style={styles.momentItem}>
+    <TouchableOpacity
+      style={styles.cardContainer}
+      activeOpacity={0.7}
+      onPress={() => onSelect(moment)}
+    >
       <View style={styles.momentThumb}>
+        {moment.thumbnail ? (
+          <Image
+            source={{ uri: moment.thumbnail }}
+            style={styles.thumbnailImage}
+            resizeMode="cover"
+          />
+        ) : (
+          <View style={styles.placeholderThumb} />
+        )}
+
         {moment.isNew && (
           <View style={styles.recBadge}>
             <Text style={styles.recBadgeText}>REC</Text>
@@ -162,6 +182,7 @@ function MomentThumbnail({ moment }: { moment: ClipMoment }) {
         <View style={styles.durationBadge}>
           <Text style={styles.durationBadgeText}>{moment.durationLabel}</Text>
         </View>
+        
         <View style={styles.playButtonOverlay}>
           <Ionicons name="play" size={16} color={COLORS.white} />
         </View>
@@ -169,7 +190,7 @@ function MomentThumbnail({ moment }: { moment: ClipMoment }) {
       <Text style={styles.momentCaption} numberOfLines={1}>
         {moment.caption}
       </Text>
-    </View>
+    </TouchableOpacity>
   );
 }
 
@@ -201,13 +222,16 @@ function RecommendedPlaceCard({ place }: { place: RecommendedPlace }) {
  * ScrollView가 스크롤을 그대로 처리합니다. 이렇게 해야 핸들의 좁은 영역만
  * 잡았을 때뿐 아니라, 콘텐츠 아무 곳이나 아래로 끌어도 시트를 내릴 수 있어요.
  */
-function PullUpSheet({ moments }: { moments: ClipMoment[] }) {
+function PullUpSheet({ moments }: { moments: ClipItem[] }) {
+  const router = useRouter();
   const DRAG_RANGE = SHEET_PEEK_HEIGHT - SHEET_EXPANDED_TOP_OFFSET;
 
   const translateY = useRef(new Animated.Value(DRAG_RANGE)).current; // 기본값: 접힌 상태
   const currentValueRef = useRef(DRAG_RANGE);
   const dragStartRef = useRef(DRAG_RANGE);
   const scrollOffsetRef = useRef(0); // 내부 ScrollView가 지금 맨 위(0)인지 추적
+
+  const [previewClip, setPreviewClip] = useState<ClipItem | null>(null);
 
   useEffect(() => {
     const id = translateY.addListener(({ value }) => {
@@ -296,10 +320,11 @@ function PullUpSheet({ moments }: { moments: ClipMoment[] }) {
         >
           <View style={styles.sectionHeaderRow}>
             <Text style={styles.sectionTitle}>오늘의 순간들</Text>
-            <TouchableOpacity>
+            <TouchableOpacity onPress={() => router.push('/clip-select')}>
               <Text style={styles.sectionLink}>전체 보기</Text>
             </TouchableOpacity>
           </View>
+
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -307,7 +332,11 @@ function PullUpSheet({ moments }: { moments: ClipMoment[] }) {
           >
             {moments.length > 0 ? (
               moments.map((moment) => (
-                <MomentThumbnail key={moment.id} moment={moment} />
+                <MomentThumbnail
+                  key={moment.id}
+                  moment={moment}
+                  onSelect={() => setPreviewClip(moment)}
+                />
               ))
             ) : (
               <Text style={styles.emptyMomentsText}>
@@ -331,6 +360,11 @@ function PullUpSheet({ moments }: { moments: ClipMoment[] }) {
           <View style={{ height: 40 }} />
         </ScrollView>
       </View>
+
+      <ClipPreviewModal
+        clip={previewClip}
+        onClose={() => setPreviewClip(null)}
+      />
     </Animated.View>
   );
 }
@@ -591,19 +625,24 @@ const styles = StyleSheet.create({
 
   // 오늘의 순간들
   momentRow: {
-    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
   },
-  momentItem: {
-    width: 84,
-    alignItems: 'flex-start',
+  cardContainer: {
+    alignItems: 'center',
+    width: 80,
   },
   momentThumb: {
-    width: 84,
-    height: 84,
-    borderRadius: 42,
-    backgroundColor: COLORS.surface,
-    borderWidth: 1.5,
+    width: 90,
+    height: 90,
+    borderRadius: 45,
+    borderWidth: 3,
     borderColor: COLORS.accent,
+    position: 'relative',
+    overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -618,10 +657,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  thumbnailImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 36,
+  },
+  placeholderThumb: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#E0E0E0',
+    borderRadius: 36,
+  },
   recBadge: {
     position: 'absolute',
-    top: -2,
-    left: 18,
+    top: 7,
+    left: 30,
     zIndex: 2,
     backgroundColor: COLORS.record,
     borderRadius: 6,
