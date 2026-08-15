@@ -12,10 +12,11 @@ import {
   Alert,
 } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS as SHARED_COLORS } from '@/constants/color';
+import { getRecordingsByFolder } from '@/services/recordingService';
 
 const COLORS = {
   background: SHARED_COLORS.background,
@@ -42,28 +43,6 @@ interface EditableClip {
   recordedAt?: string; // ISO
   durationSeconds: number;
 }
-
-// TODO: 클립 관리 화면에서 넘어온 실제 클립 목록(순서 포함)으로 교체
-const MOCK_CLIPS: EditableClip[] = [
-  {
-    id: '1',
-    placeName: '전주 한옥마을',
-    recordedAt: '2026-07-24T14:30:00',
-    durationSeconds: 6,
-  },
-  {
-    id: '2',
-    placeName: '전주 남부시장',
-    recordedAt: '2026-07-24T15:05:00',
-    durationSeconds: 8,
-  },
-  {
-    id: '3',
-    placeName: '전주 방수 맛집',
-    recordedAt: '2026-07-24T17:20:00',
-    durationSeconds: 5,
-  },
-];
 
 // ── 도구바 ───────────────────────────────────────────────────
 type ToolId = 'text' | 'position' | 'mute';
@@ -260,12 +239,60 @@ function formatTimer(seconds: number) {
 export default function VideoEditScreen() {
   const insets = useSafeAreaInsets();
 
+  const { clipIds, folderId } = useLocalSearchParams<{
+    clipIds?: string;
+    folderId?: string;
+  }>();
+
+  const selectedClipIds = useMemo(() => {
+    if (!clipIds) return [];
+    return clipIds.split(',').filter((id) => id.length > 0);
+  }, [clipIds]);
+
+  const [clips, setClips] = useState<EditableClip[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      if (!folderId || selectedClipIds.length === 0) {
+        setClips([]);
+        setIsLoading(false);
+        return;
+      }
+
+      try {
+        const allRecords = await getRecordingsByFolder(folderId);
+        const editableClips: EditableClip[] = [];
+
+        for (const id of selectedClipIds) {
+          const record = allRecords.find((r) => r.id === id);
+          if (!record) continue;
+
+          editableClips.push({
+            id: record.id,
+            videoUri: record.videoUri,
+            thumbnailUri: record.thumbnail,
+            placeName: record.location?.placeName ?? undefined,
+            recordedAt: record.recordedAt,
+            durationSeconds: Math.floor((record.durationMs ?? 0) / 1000),
+          });
+        }
+        
+        setClips(editableClips);
+      } catch (error) {
+        console.error('[VideoEditScreen] 클립 로드 실패', error);
+        setClips([]);
+      } finally {
+        setIsLoading(false);
+      }
+    })();
+  }, [folderId, selectedClipIds]);
+
   // 프리뷰 박스 하단이 화면 맨 위에서 몇 px 떨어져 있는지 실측한 값. 헤더 높이는
   // safe area(insets.top)에 따라 기기마다 달라져서 고정 숫자로 계산할 수 없어,
   // onLayout으로 실제 위치를 재서 바텀시트 높이를 거기 맞춰 늘립니다.
   const [previewBottomY, setPreviewBottomY] = useState<number | null>(null);
 
-  const [clips] = useState<EditableClip[]>(MOCK_CLIPS);
   const totalDurationSeconds = useMemo(
     () => clips.reduce((sum, c) => sum + c.durationSeconds, 0),
     [clips],
@@ -283,9 +310,14 @@ export default function VideoEditScreen() {
     return ticks;
   }, [totalDurationSeconds, rulerStepSeconds]);
 
-  const [editingClipId, setEditingClipId] = useState<string | null>(
-    clips[0]?.id ?? null,
-  );
+  const [editingClipId, setEditingClipId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (clips.length > 0 && !editingClipId) {
+      setEditingClipId(clips[0].id);
+    }
+  }, [clips]);
+
   const editingClip = clips.find((c) => c.id === editingClipId) ?? null;
 
   // 정보 종류/위치/정렬/시간·장소 스타일은 영상 전체에 하나만 적용되는 전역 설정입니다.

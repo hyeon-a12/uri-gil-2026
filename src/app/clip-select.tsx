@@ -413,20 +413,29 @@ export default function ClipSelectScreen() {
       return;
     }
 
-    router.push({
-      pathname: '/video-edit',
-      params: {
-        clips: JSON.stringify(
-          selectedClips.map((clip) => ({
-            id: clip.id,
-            thumbnailUri: clip.thumbnail,
-            videoUri: clip.uri,
-            placeName: clip.title,
-            recordedAt: clip.recordedAt,
-          })),
-        ),
-      },
-    });
+    Alert.alert(
+      '클립 선택 완료',
+      `${selectedCount}개의 클립으로 영상을 생성할까요?`,
+      [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '생성하기',
+          onPress: () => {
+            const clipIdList = selectedClips
+              .map((clip) => clip.id)
+              .join(',');
+            
+            router.push({
+              pathname: '/video-edit',
+              params: {
+                clipIds: clipIdList,
+                folderId: folderId,
+              },
+            });
+          },
+        },
+      ],
+    );
   };
 
   return (
