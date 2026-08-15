@@ -12,6 +12,8 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as MediaLibrary from 'expo-media-library';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useVideoPlayer, VideoView } from 'expo-video';
@@ -254,7 +256,26 @@ async function renderVideo(exportData: {
 }): Promise<{ success: boolean; message?: string }> {
   try {
     console.log('[renderVideo] 렌더링 시작', exportData);
-    
+
+    /*
+    const response = await fetch('https://uri-gil-2026-production.up.railway.app/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(exportData)
+    });
+    if (!response.ok) throw new Error('서버 렌더링 실패');
+    const { downloadUrl } = await response.json();
+
+    const localPath = FileSystem.documentDirectory + `output_${Date.now()}.mp4`;
+    await FileSystem.downloadAsync(downloadUrl, localPath);
+
+    const { status } = await MediaLibrary.requestPermissionsAsync();
+    if (status !== 'granted') {
+      return { success: false, message: '갤러리 접근 권한이 필요합니다.' };
+    }
+    await MediaLibrary.saveToLibraryAsync(localPath);
+    */
+   
     await new Promise((resolve) => setTimeout(resolve, 3000));
     console.log('[renderVideo] 완료');
     return { success: true};
@@ -1379,6 +1400,19 @@ export default function VideoEditScreen() {
           </Animated.View>
         </>
       )}
+      {isExporting && (
+        <View style={styles.exportingOverlay} pointerEvents='auto'>
+          <View style={styles.exportingBox}>
+            <ActivityIndicator size="large" color={COLORS.accent} />
+            <Text allowFontScaling={false} style={styles.exportingTitle}>
+              영상을 만드는 중...
+            </Text>
+            <Text allowFontScaling={false} style={styles.exportingSubtitle}>
+              잠시만 기다려주세요
+            </Text>
+          </View>
+        </View>
+      )}
     </View>
   );
 }
@@ -1959,5 +1993,40 @@ const styles = StyleSheet.create({
   positionDotSelected: {
     backgroundColor: COLORS.accent,
     borderColor: COLORS.accent,
+  },
+
+  exportingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 999,
+  },
+  exportingBox: {
+    paddingHorizontal: 40,
+    paddingVertical: 32,
+    borderRadius: 16,
+    backgroundColor: COLORS.background,
+    alignItems: 'center',
+    gap: 14,
+    minWidth: 240,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  exportingTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: COLORS.black,
+  },
+  exportingSubtitle: {
+    fontSize: 12,
+    color: COLORS.gray500,
   },
 });
