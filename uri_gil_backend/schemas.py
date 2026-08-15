@@ -65,6 +65,7 @@ class ClipResponse(BaseModel):
     id: int
     route_id: int
     user_id: int
+    spot_id: Optional[int] = None
     clip_url: str
     clip_order: Optional[int]
     recorded_at: Optional[datetime]
