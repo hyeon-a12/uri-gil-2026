@@ -8,6 +8,11 @@ import {
   Animated,
   PanResponder,
   Dimensions,
+  Modal,
+  Pressable,
+  Alert,
+  TextInput,
+  Keyboard,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
@@ -16,8 +21,16 @@ import KakaoMapView, {
   KakaoMapPin,
   KakaoMapCurrentLocation,
 } from '@/components/KakaoMapView';
-import { TripSelector } from '@/components/common';
-import { useTripStore } from '@/store/useTripStore';
+import NewTripModal from '@/components/NewTripModal';
+import {
+  getAllFolders,
+  saveFolder,
+  type FolderItem,
+} from '@/services/folderService';
+import {
+  selectCurrentTrip,
+  useTripStore,
+} from '@/store/useTripStore';
 import { getRecordingsByFolder } from '@/services/recordingService';
 import type { RecordingData } from '@/types/recording';
 
@@ -168,6 +181,161 @@ function MomentThumbnail({ moment }: { moment: ClipMoment }) {
       <Text style={styles.momentCaption} numberOfLines={1}>
         {moment.caption}
       </Text>
+    </View>
+  );
+}
+
+
+
+type SearchResultItem = {
+  id: string;
+  title: string;
+  subtitle: string;
+  type: 'place' | 'record';
+};
+
+type HomeTopBarProps = {
+  query: string;
+  results: SearchResultItem[];
+  searchFocused: boolean;
+  onChangeQuery: (text: string) => void;
+  onFocusSearch: () => void;
+  onBlurSearch: () => void;
+  onSubmitSearch: () => void;
+  onSelectResult: (item: SearchResultItem) => void;
+  onClearSearch: () => void;
+  onPressMyTrip: () => void;
+};
+
+function HomeTopBar({
+  query,
+  results,
+  searchFocused,
+  onChangeQuery,
+  onFocusSearch,
+  onBlurSearch,
+  onSubmitSearch,
+  onSelectResult,
+  onClearSearch,
+  onPressMyTrip,
+}: HomeTopBarProps) {
+  const showResults = searchFocused && query.trim().length > 0;
+
+  return (
+    <View style={styles.topBarWrapper}>
+      <View style={styles.topBar}>
+        <View style={styles.searchBar}>
+          <Ionicons
+            name="search-outline"
+            size={23}
+            color={COLORS.textPrimary}
+          />
+
+          <TextInput
+            value={query}
+            onChangeText={onChangeQuery}
+            onFocus={onFocusSearch}
+            onBlur={onBlurSearch}
+            onSubmitEditing={onSubmitSearch}
+            placeholder="장소, 기록, 사람 검색"
+            placeholderTextColor="#777777"
+            returnKeyType="search"
+            autoCorrect={false}
+            autoCapitalize="none"
+            clearButtonMode="never"
+            style={styles.searchInput}
+          />
+
+          {query.length > 0 ? (
+            <Pressable
+              onPress={onClearSearch}
+              hitSlop={8}
+              style={styles.searchClearButton}
+            >
+              <Ionicons
+                name="close-circle"
+                size={19}
+                color={COLORS.textSecondary}
+              />
+            </Pressable>
+          ) : null}
+        </View>
+
+        <TouchableOpacity
+          style={styles.myTripButton}
+          activeOpacity={0.9}
+          onPress={onPressMyTrip}
+        >
+          <Ionicons
+            name="people-outline"
+            size={25}
+            color={COLORS.textPrimary}
+          />
+          <Text style={styles.myTripText}>나의 여행</Text>
+          <Ionicons
+            name="chevron-forward"
+            size={23}
+            color={COLORS.textPrimary}
+          />
+        </TouchableOpacity>
+      </View>
+
+      {showResults ? (
+        <View style={styles.searchResultPanel}>
+          {results.length > 0 ? (
+            results.map((item, index) => (
+              <Pressable
+                key={item.id}
+                onPress={() => onSelectResult(item)}
+                style={({ pressed }) => [
+                  styles.searchResultItem,
+                  index !== results.length - 1 &&
+                  styles.searchResultItemBorder,
+                  pressed && styles.searchResultItemPressed,
+                ]}
+              >
+                <View style={styles.searchResultIcon}>
+                  <Ionicons
+                    name={
+                      item.type === 'record'
+                        ? 'videocam-outline'
+                        : 'location-outline'
+                    }
+                    size={19}
+                    color={COLORS.accent}
+                  />
+                </View>
+
+                <View style={styles.searchResultTextArea}>
+                  <Text style={styles.searchResultTitle} numberOfLines={1}>
+                    {item.title}
+                  </Text>
+                  <Text style={styles.searchResultSubtitle} numberOfLines={1}>
+                    {item.subtitle}
+                  </Text>
+                </View>
+
+                <Ionicons
+                  name="chevron-forward"
+                  size={18}
+                  color={COLORS.textSecondary}
+                />
+              </Pressable>
+            ))
+          ) : (
+            <View style={styles.searchEmpty}>
+              <Ionicons
+                name="search-outline"
+                size={20}
+                color={COLORS.textSecondary}
+              />
+              <Text style={styles.searchEmptyText}>
+                일치하는 검색 결과가 없어요
+              </Text>
+            </View>
+          )}
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -334,6 +502,161 @@ function PullUpSheet({ moments }: { moments: ClipMoment[] }) {
   );
 }
 
+
+function getTripDisplayName(trip: FolderItem | null): string {
+  if (!trip) return '여행 선택';
+
+  const candidate = trip as FolderItem & Record<string, unknown>;
+  const displayName =
+    candidate.name ??
+    candidate.title ??
+    candidate.folderName ??
+    candidate.tripName;
+
+  return typeof displayName === 'string' && displayName.trim().length > 0
+    ? displayName
+    : `여행 ${trip.id}`;
+}
+
+type TripSelectorModalProps = {
+  visible: boolean;
+  trips: FolderItem[];
+  currentTrip: FolderItem | null;
+  onSelect: (trip: FolderItem) => void | Promise<void>;
+  onClose: () => void;
+  onCreateTrip: () => void;
+};
+
+function TripSelectorModal({
+  visible,
+  trips,
+  currentTrip,
+  onSelect,
+  onClose,
+  onCreateTrip,
+}: TripSelectorModalProps) {
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={onClose}
+    >
+      <Pressable style={styles.tripModalBackdrop} onPress={onClose}>
+        <Pressable
+          style={styles.tripModalCard}
+          onPress={(event) => event.stopPropagation()}
+        >
+          <View style={styles.tripModalHandle} />
+
+          <View style={styles.tripModalHeader}>
+            <View>
+              <Text style={styles.tripModalTitle}>여행 선택</Text>
+              <Text style={styles.tripModalSubtitle}>
+                확인하거나 기록할 여행을 선택해주세요.
+              </Text>
+            </View>
+
+            <Pressable
+              hitSlop={10}
+              onPress={onClose}
+              style={styles.tripModalClose}
+            >
+              <Ionicons
+                name="close"
+                size={21}
+                color={COLORS.textSecondary}
+              />
+            </Pressable>
+          </View>
+
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            style={styles.tripModalList}
+          >
+            {trips.map((trip) => {
+              const selected = currentTrip?.id === trip.id;
+
+              return (
+                <Pressable
+                  key={trip.id}
+                  onPress={() => void onSelect(trip)}
+                  style={({ pressed }) => [
+                    styles.tripOption,
+                    selected && styles.tripOptionSelected,
+                    pressed && styles.tripOptionPressed,
+                  ]}
+                >
+                  <View
+                    style={[
+                      styles.tripOptionIcon,
+                      selected && styles.tripOptionIconSelected,
+                    ]}
+                  >
+                    <Ionicons
+                      name="airplane"
+                      size={20}
+                      color={
+                        selected ? COLORS.accent : COLORS.textSecondary
+                      }
+                    />
+                  </View>
+
+                  <View style={styles.tripOptionTextArea}>
+                    <Text
+                      numberOfLines={1}
+                      style={[
+                        styles.tripOptionTitle,
+                        selected && styles.tripOptionTitleSelected,
+                      ]}
+                    >
+                      {getTripDisplayName(trip)}
+                    </Text>
+                    <Text style={styles.tripOptionSubtitle}>
+                      여행 기록 보기
+                    </Text>
+                  </View>
+
+                  {selected ? (
+                    <Ionicons
+                      name="checkmark-circle"
+                      size={23}
+                      color={COLORS.accent}
+                    />
+                  ) : (
+                    <Ionicons
+                      name="chevron-forward"
+                      size={19}
+                      color={COLORS.textSecondary}
+                    />
+                  )}
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+
+          <Pressable
+            style={({ pressed }) => [
+              styles.newTripButton,
+              pressed && styles.tripOptionPressed,
+            ]}
+            onPress={onCreateTrip}
+          >
+            <View style={styles.newTripIcon}>
+              <Ionicons
+                name="add"
+                size={22}
+                color={COLORS.textSecondary}
+              />
+            </View>
+            <Text style={styles.newTripText}>새 여행</Text>
+          </Pressable>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
 }
@@ -345,6 +668,26 @@ export default function TripHomeScreen() {
   const [currentLocation, setCurrentLocation] =
     useState<KakaoMapCurrentLocation | null>(null);
   const [recordings, setRecordings] = useState<RecordingData[]>([]);
+  const [trips, setTrips] = useState<FolderItem[]>([]);
+  const [tripSelectorVisible, setTripSelectorVisible] = useState(false);
+  const [newTripModalVisible, setNewTripModalVisible] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchFocused, setSearchFocused] = useState(false);
+
+  const loadTrips = useCallback(async () => {
+    try {
+      const folders = await getAllFolders();
+      setTrips(folders);
+    } catch (error) {
+      console.error('[HomeScreen] 여행 목록을 불러오지 못했습니다.', error);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadTrips();
+    }, [loadTrips]),
+  );
 
   // 활성 여행이 바뀔 때마다(전환/새 여행 생성 포함) 지도 핀·오늘의 순간들을
   // 그 여행의 실제 클립 데이터로 다시 채웁니다.
@@ -375,6 +718,86 @@ export default function TripHomeScreen() {
 
   const routePins = buildRoutePins(recordings);
   const todayMoments = buildTodayMoments(recordings);
+
+  const searchResults: SearchResultItem[] = (() => {
+    const keyword = searchQuery.trim().toLowerCase();
+
+    if (!keyword) return [];
+
+    const placeMap = new Map<string, SearchResultItem>();
+
+    // 기본 추천 장소
+    RECOMMENDED_PLACES.forEach((place) => {
+      if (place.name.toLowerCase().includes(keyword)) {
+        placeMap.set(`place-${place.id}`, {
+          id: `place-${place.id}`,
+          title: place.name,
+          subtitle: '추천 장소',
+          type: 'place',
+        });
+      }
+    });
+
+    // 현재 여행의 기록에 들어 있는 장소명도 검색 대상에 포함
+    recordings.forEach((recording) => {
+      const placeName = recording.location.placeName?.trim();
+
+      if (placeName && placeName.toLowerCase().includes(keyword)) {
+        const key = `record-${recording.id}`;
+
+        placeMap.set(key, {
+          id: key,
+          title: placeName,
+          subtitle: `여행 기록 · ${new Date(
+            recording.recordedAt,
+          ).toLocaleDateString('ko-KR')}`,
+          type: 'record',
+        });
+      }
+    });
+
+    return Array.from(placeMap.values()).slice(0, 6);
+  })();
+
+  const handleSubmitSearch = () => {
+    const keyword = searchQuery.trim();
+
+    if (!keyword) return;
+
+    Keyboard.dismiss();
+    setSearchFocused(false);
+
+    if (searchResults.length === 0) {
+      Alert.alert(
+        '검색 결과 없음',
+        `"${keyword}"와 일치하는 장소나 기록을 찾지 못했습니다.`,
+      );
+      return;
+    }
+
+    const firstResult = searchResults[0];
+    setSearchQuery(firstResult.title);
+
+    Alert.alert(
+      firstResult.title,
+      firstResult.type === 'record'
+        ? '현재 여행의 기록에서 찾은 장소입니다.'
+        : '추천 장소에서 찾은 결과입니다.',
+    );
+  };
+
+  const handleSelectSearchResult = (item: SearchResultItem) => {
+    setSearchQuery(item.title);
+    setSearchFocused(false);
+    Keyboard.dismiss();
+
+    Alert.alert(
+      item.title,
+      item.type === 'record'
+        ? '현재 여행의 기록에서 찾은 장소입니다.'
+        : '추천 장소에서 찾은 결과입니다.',
+    );
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -423,7 +846,29 @@ export default function TripHomeScreen() {
         />
       </View>
 
-      <TripSelector />
+      <HomeTopBar
+        query={searchQuery}
+        results={searchResults}
+        searchFocused={searchFocused}
+        onChangeQuery={setSearchQuery}
+        onFocusSearch={() => setSearchFocused(true)}
+        onBlurSearch={() => {
+          // 결과 항목을 누르는 터치 이벤트가 먼저 처리될 수 있도록 약간 늦게 닫습니다.
+          setTimeout(() => setSearchFocused(false), 150);
+        }}
+        onSubmitSearch={handleSubmitSearch}
+        onSelectResult={handleSelectSearchResult}
+        onClearSearch={() => {
+          setSearchQuery('');
+          setSearchFocused(true);
+        }}
+        onPressMyTrip={() => {
+          Keyboard.dismiss();
+          setSearchFocused(false);
+          void loadTrips();
+          setTripSelectorVisible(true);
+        }}
+      />
 
       <View style={styles.progressCardWrapper}>
         {currentTrip ? (
@@ -438,6 +883,64 @@ export default function TripHomeScreen() {
       </View>
 
       <PullUpSheet moments={todayMoments} />
+
+      <TripSelectorModal
+        visible={tripSelectorVisible}
+        trips={trips}
+        currentTrip={currentTrip}
+        onClose={() => setTripSelectorVisible(false)}
+        onSelect={async (trip) => {
+          try {
+            await selectCurrentTrip(trip);
+            setTripSelectorVisible(false);
+          } catch (error) {
+            console.error('[HomeScreen] 여행 변경에 실패했습니다.', error);
+            Alert.alert('여행 변경 실패', '여행을 변경하지 못했습니다.');
+          }
+        }}
+        onCreateTrip={() => {
+          setTripSelectorVisible(false);
+          setTimeout(() => setNewTripModalVisible(true), 250);
+        }}
+      />
+
+      <NewTripModal
+        visible={newTripModalVisible}
+        onClose={() => setNewTripModalVisible(false)}
+        onCreated={async (trip) => {
+          const formatDate = (date: Date) => {
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            return `${year}.${month}.${day}.`;
+          };
+
+          const folder: FolderItem = {
+            id: `folder-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            title: trip.name.trim(),
+            dateRange: `${formatDate(trip.startDate)} ~ ${formatDate(trip.endDate)}`,
+            // clipCount: 0,
+            thumbnail: '',
+            region: trip.region,
+            memo: trip.memo,
+            partySize: trip.partySize,
+            themes: trip.themes,
+            clipLengthSeconds: trip.clipLengthSeconds,
+            shootingStyle: trip.shootingStyle,
+            gridTemplateId: trip.gridTemplateId,
+          };
+
+          try {
+            await saveFolder(folder);
+            await selectCurrentTrip(folder);
+            await loadTrips();
+            setNewTripModalVisible(false);
+          } catch (error) {
+            console.error('[HomeScreen] 새 여행 저장에 실패했습니다.', error);
+            Alert.alert('여행 생성 실패', '새 여행을 저장하지 못했습니다.');
+          }
+        }}
+      />
     </View>
   );
 }
@@ -446,6 +949,133 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: COLORS.white,
+  },
+
+
+
+  // 상단 검색 + 나의 여행
+  topBarWrapper: {
+    position: 'absolute',
+    top: 54,
+    left: 20,
+    right: 20,
+    zIndex: 30,
+  },
+  topBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  searchBar: {
+    flex: 1,
+    height: 58,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingLeft: 18,
+    paddingRight: 12,
+    gap: 10,
+    backgroundColor: COLORS.white,
+    borderRadius: 22,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 5,
+  },
+  searchInput: {
+    flex: 1,
+    height: '100%',
+    paddingVertical: 0,
+    fontSize: 16,
+    fontWeight: '500',
+    color: COLORS.textPrimary,
+  },
+  searchClearButton: {
+    width: 28,
+    height: 38,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  myTripButton: {
+    height: 58,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+    gap: 7,
+    backgroundColor: COLORS.white,
+    borderRadius: 22,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 5,
+  },
+  myTripText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: COLORS.textPrimary,
+  },
+  searchResultPanel: {
+    marginTop: 10,
+    marginRight: 154,
+    overflow: 'hidden',
+    backgroundColor: COLORS.white,
+    borderRadius: 18,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    elevation: 9,
+  },
+  searchResultItem: {
+    minHeight: 66,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  searchResultItemBorder: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: COLORS.border,
+  },
+  searchResultItemPressed: {
+    backgroundColor: COLORS.surface,
+  },
+  searchResultIcon: {
+    width: 38,
+    height: 38,
+    marginRight: 10,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.accentTint,
+  },
+  searchResultTextArea: {
+    flex: 1,
+    marginRight: 8,
+  },
+  searchResultTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: COLORS.textPrimary,
+  },
+  searchResultSubtitle: {
+    marginTop: 3,
+    fontSize: 11,
+    color: COLORS.textSecondary,
+  },
+  searchEmpty: {
+    minHeight: 66,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingHorizontal: 14,
+  },
+  searchEmptyText: {
+    fontSize: 13,
+    color: COLORS.textSecondary,
   },
 
   // 지도
@@ -692,4 +1322,123 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: COLORS.textPrimary,
   },
+
+  // 여행 선택 모달
+  tripModalBackdrop: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0,0,0,0.32)',
+  },
+  tripModalCard: {
+    maxHeight: '68%',
+    minHeight: 280,
+    paddingHorizontal: 28,
+    paddingTop: 12,
+    paddingBottom: 28,
+    backgroundColor: COLORS.white,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+  },
+  tripModalHandle: {
+    alignSelf: 'center',
+    width: 62,
+    height: 6,
+    marginBottom: 24,
+    borderRadius: 3,
+    backgroundColor: COLORS.border,
+  },
+  tripModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    marginBottom: 18,
+  },
+  tripModalTitle: {
+    fontSize: 23,
+    fontWeight: '800',
+    color: COLORS.textPrimary,
+  },
+  tripModalSubtitle: {
+    marginTop: 6,
+    fontSize: 14,
+    color: COLORS.textSecondary,
+  },
+  tripModalClose: {
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tripModalList: {
+    maxHeight: 280,
+  },
+  tripOption: {
+    minHeight: 72,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    borderRadius: 16,
+  },
+  tripOptionSelected: {
+    backgroundColor: COLORS.accentTint,
+  },
+  tripOptionPressed: {
+    opacity: 0.65,
+  },
+  tripOptionIcon: {
+    width: 48,
+    height: 48,
+    marginRight: 14,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.surface,
+  },
+  tripOptionIconSelected: {
+    backgroundColor: '#FFE4DC',
+  },
+  tripOptionTextArea: {
+    flex: 1,
+  },
+  tripOptionTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: COLORS.textPrimary,
+  },
+  tripOptionTitleSelected: {
+    color: COLORS.accent,
+  },
+  tripOptionSubtitle: {
+    marginTop: 4,
+    fontSize: 12,
+    color: COLORS.textSecondary,
+  },
+  newTripButton: {
+    minHeight: 72,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 10,
+    paddingHorizontal: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: COLORS.border,
+  },
+  newTripIcon: {
+    width: 48,
+    height: 48,
+    marginRight: 14,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: COLORS.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.surface,
+  },
+  newTripText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: COLORS.textSecondary,
+  },
+
 });
