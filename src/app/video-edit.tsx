@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   Pressable,
   Animated,
+  Easing,
   StyleSheet,
   Dimensions,
   Alert,
@@ -37,6 +38,12 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const PREVIEW_HORIZONTAL_MARGIN = 40;
 const PREVIEW_WIDTH = SCREEN_WIDTH - PREVIEW_HORIZONTAL_MARGIN * 2;
 
+// 룰러(styles.rulerRow)의 paddingHorizontal과 반드시 같은 값이어야, 재생 눈금
+// (playhead)이 실제 눈금 위치와 어긋나지 않습니다.
+const RULER_HORIZONTAL_PADDING = 20;
+const RULER_CONTENT_WIDTH = SCREEN_WIDTH - RULER_HORIZONTAL_PADDING * 2;
+const PLAYHEAD_SIZE = 5;
+
 // ── 클립 데이터 ──────────────────────────────────────────────
 interface EditableClip {
   id: string;
@@ -45,6 +52,24 @@ interface EditableClip {
   placeName?: string;
   recordedAt?: string; // ISO
   durationSeconds: number;
+  /** 그리드 촬영(칸별로 나눠 찍은 클립)일 때만 채워짐 — 같은 값이면 같은 그리드 세트. */
+  gridGroupId?: string;
+  /** 그리드 세트 안에서 몇 번째 칸이었는지 (0부터 시작). */
+  gridSlotIndex?: number;
+}
+
+/** 타임라인/전체 재생에 실제로 쓰는 항목 — 낱개 클립이거나, 같은 그리드 세트끼리
+ * 묶인 항목. 그리드 항목은 재생할 때도 한 항목으로 취급해서 칸들을 동시에 재생해요. */
+type TimelineItem =
+  | { kind: 'single'; clip: EditableClip }
+  | { kind: 'grid'; groupId: string; members: EditableClip[] };
+
+/** 항목 하나(그리드 세트 포함)가 최종 영상에서 차지하는 길이. 그리드 세트는 칸들이
+ * 동시에 재생되니 다 더하면 실제보다 길어져요 — 가장 긴 칸 하나의 길이만큼만 차지해요. */
+function getItemDurationSeconds(item: TimelineItem): number {
+  return item.kind === 'single'
+    ? item.clip.durationSeconds
+    : Math.max(0, ...item.members.map((m) => m.durationSeconds));
 }
 
 // ── 도구바 ───────────────────────────────────────────────────
@@ -288,6 +313,86 @@ async function renderVideo(exportData: {
   }
 }
 
+/** 그리드 세트 안의 클립 하나. 재생/정지는 화면 전체 재생 버튼(isPlaying)에 맞춥니다.
+ * 썸네일을 VideoView 뒤에 깔아둬서, 새 클립으로 넘어갈 때 플레이어가 첫 프레임을
+ * 디코딩하는 짧은 순간에도 화면이 까맣게 깜빡이지 않고 썸네일이 대신 보이게 합니다. */
+function GroupPreviewCell({
+  uri,
+  thumbnailUri,
+  isPlaying,
+}: {
+  uri?: string;
+  thumbnailUri?: string;
+  isPlaying: boolean;
+}) {
+  const player = useVideoPlayer(uri ?? null, (p) => {
+    p.loop = true;
+    // 칸마다 소리가 다 나오면 겹쳐서 시끄러우니 미리보기에서는 음소거합니다.
+    p.muted = true;
+  });
+
+  useEffect(() => {
+    if (isPlaying) {
+      player.play();
+    } else {
+      player.pause();
+    }
+  }, [isPlaying, player]);
+
+  return (
+    <>
+      {thumbnailUri && (
+        <Image source={{ uri: thumbnailUri }} style={StyleSheet.absoluteFill} />
+      )}
+      <VideoView
+        player={player}
+        style={StyleSheet.absoluteFill}
+        contentFit="cover"
+        nativeControls={false}
+      />
+    </>
+  );
+}
+
+/** 그리드로 나눠 찍은 클립들을 실제 분할 구도 그대로 프리뷰에 동시 재생. 터치는
+ * 그대로 통과시켜서(pointerEvents 없음) 프리뷰 배경 탭으로 선택 해제하는
+ * 기존 동작이 그리드일 때도 똑같이 동작하게 둡니다. */
+function GroupPreviewPlayers({
+  clips,
+  isPlaying,
+}: {
+  clips: EditableClip[];
+  isPlaying: boolean;
+}) {
+  const cellPercent = 100 / clips.length;
+
+  return (
+    <>
+      {clips.map((clip, index) => (
+        <View
+          key={clip.id}
+          style={[
+            styles.groupPreviewCell,
+            { top: `${index * cellPercent}%`, height: `${cellPercent}%` },
+          ]}
+        >
+          <GroupPreviewCell
+            uri={clip.videoUri}
+            thumbnailUri={clip.thumbnailUri}
+            isPlaying={isPlaying}
+          />
+        </View>
+      ))}
+      {clips.slice(1).map((_, index) => (
+        <View
+          key={`divider-${index}`}
+          style={[styles.groupPreviewDivider, { top: `${(index + 1) * cellPercent}%` }]}
+        />
+      ))}
+    </>
+  );
+}
+
 export default function VideoEditScreen() {
   const insets = useSafeAreaInsets();
 
@@ -327,6 +432,8 @@ export default function VideoEditScreen() {
             placeName: record.location?.placeName ?? undefined,
             recordedAt: record.recordedAt,
             durationSeconds: Math.floor((record.durationMs ?? 0) / 1000),
+            gridGroupId: record.gridGroupId,
+            gridSlotIndex: record.gridSlotIndex,
           });
         }
         
@@ -345,23 +452,6 @@ export default function VideoEditScreen() {
   // onLayout으로 실제 위치를 재서 바텀시트 높이를 거기 맞춰 늘립니다.
   const [previewBottomY, setPreviewBottomY] = useState<number | null>(null);
 
-  const totalDurationSeconds = useMemo(
-    () => clips.reduce((sum, c) => sum + c.durationSeconds, 0),
-    [clips],
-  );
-
-  // 눈금 간격은 전체 길이에 맞춰 자동으로 성깁니다 — 짧은 영상은 1초마다,
-  // 길어질수록 5초/10초 단위로 넘어가서 눈금이 서로 겹치지 않게 해요.
-  const rulerStepSeconds =
-    totalDurationSeconds > 60 ? 10 : totalDurationSeconds > 20 ? 5 : 1;
-  const rulerTicks = useMemo(() => {
-    const ticks: number[] = [];
-    for (let s = 0; s <= totalDurationSeconds; s += rulerStepSeconds) {
-      ticks.push(s);
-    }
-    return ticks;
-  }, [totalDurationSeconds, rulerStepSeconds]);
-
   const [editingClipId, setEditingClipId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -371,6 +461,70 @@ export default function VideoEditScreen() {
   }, [clips]);
 
   const editingClip = clips.find((c) => c.id === editingClipId) ?? null;
+
+  // 편집 대상 클립이 그리드로 나눠 찍은 세트의 일부면, 같은 세트의 다른 칸들도
+  // 같이 찾아둡니다 — 프리뷰에서 그리드로 합쳐서 보여줄 때 씁니다.
+  // (2명 이상일 때만 "그리드"로 취급 — 그룹 id가 있어도 멤버가 1개뿐이면 그냥 단일 클립.)
+  const editingClipGroup = useMemo(() => {
+    if (!editingClip?.gridGroupId) return null;
+    const members = clips
+      .filter((c) => c.gridGroupId === editingClip.gridGroupId)
+      .sort((a, b) => (a.gridSlotIndex ?? 0) - (b.gridSlotIndex ?? 0));
+    return members.length > 1 ? members : null;
+  }, [editingClip, clips]);
+
+  // 타임라인에 실제로 그릴 항목 — 낱개 클립이거나, 같은 그리드 세트끼리 묶인 타일.
+  const timelineItems = useMemo(() => {
+    const membersByGroup = new Map<string, EditableClip[]>();
+    for (const clip of clips) {
+      if (!clip.gridGroupId) continue;
+      const list = membersByGroup.get(clip.gridGroupId) ?? [];
+      list.push(clip);
+      membersByGroup.set(clip.gridGroupId, list);
+    }
+
+    const items: TimelineItem[] = [];
+    const renderedGroups = new Set<string>();
+
+    for (const clip of clips) {
+      if (!clip.gridGroupId) {
+        items.push({ kind: 'single', clip });
+        continue;
+      }
+      const members = membersByGroup.get(clip.gridGroupId) ?? [];
+      if (members.length <= 1) {
+        items.push({ kind: 'single', clip });
+        continue;
+      }
+      if (renderedGroups.has(clip.gridGroupId)) continue;
+      renderedGroups.add(clip.gridGroupId);
+
+      const sortedMembers = [...members].sort(
+        (a, b) => (a.gridSlotIndex ?? 0) - (b.gridSlotIndex ?? 0),
+      );
+      items.push({ kind: 'grid', groupId: clip.gridGroupId, members: sortedMembers });
+    }
+
+    return items;
+  }, [clips]);
+
+  const totalDurationSeconds = useMemo(
+    () => timelineItems.reduce((sum, item) => sum + getItemDurationSeconds(item), 0),
+    [timelineItems],
+  );
+
+  // 큰 눈금 간격은 전체 길이에 맞춰 자동으로 성깁니다 — 짧은 영상은 5초마다,
+  // 길어질수록 10초 단위로 넘어가서 큰 눈금끼리 서로 겹치지 않게 해요. 작은
+  // 눈금은 길이에 상관없이 항상 1초 간격으로 그려서 그 사이가 비어 보이지
+  // 않게 합니다.
+  const rulerStepSeconds = totalDurationSeconds > 60 ? 10 : 5;
+  const rulerTicks = useMemo(() => {
+    const ticks: number[] = [];
+    for (let s = 0; s <= totalDurationSeconds; s += 1) {
+      ticks.push(s);
+    }
+    return ticks;
+  }, [totalDurationSeconds]);
 
   // 정보 종류/위치/정렬/시간·장소 스타일은 영상 전체에 하나만 적용되는 전역 설정입니다.
   const [globalEditState, setGlobalEditState] = useState<GlobalEditState>(
@@ -424,37 +578,141 @@ export default function VideoEditScreen() {
     Object.values(editStates).some((state) => !isDefaultClipEditState(state));
 
   // ── 재생 ────────────────────────────────────────────────
-  // 클립이 선택돼 있으면(editingClipId) 그 클립 하나만 재생하고 끝나면 멈춰요.
-  // 선택된 클립이 없으면 전체 클립을 이어서(playIndex 순서대로) 재생합니다.
-  const [playIndex, setPlayIndex] = useState(0);
+  // 클립이 선택돼 있으면(editingClipId) 그 클립(또는 그리드 세트) 하나만 재생하고
+  // 끝나면 멈춰요. 선택된 클립이 없으면 타임라인 항목(timelineItems) 순서대로
+  // 이어서 재생합니다 — 그리드로 묶인 항목은 한 항목으로 취급해서, 칸들을 동시에
+  // 재생하고 그 항목이 끝나면 다음 항목으로 넘어갑니다.
+  const [playItemIndex, setPlayItemIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
 
-  const playingClip = editingClipId ? editingClip : clips[playIndex] ?? null;
+  const playingItem: TimelineItem | null = editingClipId
+    ? null
+    : timelineItems[playItemIndex] ?? null;
 
-  const player = useVideoPlayer(clips[playIndex]?.videoUri ?? null, (p) => {
+  // 지금 재생해야 할 게 그리드 세트면(선택 모드든 전체 재생 모드든) 이 배열에 담김.
+  const playingGroup: EditableClip[] | null = editingClipId
+    ? editingClipGroup
+    : playingItem?.kind === 'grid'
+      ? playingItem.members
+      : null;
+
+  // 단일 재생/타임라인 하이라이트용 "대표 클립". 그리드일 땐 첫 번째 칸이 대표예요.
+  const playingClip: EditableClip | null = editingClipId
+    ? editingClip
+    : playingItem?.kind === 'single'
+      ? playingItem.clip
+      : playingItem?.kind === 'grid'
+        ? playingItem.members[0]
+        : null;
+
+  // 재생 눈금바 위에서 움직이는 재생 위치 표시(playhead)용 계산. 지금 재생/선택
+  // 중인 항목이 전체 타임라인에서 몇 번째인지 찾고(activeTimelineIndex), 그 앞에
+  // 있는 항목들의 길이를 더해 "이 항목이 시작하는 지점"(itemStartSeconds)을 구합니다.
+  const activeTimelineIndex = useMemo(() => {
+    if (!editingClipId) return playItemIndex;
+    const idx = timelineItems.findIndex((item) =>
+      item.kind === 'single'
+        ? item.clip.id === editingClipId
+        : item.members.some((m) => m.id === editingClipId),
+    );
+    return idx === -1 ? 0 : idx;
+  }, [editingClipId, playItemIndex, timelineItems]);
+
+  const itemStartSeconds = useMemo(() => {
+    let sum = 0;
+    for (let i = 0; i < activeTimelineIndex; i++) {
+      sum += getItemDurationSeconds(timelineItems[i]);
+    }
+    return sum;
+  }, [timelineItems, activeTimelineIndex]);
+
+  const activeItemDurationSeconds =
+    timelineItems[activeTimelineIndex] != null
+      ? getItemDurationSeconds(timelineItems[activeTimelineIndex])
+      : 0;
+
+  // 재생 위치(초 단위)를 부드럽게 움직이는 Animated.Value. 항목이 바뀌면 그 항목의
+  // 시작 지점으로 즉시 점프하고(아래 첫 번째 effect), 재생 중이면 남은 시간 동안
+  // 항목이 끝나는 지점까지 선형으로 애니메이션합니다. 일시정지하면 애니메이션만
+  // 멈추고 값은 그대로 남아서 그 자리에 계속 멈춰 있어요.
+  const playheadAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    playheadAnim.stopAnimation();
+    playheadAnim.setValue(itemStartSeconds);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTimelineIndex]);
+
+  useEffect(() => {
+    if (isPlaying) {
+      playheadAnim.stopAnimation((currentValue) => {
+        const targetSeconds = itemStartSeconds + activeItemDurationSeconds;
+        const remainingSeconds = Math.max(0, targetSeconds - currentValue);
+        Animated.timing(playheadAnim, {
+          toValue: targetSeconds,
+          duration: remainingSeconds * 1000,
+          easing: Easing.linear,
+          useNativeDriver: false,
+        }).start();
+      });
+    } else {
+      playheadAnim.stopAnimation();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPlaying, activeTimelineIndex]);
+
+  const advanceToNextItem = () => {
+    setPlayItemIndex((prevIndex) => {
+      const nextIndex = prevIndex + 1;
+      if (nextIndex < timelineItems.length) {
+        return nextIndex;
+      }
+      setIsPlaying(false);
+      return 0;
+    });
+  };
+
+  const player = useVideoPlayer(null, (p) => {
     p.loop = false;
   });
 
+  // 단일 클립 재생이 끝났을 때: 선택 모드면 그냥 멈추고, 전체 재생 모드면 다음
+  // 타임라인 항목으로 넘어갑니다. (그리드 항목 재생 중엔 이 player 자체를 안 쓰므로
+  // 이 리스너가 안 불립니다 — 그리드는 아래 타이머로 따로 처리해요.)
   useEffect(() => {
     const subscription = player.addListener('playToEnd', () => {
       if (editingClipId) {
-        // 단일 클립 모드: 다음 클립으로 안 넘어가고 그냥 멈춥니다.
         setIsPlaying(false);
         return;
       }
-      setPlayIndex((prevIndex) => {
-        const nextIndex = prevIndex + 1;
-        if (nextIndex < clips.length) {
-          return nextIndex;
-        }
-        setIsPlaying(false);
-        return 0;
-      });
+      advanceToNextItem();
     });
     return () => subscription.remove();
-  }, [player, clips.length, editingClipId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [player, editingClipId, timelineItems.length]);
+
+  // 그리드 항목 재생 중일 땐 playToEnd를 낼 단일 플레이어가 없어서, 칸들 중 가장
+  // 긴 길이만큼 타이머로 다음 항목으로 넘깁니다(전체 재생 모드에서만).
+  useEffect(() => {
+    if (editingClipId || !isPlaying || !playingGroup) return;
+
+    const durationMs =
+      Math.max(1, ...playingGroup.map((m) => m.durationSeconds || 0)) * 1000;
+    const timeout = setTimeout(() => {
+      advanceToNextItem();
+    }, durationMs);
+
+    return () => clearTimeout(timeout);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editingClipId, isPlaying, playingGroup, timelineItems.length]);
 
   useEffect(() => {
+    if (playingGroup) {
+      // 그리드 그룹 재생은 GroupPreviewPlayers가 칸별로 알아서 재생하니, 단일
+      // player는 멈춰둡니다(같은 소스를 또 재생하면 소리가 겹쳐요).
+      player.pause();
+      return;
+    }
     if (!playingClip?.videoUri) return;
 
     if (isPlaying) {
@@ -466,7 +724,7 @@ export default function VideoEditScreen() {
       player.pause();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [playingClip, isPlaying, player]);
+  }, [playingClip, playingGroup, isPlaying, player]);
 
   const hasPlayableClips = clips.some((c) => !!c.videoUri);
 
@@ -477,7 +735,11 @@ export default function VideoEditScreen() {
       return;
     }
     if (!editingClipId) {
-      setPlayIndex(0);
+      setPlayItemIndex(0);
+      // 이미 0번째 항목이었으면 activeTimelineIndex가 안 바뀌어서 리셋
+      // effect가 안 도니, 재생 눈금을 확실히 0초로 되돌려둡니다.
+      playheadAnim.stopAnimation();
+      playheadAnim.setValue(0);
     }
     setIsPlaying(true);
   }
@@ -645,7 +907,7 @@ export default function VideoEditScreen() {
 
     Alert.alert(
       '영상 생성하기',
-      `${clips.length}개의 클립으로 영상을 만들까요?\n예상 길이: ${formatTimer(totalDurationSeconds)}`,
+      `${timelineItems.length}개의 클립으로 영상을 만들까요?\n예상 길이: ${formatTimer(totalDurationSeconds)}`,
       [
         { text: '취소', style: 'cancel'},
         {
@@ -733,13 +995,48 @@ export default function VideoEditScreen() {
           setPreviewBottomY(y + height);
         }}
       >
-        {isPlaying && playingClip?.videoUri ? (
-          <VideoView
-            player={player}
-            style={styles.previewImage}
-            contentFit="cover"
-            nativeControls={false}
-          />
+        {playingGroup && isPlaying ? (
+          <GroupPreviewPlayers clips={playingGroup} isPlaying={isPlaying} />
+        ) : editingClipGroup ? (
+          // 선택 모드에서 일시정지 중 — 칸별 썸네일을 쌓아서 보여줍니다.
+          editingClipGroup.map((member, index) => (
+            <View
+              key={member.id}
+              style={[
+                styles.groupPreviewCell,
+                {
+                  top: `${(index * 100) / editingClipGroup.length}%`,
+                  height: `${100 / editingClipGroup.length}%`,
+                },
+              ]}
+            >
+              {member.thumbnailUri ? (
+                <Image
+                  source={{ uri: member.thumbnailUri }}
+                  style={styles.previewImage}
+                />
+              ) : (
+                <View style={styles.timelineThumbPlaceholder} />
+              )}
+            </View>
+          ))
+        ) : isPlaying && playingClip?.videoUri ? (
+          <View style={styles.previewImage}>
+            {/* 다음 클립으로 넘어갈 때 새 영상의 첫 프레임을 디코딩하는 짧은 순간
+                화면이 까맣게 깜빡이는 걸 막기 위해, 썸네일을 뒤에 깔아둡니다. */}
+            {playingClip.thumbnailUri && (
+              <Image
+                source={{ uri: playingClip.thumbnailUri }}
+                style={StyleSheet.absoluteFill}
+              />
+            )}
+            <VideoView
+              player={player}
+              style={StyleSheet.absoluteFill}
+              contentFit="cover"
+              nativeControls={false}
+            />
+          </View>
         ) : editingClip?.thumbnailUri ? (
           <Image
             source={{ uri: editingClip.thumbnailUri }}
@@ -788,7 +1085,7 @@ export default function VideoEditScreen() {
                     },
                   ]}
                 >
-                  {getTimeLabel(editingClip)}
+                  {getTimeLabel(playingClip ?? editingClip)}
                 </Text>
               </Pressable>
             )}
@@ -819,7 +1116,7 @@ export default function VideoEditScreen() {
                     },
                   ]}
                 >
-                  {getPlaceLabel(editingClip)}
+                  {getPlaceLabel(playingClip ?? editingClip)}
                 </Text>
               </Pressable>
             )}
@@ -859,7 +1156,7 @@ export default function VideoEditScreen() {
       {/* 타임 룰러 — 빈 배경을 탭하면 선택된 클립을 해제합니다 */}
       <Pressable style={styles.rulerRow} onPress={deselectClip}>
         {rulerTicks.map((second) => {
-          const isMajor = rulerStepSeconds >= 5 || second % 5 === 0;
+          const isMajor = second % rulerStepSeconds === 0;
           return (
             <View key={second} style={styles.rulerTickWrapper}>
               <View
@@ -868,6 +1165,32 @@ export default function VideoEditScreen() {
             </View>
           );
         })}
+
+        {/* 재생 위치 표시(playhead) — 0초에서 시작해 재생에 맞춰 부드럽게 오른쪽으로
+            움직이고, 멈추면 그 자리에 그대로 있습니다. */}
+        {totalDurationSeconds > 0 && (
+          <Animated.View
+            pointerEvents="none"
+            style={[
+              styles.playheadDot,
+              {
+                left: playheadAnim.interpolate({
+                  inputRange: [0, totalDurationSeconds],
+                  outputRange: [
+                    RULER_HORIZONTAL_PADDING +
+                      (0.5 / (totalDurationSeconds + 1)) * RULER_CONTENT_WIDTH -
+                      PLAYHEAD_SIZE / 2,
+                    RULER_HORIZONTAL_PADDING +
+                      ((totalDurationSeconds + 0.5) / (totalDurationSeconds + 1)) *
+                        RULER_CONTENT_WIDTH -
+                      PLAYHEAD_SIZE / 2,
+                  ],
+                  extrapolate: 'clamp',
+                }),
+              },
+            ]}
+          />
+        )}
       </Pressable>
 
       {/* 클립 타임라인 */}
@@ -876,21 +1199,80 @@ export default function VideoEditScreen() {
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.timelineRow}
       >
-        {clips.map((clip, index) => {
-          const isEditing = clip.id === editingClipId;
-          const isCurrentlyPlaying = isPlaying && playingClip?.id === clip.id;
-          const clipState = getEditState(clip.id);
+        {timelineItems.map((item, index) => {
+          if (item.kind === 'single') {
+            const clip = item.clip;
+            const isEditing = clip.id === editingClipId;
+            const isCurrentlyPlaying = isPlaying && playingClip?.id === clip.id;
+            const clipState = getEditState(clip.id);
+
+            return (
+              <TouchableOpacity
+                key={clip.id}
+                onPress={() => {
+                  if (isEditing) {
+                    // 이미 선택된 클립을 다시 누르면 선택 해제
+                    deselectClip();
+                    return;
+                  }
+                  setEditingClipId(clip.id);
+                  setIsPlaying(false);
+                }}
+                style={[
+                  styles.timelineTile,
+                  isEditing && styles.timelineTileEditing,
+                ]}
+                activeOpacity={0.85}
+              >
+                {clip.thumbnailUri ? (
+                  <Image
+                    source={{ uri: clip.thumbnailUri }}
+                    style={styles.timelineThumb}
+                  />
+                ) : (
+                  <View style={styles.timelineThumbPlaceholder} />
+                )}
+
+                <View style={styles.timelineBadge}>
+                  <Text allowFontScaling={false} style={styles.timelineBadgeText}>
+                    {index + 1}
+                  </Text>
+                </View>
+
+                {clipState.isMuted && (
+                  <View style={styles.timelineMuteBadge}>
+                    <Ionicons name="volume-mute" size={10} color="#FFFFFF" />
+                  </View>
+                )}
+
+                {isCurrentlyPlaying && (
+                  <View style={styles.nowPlayingBadge}>
+                    <Ionicons name="volume-high" size={10} color="#FFFFFF" />
+                  </View>
+                )}
+              </TouchableOpacity>
+            );
+          }
+
+          // 그리드로 나눠 찍은 세트 — 칸 개수만큼 썸네일을 쌓아서 타일 하나로 보여줍니다.
+          const { groupId, members } = item;
+          const firstMember = members[0];
+          const isEditing =
+            editingClipId != null && members.some((m) => m.id === editingClipId);
+          const isCurrentlyPlaying =
+            isPlaying && !!playingClip && members.some((m) => m.id === playingClip.id);
+          const clipState = getEditState(firstMember.id);
+          const cellPercent = 100 / members.length;
 
           return (
             <TouchableOpacity
-              key={clip.id}
+              key={groupId}
               onPress={() => {
                 if (isEditing) {
-                  // 이미 선택된 클립을 다시 누르면 선택 해제
                   deselectClip();
                   return;
                 }
-                setEditingClipId(clip.id);
+                setEditingClipId(firstMember.id);
                 setIsPlaying(false);
               }}
               style={[
@@ -899,19 +1281,36 @@ export default function VideoEditScreen() {
               ]}
               activeOpacity={0.85}
             >
-              {clip.thumbnailUri ? (
-                <Image
-                  source={{ uri: clip.thumbnailUri }}
-                  style={styles.timelineThumb}
-                />
-              ) : (
-                <View style={styles.timelineThumbPlaceholder} />
-              )}
+              {members.map((member, memberIndex) => (
+                <View
+                  key={member.id}
+                  style={[
+                    styles.timelineGridCell,
+                    {
+                      top: `${memberIndex * cellPercent}%`,
+                      height: `${cellPercent}%`,
+                    },
+                  ]}
+                >
+                  {member.thumbnailUri ? (
+                    <Image
+                      source={{ uri: member.thumbnailUri }}
+                      style={styles.timelineThumb}
+                    />
+                  ) : (
+                    <View style={styles.timelineThumbPlaceholder} />
+                  )}
+                </View>
+              ))}
 
               <View style={styles.timelineBadge}>
                 <Text allowFontScaling={false} style={styles.timelineBadgeText}>
                   {index + 1}
                 </Text>
+              </View>
+
+              <View style={styles.timelineGridBadge}>
+                <Ionicons name="apps-outline" size={10} color="#FFFFFF" />
               </View>
 
               {clipState.isMuted && (
@@ -1476,6 +1875,19 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
   },
+  // 그리드 프리뷰 — 칸 하나(top/height는 인라인으로 계산해서 넣음)
+  groupPreviewCell: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+  },
+  groupPreviewDivider: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    height: StyleSheet.hairlineWidth * 2,
+    backgroundColor: 'rgba(255,255,255,0.6)',
+  },
   previewPlaceholder: {
     flex: 1,
     alignItems: 'center',
@@ -1483,6 +1895,8 @@ const styles = StyleSheet.create({
   },
   infoOverlay: {
     position: 'absolute',
+    // 그리드 프리뷰의 칸 구분선 등 영상 레이어 위에서 항상 텍스트가 보이도록.
+    zIndex: 2,
     borderRadius: 10,
     paddingHorizontal: 10,
     paddingVertical: 6,
@@ -1547,7 +1961,7 @@ const styles = StyleSheet.create({
   // 맞춰서 눈금이 클립 시작 위치와 나란히 보이도록 정렬했어요.
   rulerRow: {
     flexDirection: 'row',
-    paddingHorizontal: 20,
+    paddingHorizontal: RULER_HORIZONTAL_PADDING,
     marginBottom: 10,
   },
   rulerTickWrapper: {
@@ -1557,11 +1971,22 @@ const styles = StyleSheet.create({
   rulerTick: {
     width: 1,
     height: 5,
-    backgroundColor: COLORS.divider,
+    // 큰 눈금(rulerTickMajor)과 같은 색이되, 그보다 옅게 보이도록 불투명도만 낮췄어요.
+    backgroundColor: COLORS.gray500,
+    opacity: 0.4,
   },
   rulerTickMajor: {
     height: 9,
     backgroundColor: COLORS.gray500,
+    opacity: 1,
+  },
+  playheadDot: {
+    position: 'absolute',
+    top: -1,
+    width: PLAYHEAD_SIZE,
+    height: PLAYHEAD_SIZE,
+    borderRadius: PLAYHEAD_SIZE / 2,
+    backgroundColor: COLORS.accent,
   },
 
   timelineRow: {
@@ -1588,6 +2013,23 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
     backgroundColor: COLORS.gray200,
+  },
+  // 그리드 타일 안, 칸 하나(top/height는 인라인으로 계산해서 넣음)
+  timelineGridCell: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+  },
+  timelineGridBadge: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   timelineBadge: {
     position: 'absolute',
