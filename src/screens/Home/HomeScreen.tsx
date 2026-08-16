@@ -191,7 +191,10 @@ type SearchResultItem = {
   id: string;
   title: string;
   subtitle: string;
-  type: 'place' | 'record';
+  latitude: number;
+  longitude: number;
+  category: string;
+  distance?: number;
 };
 
 type HomeTopBarProps = {
@@ -296,11 +299,7 @@ function HomeTopBar({
               >
                 <View style={styles.searchResultIcon}>
                   <Ionicons
-                    name={
-                      item.type === 'record'
-                        ? 'videocam-outline'
-                        : 'location-outline'
-                    }
+                    name="location-outline"
                     size={19}
                     color={COLORS.accent}
                   />
@@ -673,6 +672,10 @@ export default function TripHomeScreen() {
   const [newTripModalVisible, setNewTripModalVisible] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
+  const [searchResults, setSearchResults] = useState<SearchResultItem[]>([]);
+  const [nearbyPlaces, setNearbyPlaces] = useState<SearchResultItem[]>([]);
+  const [selectedPlace, setSelectedPlace] = useState<SearchResultItem | null>(null);
+  const [isSearching, setIsSearching] = useState(false);
 
   const loadTrips = useCallback(async () => {
     try {
@@ -719,84 +722,197 @@ export default function TripHomeScreen() {
   const routePins = buildRoutePins(recordings);
   const todayMoments = buildTodayMoments(recordings);
 
-  const searchResults: SearchResultItem[] = (() => {
-    const keyword = searchQuery.trim().toLowerCase();
+  const searchKakaoPlaces = async (
+    keyword: string,
+  ): Promise<SearchResultItem[]> => {
+    const apiKey = process.env.EXPO_PUBLIC_KAKAO_REST_API_KEY;
 
-    if (!keyword) return [];
+    if (!apiKey) {
+      console.error(
+        '[HomeScreen] EXPO_PUBLIC_KAKAO_REST_API_KEY가 설정되지 않았습니다.',
+      );
+      return [];
+    }
 
-    const placeMap = new Map<string, SearchResultItem>();
+    const trimmedKeyword = keyword.trim();
 
-    // 기본 추천 장소
-    RECOMMENDED_PLACES.forEach((place) => {
-      if (place.name.toLowerCase().includes(keyword)) {
-        placeMap.set(`place-${place.id}`, {
-          id: `place-${place.id}`,
-          title: place.name,
-          subtitle: '추천 장소',
-          type: 'place',
-        });
-      }
+    if (!trimmedKeyword) {
+      return [];
+    }
+
+    const params = new URLSearchParams({
+      query: trimmedKeyword,
+      size: '10',
     });
 
-    // 현재 여행의 기록에 들어 있는 장소명도 검색 대상에 포함
-    recordings.forEach((recording) => {
-      const placeName = recording.location.placeName?.trim();
+    if (currentLocation) {
+      params.append('x', String(currentLocation.lng));
+      params.append('y', String(currentLocation.lat));
+      params.append('sort', 'distance');
+    }
 
-      if (placeName && placeName.toLowerCase().includes(keyword)) {
-        const key = `record-${recording.id}`;
+    const response = await fetch(
+      `https://dapi.kakao.com/v2/local/search/keyword.json?${params.toString()}`,
+      {
+        headers: {
+          Authorization: `KakaoAK ${apiKey}`,
+        },
+      },
+    );
 
-        placeMap.set(key, {
-          id: key,
-          title: placeName,
-          subtitle: `여행 기록 · ${new Date(
-            recording.recordedAt,
-          ).toLocaleDateString('ko-KR')}`,
-          type: 'record',
+    if (!response.ok) {
+      const errorText = await response.text();
+
+      console.error(
+        '[HomeScreen] 카카오 장소 검색 실패:',
+        response.status,
+        errorText,
+      );
+
+      throw new Error(`카카오 장소 검색 실패: ${response.status}`);
+    }
+
+    const data = await response.json();
+
+    return (data.documents ?? []).map((place: any) => ({
+      id: String(place.id),
+      title: place.place_name ?? '이름 없는 장소',
+      subtitle:
+        place.road_address_name ||
+        place.address_name ||
+        place.category_name ||
+        '주소 정보 없음',
+      latitude: Number(place.y),
+      longitude: Number(place.x),
+      category:
+        place.category_group_name ||
+        place.category_name ||
+        '장소',
+      distance: place.distance ? Number(place.distance) : undefined,
+    }));
+  };
+
+  const searchNearbyPlaces = async (
+    place: SearchResultItem,
+  ): Promise<SearchResultItem[]> => {
+    const apiKey = process.env.EXPO_PUBLIC_KAKAO_REST_API_KEY;
+
+    if (!apiKey) {
+      return [];
+    }
+
+    const categoryCodes = ['FD6', 'CE7', 'AT4'];
+
+    const responses = await Promise.all(
+      categoryCodes.map(async (categoryCode) => {
+        const params = new URLSearchParams({
+          category_group_code: categoryCode,
+          x: String(place.longitude),
+          y: String(place.latitude),
+          radius: '1500',
+          sort: 'distance',
+          size: '5',
         });
-      }
-    });
 
-    return Array.from(placeMap.values()).slice(0, 6);
-  })();
+        const response = await fetch(
+          `https://dapi.kakao.com/v2/local/search/category.json?${params.toString()}`,
+          {
+            headers: {
+              Authorization: `KakaoAK ${apiKey}`,
+            },
+          },
+        );
 
-  const handleSubmitSearch = () => {
+        if (!response.ok) {
+          return [];
+        }
+
+        const data = await response.json();
+        return data.documents ?? [];
+      }),
+    );
+
+    const flattened = responses.flat();
+
+    const unique = flattened.filter(
+      (item: any, index: number, array: any[]) =>
+        array.findIndex((other) => other.id === item.id) === index,
+    );
+
+    return unique
+      .map((item: any) => ({
+        id: String(item.id),
+        title: item.place_name ?? '이름 없는 장소',
+        subtitle:
+          item.road_address_name ||
+          item.address_name ||
+          item.category_name ||
+          '주소 정보 없음',
+        latitude: Number(item.y),
+        longitude: Number(item.x),
+        category:
+          item.category_group_name ||
+          item.category_name ||
+          '장소',
+        distance: item.distance ? Number(item.distance) : undefined,
+      }))
+      .sort(
+        (a: SearchResultItem, b: SearchResultItem) =>
+          (a.distance ?? Number.POSITIVE_INFINITY) -
+          (b.distance ?? Number.POSITIVE_INFINITY),
+      )
+      .filter((item: SearchResultItem) => item.id !== place.id)
+      .slice(0, 10);
+  };
+
+  const handleSubmitSearch = async () => {
     const keyword = searchQuery.trim();
 
     if (!keyword) return;
 
-    Keyboard.dismiss();
-    setSearchFocused(false);
+    try {
+      setIsSearching(true);
+      setSelectedPlace(null);
+      setNearbyPlaces([]);
 
-    if (searchResults.length === 0) {
-      Alert.alert(
-        '검색 결과 없음',
-        `"${keyword}"와 일치하는 장소나 기록을 찾지 못했습니다.`,
-      );
-      return;
+      const results = await searchKakaoPlaces(keyword);
+      setSearchResults(results);
+      setSearchFocused(true);
+
+      if (results.length === 0) {
+        Alert.alert(
+          '검색 결과 없음',
+          `"${keyword}"에 대한 장소를 찾지 못했습니다.`,
+        );
+      }
+    } catch (error) {
+      console.error('[HomeScreen] 검색 실패:', error);
+      Alert.alert('검색 실패', '카카오 장소 검색 중 오류가 발생했습니다.');
+    } finally {
+      setIsSearching(false);
     }
-
-    const firstResult = searchResults[0];
-    setSearchQuery(firstResult.title);
-
-    Alert.alert(
-      firstResult.title,
-      firstResult.type === 'record'
-        ? '현재 여행의 기록에서 찾은 장소입니다.'
-        : '추천 장소에서 찾은 결과입니다.',
-    );
   };
 
-  const handleSelectSearchResult = (item: SearchResultItem) => {
-    setSearchQuery(item.title);
-    setSearchFocused(false);
-    Keyboard.dismiss();
+  const handleSelectSearchResult = async (item: SearchResultItem) => {
+    try {
+      setSearchQuery(item.title);
+      setSelectedPlace(item);
+      setSearchResults([]);
+      setSearchFocused(false);
+      Keyboard.dismiss();
+      setIsSearching(true);
 
-    Alert.alert(
-      item.title,
-      item.type === 'record'
-        ? '현재 여행의 기록에서 찾은 장소입니다.'
-        : '추천 장소에서 찾은 결과입니다.',
-    );
+      const nearby = await searchNearbyPlaces(item);
+      setNearbyPlaces(nearby);
+    } catch (error) {
+      console.error('[HomeScreen] 주변 장소 검색 실패:', error);
+      Alert.alert(
+        '주변 장소 검색 실패',
+        '선택한 장소 주변 정보를 불러오지 못했습니다.',
+      );
+    } finally {
+      setIsSearching(false);
+    }
   };
 
   useEffect(() => {
@@ -860,6 +976,9 @@ export default function TripHomeScreen() {
         onSelectResult={handleSelectSearchResult}
         onClearSearch={() => {
           setSearchQuery('');
+          setSearchResults([]);
+          setNearbyPlaces([]);
+          setSelectedPlace(null);
           setSearchFocused(true);
         }}
         onPressMyTrip={() => {
@@ -869,6 +988,96 @@ export default function TripHomeScreen() {
           setTripSelectorVisible(true);
         }}
       />
+
+      {selectedPlace ? (
+        <View style={styles.nearbyPanel}>
+          <View style={styles.nearbyHeader}>
+            <View style={styles.nearbyHeaderTextArea}>
+              <Text style={styles.nearbyTitle} numberOfLines={1}>
+                {selectedPlace.title}
+              </Text>
+              <Text style={styles.nearbySubtitle} numberOfLines={1}>
+                {selectedPlace.subtitle}
+              </Text>
+            </View>
+            <Pressable
+              hitSlop={8}
+              onPress={() => {
+                setSelectedPlace(null);
+                setNearbyPlaces([]);
+              }}
+            >
+              <Ionicons
+                name="close"
+                size={20}
+                color={COLORS.textSecondary}
+              />
+            </Pressable>
+          </View>
+
+          <Text style={styles.nearbySectionLabel}>주변 추천</Text>
+
+          {isSearching ? (
+            <Text style={styles.nearbyEmptyText}>
+              주변 장소를 불러오는 중이에요...
+            </Text>
+          ) : nearbyPlaces.length > 0 ? (
+            <ScrollView
+              style={styles.nearbyList}
+              showsVerticalScrollIndicator={false}
+            >
+              {nearbyPlaces.map((place, index) => (
+                <Pressable
+                  key={place.id}
+                  onPress={() => {
+                    setSearchQuery(place.title);
+                    setSelectedPlace(place);
+                  }}
+                  style={({ pressed }) => [
+                    styles.nearbyItem,
+                    index !== nearbyPlaces.length - 1 &&
+                    styles.nearbyItemBorder,
+                    pressed && styles.searchResultItemPressed,
+                  ]}
+                >
+                  <View style={styles.nearbyIcon}>
+                    <Ionicons
+                      name="location-outline"
+                      size={18}
+                      color={COLORS.accent}
+                    />
+                  </View>
+
+                  <View style={styles.nearbyTextArea}>
+                    <Text
+                      style={styles.nearbyItemTitle}
+                      numberOfLines={1}
+                    >
+                      {place.title}
+                    </Text>
+                    <Text
+                      style={styles.nearbyItemSubtitle}
+                      numberOfLines={1}
+                    >
+                      {place.category}
+                      {place.distance !== undefined
+                        ? ` · ${place.distance < 1000
+                          ? `${Math.round(place.distance)}m`
+                          : `${(place.distance / 1000).toFixed(1)}km`
+                        }`
+                        : ''}
+                    </Text>
+                  </View>
+                </Pressable>
+              ))}
+            </ScrollView>
+          ) : (
+            <Text style={styles.nearbyEmptyText}>
+              주변 추천 장소가 없어요.
+            </Text>
+          )}
+        </View>
+      ) : null}
 
       <View style={styles.progressCardWrapper}>
         {currentTrip ? (
@@ -1075,6 +1284,91 @@ const styles = StyleSheet.create({
   },
   searchEmptyText: {
     fontSize: 13,
+    color: COLORS.textSecondary,
+  },
+
+  nearbyPanel: {
+    position: 'absolute',
+    top: 126,
+    left: 20,
+    right: 20,
+    zIndex: 25,
+    maxHeight: 320,
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 10,
+    backgroundColor: COLORS.white,
+    borderRadius: 18,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    elevation: 9,
+  },
+  nearbyHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginBottom: 10,
+  },
+  nearbyHeaderTextArea: {
+    flex: 1,
+  },
+  nearbyTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: COLORS.textPrimary,
+  },
+  nearbySubtitle: {
+    marginTop: 3,
+    fontSize: 11,
+    color: COLORS.textSecondary,
+  },
+  nearbySectionLabel: {
+    marginBottom: 6,
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.textPrimary,
+  },
+  nearbyList: {
+    maxHeight: 220,
+  },
+  nearbyItem: {
+    minHeight: 58,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  nearbyItemBorder: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: COLORS.border,
+  },
+  nearbyIcon: {
+    width: 34,
+    height: 34,
+    marginRight: 10,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.accentTint,
+  },
+  nearbyTextArea: {
+    flex: 1,
+  },
+  nearbyItemTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: COLORS.textPrimary,
+  },
+  nearbyItemSubtitle: {
+    marginTop: 2,
+    fontSize: 11,
+    color: COLORS.textSecondary,
+  },
+  nearbyEmptyText: {
+    paddingVertical: 14,
+    fontSize: 12,
     color: COLORS.textSecondary,
   },
 
