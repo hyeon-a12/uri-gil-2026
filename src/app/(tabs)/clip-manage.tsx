@@ -15,7 +15,7 @@ import { Ionicons, Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { setActiveFolder, clearActiveFolder, getActiveFolder } from '@/services/activeFolderService';
 import { getAllFolders, saveFolder, deleteFolder as deleteFolderFromStorage, FolderItem } from '@/services/folderService';
-import { getRecordingsByFolder } from '@/services/recordingService';
+import { countDisplayItems, getRecordingsByFolder } from '@/services/recordingService';
 import { useTripStore } from '@/store/useTripStore';
 import NewTripModal from '@/components/NewTripModal';
 import { COLORS as SHARED_COLORS } from '@/constants/color';
@@ -69,7 +69,7 @@ export default function ClipManageScreen() {
           const records = await getRecordingsByFolder(f.id);
           return {
             ...f,
-            clipCount: records.length,
+            clipCount: countDisplayItems(records),
             isCurrentActive: f.id === activeId,
           };
         }),

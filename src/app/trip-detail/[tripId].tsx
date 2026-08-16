@@ -5,7 +5,7 @@ import { AppText } from '@/components/AppText';
 import { colors } from '@/constants/menu-theme';
 import { Card, ListRow, SectionLabel, ScreenHeader } from '@/components/common';
 import { getAllFolders } from '@/services/folderService';
-import { getRecordingsByFolder } from '@/services/recordingService';
+import { countDisplayItems, getRecordingsByFolder } from '@/services/recordingService';
 
 interface VisitedPlace {
   order: number;
@@ -70,7 +70,7 @@ export default function TripDetailScreen() {
           id: folder.id,
           title: folder.title,
           dateRange: folder.dateRange,
-          clipCount: recordings.length,
+          clipCount: countDisplayItems(recordings),
           places,
         });
       })();
