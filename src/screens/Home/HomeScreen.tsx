@@ -135,7 +135,19 @@ function buildTodayMoments(recordings: RecordingData[]): ClipItem[] {
     durationLabel: formatClipDuration(r.durationMs),
     caption: r.location.placeName ?? '장소 미지정',
     isNew: index === 0,
+    gridGroupId: r.gridGroupId,
+    gridSlotIndex: r.gridSlotIndex,
   }));
+}
+
+/** 탭한 클립이 그리드 세트의 일부면 같은 세트의 다른 칸들도 같이 찾아서, 미리보기를
+ * 그리드로 합쳐서 열 수 있게 합니다(2명 이상일 때만 그리드로 취급). */
+function getPreviewGroup(moment: ClipItem, moments: ClipItem[]): ClipItem[] {
+  if (!moment.gridGroupId) return [moment];
+  const members = moments
+    .filter((m) => m.gridGroupId === moment.gridGroupId)
+    .sort((a, b) => (a.gridSlotIndex ?? 0) - (b.gridSlotIndex ?? 0));
+  return members.length > 1 ? members : [moment];
 }
 
 interface RecommendedPlace {
@@ -174,11 +186,6 @@ function MomentThumbnail({
           <View style={styles.placeholderThumb} />
         )}
 
-        {moment.isNew && (
-          <View style={styles.recBadge}>
-            <Text style={styles.recBadgeText}>REC</Text>
-          </View>
-        )}
         <View style={styles.durationBadge}>
           <Text style={styles.durationBadgeText}>{moment.durationLabel}</Text>
         </View>
@@ -231,7 +238,7 @@ function PullUpSheet({ moments }: { moments: ClipItem[] }) {
   const dragStartRef = useRef(DRAG_RANGE);
   const scrollOffsetRef = useRef(0); // 내부 ScrollView가 지금 맨 위(0)인지 추적
 
-  const [previewClip, setPreviewClip] = useState<ClipItem | null>(null);
+  const [previewClips, setPreviewClips] = useState<ClipItem[] | null>(null);
 
   useEffect(() => {
     const id = translateY.addListener(({ value }) => {
@@ -335,7 +342,7 @@ function PullUpSheet({ moments }: { moments: ClipItem[] }) {
                 <MomentThumbnail
                   key={moment.id}
                   moment={moment}
-                  onSelect={() => setPreviewClip(moment)}
+                  onSelect={() => setPreviewClips(getPreviewGroup(moment, moments))}
                 />
               ))
             ) : (
@@ -362,8 +369,8 @@ function PullUpSheet({ moments }: { moments: ClipItem[] }) {
       </View>
 
       <ClipPreviewModal
-        clip={previewClip}
-        onClose={() => setPreviewClip(null)}
+        clips={previewClips}
+        onClose={() => setPreviewClips(null)}
       />
     </Animated.View>
   );
@@ -636,10 +643,10 @@ const styles = StyleSheet.create({
     width: 80,
   },
   momentThumb: {
-    width: 90,
-    height: 90,
-    borderRadius: 45,
-    borderWidth: 3,
+    width: 81,
+    height: 81,
+    borderRadius: 40.5,
+    borderWidth: 2.7,
     borderColor: COLORS.accent,
     position: 'relative',
     overflow: 'hidden',
@@ -652,7 +659,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    borderRadius: 42,
+    borderRadius: 37.8,
     backgroundColor: 'rgba(0,0,0,0.15)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -660,28 +667,13 @@ const styles = StyleSheet.create({
   thumbnailImage: {
     width: '100%',
     height: '100%',
-    borderRadius: 36,
+    borderRadius: 32.4,
   },
   placeholderThumb: {
     width: '100%',
     height: '100%',
     backgroundColor: '#E0E0E0',
-    borderRadius: 36,
-  },
-  recBadge: {
-    position: 'absolute',
-    top: 7,
-    left: 30,
-    zIndex: 2,
-    backgroundColor: COLORS.record,
-    borderRadius: 6,
-    paddingHorizontal: 5,
-    paddingVertical: 1,
-  },
-  recBadgeText: {
-    fontSize: 8,
-    fontWeight: '800',
-    color: COLORS.white,
+    borderRadius: 32.4,
   },
   durationBadge: {
     position: 'absolute',
