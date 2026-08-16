@@ -6,16 +6,15 @@ import {
   View,
   Modal,
   Animated,
-  Dimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
+import { useEvent } from 'expo';
 import { ClipItem } from '@/types/home';
 import { useVideoPlayer, VideoView } from "expo-video";
+import { GridVideoPreview } from '@/components/location-confirm/GridVideoPreview';
 import { COLORS as SHARED_COLORS } from '@/constants/color';
-
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 const COLORS = {
   background: SHARED_COLORS.background,
@@ -41,7 +40,8 @@ const COLORS = {
 };
 
 interface ClipPreviewModalProps {
-  clip: ClipItem | null;
+  /** 그리드 클립이면 칸 순서대로 정렬된 배열(2개 이상), 낱개 클립이면 길이 1짜리 배열. */
+  clips: ClipItem[] | null;
   onClose: () => void;
 }
 
@@ -55,7 +55,66 @@ const formatDate = (isoString: string) => {
   return `${yyyy}.${mm}.${dd} ${hh}:${min}`;
 };
 
-export function ClipPreviewModal({ clip, onClose }: ClipPreviewModalProps) {
+/** 여러 칸을 한 번에 보여줘야 하면 그리드 미리보기로, 아니면 원래 있던 전체화면
+ * 단일 재생 미리보기로 분기합니다. */
+export function ClipPreviewModal({ clips, onClose }: ClipPreviewModalProps) {
+  if (!clips || clips.length === 0) return null;
+  if (clips.length > 1) {
+    return <GridClipPreview clips={clips} onClose={onClose} />;
+  }
+  return <SingleClipPreview clip={clips[0]} onClose={onClose} />;
+}
+
+/** 그리드로 나눠 찍은 클립 여러 개를 실제 분할 구도 그대로 동시 재생하는 전체화면
+ * 미리보기. 클립 선택 목록에서 쓰는 GridVideoPreview를 그대로 재사용합니다. */
+function GridClipPreview({ clips, onClose }: { clips: ClipItem[]; onClose: () => void }) {
+  const insets = useSafeAreaInsets();
+  const first = clips[0];
+
+  return (
+    <Modal
+      visible
+      transparent
+      animationType='fade'
+      onRequestClose={onClose}
+      statusBarTranslucent
+    >
+      <View style={previewStyles.container}>
+        <GridVideoPreview
+          videoUris={clips.map((c) => c.uri)}
+          style={previewStyles.gridVideoContainer}
+        />
+
+        <View style={[previewStyles.topBar, { paddingTop: insets.top + 10 }]}>
+          <View style={previewStyles.topInfoRow}>
+            <View style={previewStyles.clipInfo}>
+              <Text
+                numberOfLines={1}
+                allowFontScaling={false}
+                style={previewStyles.clipTitle}
+              >
+                {first.title}
+              </Text>
+              <Text allowFontScaling={false} style={previewStyles.clipDate}>
+                그리드 {clips.length}칸 · {formatDate(first.recordedAt)}
+              </Text>
+            </View>
+
+            <Pressable
+              hitSlop={12}
+              onPress={onClose}
+              style={previewStyles.closeButton}
+            >
+              <Ionicons name='close' size={26} color="#FFFFFF" />
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+function SingleClipPreview({ clip, onClose }: { clip: ClipItem; onClose: () => void }) {
   const [isPlaying, setIsPlaying] = useState(true);
   const progressAnim = useRef(new Animated.Value(0)).current;
   const insets = useSafeAreaInsets();
@@ -65,18 +124,25 @@ export function ClipPreviewModal({ clip, onClose }: ClipPreviewModalProps) {
     p.play();
   });
 
-  useEffect(() => {
-    if (!clip) return;
+  const { status } = useEvent(player, 'statusChange', { status: player.status });
 
-    const durationMs = (clip.durationSeconds ?? 5) * 1000;
+  // 진행바 속도는 clip.durationSeconds(촬영 당시 wall-clock으로 잰 값이라 살짝
+  // 어긋날 수 있음) 대신, 재생기가 실제로 읽어들인 영상 길이(player.duration)를
+  // 우선 씁니다 — 그래야 진행바가 끝까지 차는 시점과 영상이 실제로 끝나는 시점이
+  // 항상 정확히 맞아떨어져요. 아직 메타데이터를 못 읽었을 때만 저장된 값으로 대체.
+  const getDurationMs = () =>
+    (player.duration > 0 ? player.duration : (clip?.durationSeconds ?? 5)) * 1000;
+
+  useEffect(() => {
+    if (!clip || status !== 'readyToPlay') return;
 
     progressAnim.setValue(0);
     Animated.timing(progressAnim, {
       toValue: 1,
-      duration: durationMs,
+      duration: getDurationMs(),
       useNativeDriver: false,
     }).start();
-  }, [clip]);
+  }, [clip, status]);
 
   useEffect(() => {
     if (!player) return;
@@ -95,8 +161,7 @@ export function ClipPreviewModal({ clip, onClose }: ClipPreviewModalProps) {
     } else {
       player.play();
       progressAnim.stopAnimation((currentValue) => {
-        const durationMs = (clip?.durationSeconds ?? 5) * 1000;
-        const remainingMs = durationMs * (1 - currentValue);
+        const remainingMs = getDurationMs() * (1 - currentValue);
 
         Animated.timing(progressAnim, {
           toValue: 1,
@@ -126,7 +191,7 @@ export function ClipPreviewModal({ clip, onClose }: ClipPreviewModalProps) {
           <VideoView
             player={player}
             style={previewStyles.video}
-            contentFit='contain'
+            contentFit='cover'
             nativeControls={false}
           />
 
@@ -189,6 +254,15 @@ const previewStyles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: '#000000',
+        justifyContent: 'center',
+    },
+    // 카메라 촬영 화면의 9:16 프레임과 같은 비율로 박스를 잡아서, 그 틀 안에서만
+    // 재생되도록 합니다(화면 전체를 꽉 채우지 않음).
+    gridVideoContainer: {
+        flex: 0,
+        width: '100%',
+        aspectRatio: 9 / 16,
+        borderRadius: 0,
     },
     videoContainer: {
         flex: 1,
@@ -196,8 +270,8 @@ const previewStyles = StyleSheet.create({
         justifyContent: 'center',
     },
     video: {
-        width: SCREEN_WIDTH,
-        height: SCREEN_HEIGHT,
+        width: '100%',
+        aspectRatio: 9 / 16,
     },
     pauseIconOverlay: {
         ...StyleSheet.absoluteFillObject,
@@ -247,7 +321,7 @@ const previewStyles = StyleSheet.create({
     },
     clipDate: {
         fontSize: 11,
-        color: 'rgba(255,255,255,0.8',
+        color: '#FFFFFF',
         marginTop: 2,
     },
     closeButton: {

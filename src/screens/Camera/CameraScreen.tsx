@@ -10,26 +10,52 @@ import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Modal,
   Platform,
   Pressable,
   StyleSheet,
   View,
 } from 'react-native';
-import Svg, { Circle } from 'react-native-svg';
+import Svg, { Circle, Rect, Line, Path } from 'react-native-svg';
+import { BlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
 import { AppText as Text } from '@/components/AppText';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { navigateToLocationConfirm } from '@/navigation/recordingNavigation';
 import { useTripStore } from '@/store/useTripStore';
-import { type ShootingStyleId } from '@/services/folderService';
+import {
+  GRID_TEMPLATE_SLOT_COUNTS,
+  type ShootingStyleId,
+  type GridTemplateId,
+} from '@/services/folderService';
 import CameraChangeIcon from '@/assets/images/camera_change.svg';
 import { COLORS as SHARED_COLORS } from '@/constants/color';
 
 const MAX_CLIPS = 15;
-const DEFAULT_CLIP_SECONDS = 10;
-const MIN_CLIP_SECONDS = 5;
-const MAX_CLIP_SECONDS_CAP = 10;
+// 카메라 촬영 시간은 3초로 고정 — 예전엔 여행 만들기 모달에서 초수를 물어봤지만,
+// 지금은 모든 클립이 3초로 통일됩니다.
+const RECORD_DURATION_SECONDS = 3;
+
+// ── 촬영 스타일 데이터 ───────────────────────────────────────
+// 원래 여행 만들기 모달(NewTripModal) 3단계에서 미리 고르던 값인데, "촬영 버튼을
+// 누르고 카메라 화면에서 정할 수 있도록" 여기로 옮겨왔습니다. 여행 단위가 아니라
+// 촬영 세션(이 화면을 여는 동안)에만 적용되는 로컬 상태예요.
+const SHOOTING_STYLES: {
+  id: ShootingStyleId;
+  label: string;
+  description: string;
+}[] = [
+  { id: 'basic', label: '기본 스타일', description: '가이드 없이 자유롭게' },
+  { id: 'grid', label: '그리드 선택', description: '클립을 분할 화면으로' },
+  { id: 'doll', label: '인형과 함께', description: '소품 놓을 위치 표시' },
+  { id: 'mirror', label: '원형 거울', description: '거울 놓을 위치 표시' },
+];
+
+const GRID_TEMPLATES: { id: GridTemplateId; label: string }[] = [
+  { id: 'rows3', label: '3분할' },
+  { id: 'rows2', label: '2분할' },
+];
 
 // 게이지(그리드 스타일 진행률 배지)에서 "여기서 0.5x로 바꾸세요" 타이밍 비율.
 const ZOOM_SWITCH_RATIO = 0.5;
@@ -52,11 +78,14 @@ const COLORS = {
   white: SHARED_COLORS.background,
   black: SHARED_COLORS.textPrimary,
   backgroundIvory: SHARED_COLORS.backgroundIvory,
-  gridLine: 'rgba(255,255,255,0.45)',
   ring: 'rgba(255,255,255,0.4)',
   pillBg: 'var(--placeholder)', // 아래 실제 스타일에서 rgba로 대체
   textSecondary: SHARED_COLORS.textSecondary,
 };
+
+// 상단 "스타일 선택" 트리거 pill 배경. 카메라 프리뷰 위에 떠 있는 다른 컨트롤
+// (닫기 버튼 등)과 마찬가지로 반투명 검정을 씁니다.
+const STYLE_TRIGGER_BG = 'rgba(0,0,0,0.4)';
 
 // 0.5×는 selectedLens로 초광각 렌즈("Back Ultra Wide Camera")로 물리적으로
 // 전환해서 처리합니다(아래 selectedLens 계산 참고) — 이건 정상 동작 확인됨.
@@ -141,24 +170,305 @@ function PermissionScreen({
   );
 }
 
-/** 3분할 구도 보조선. 촬영 스타일과 무관하게 항상 켜져 있는 일반적인
- * 카메라 구도 가이드예요("그리드 선택" 촬영 스타일과는 다른 개념입니다 —
- * 그건 여러 클립을 분할 화면으로 합치는 편집 포맷이고, 이건 그냥 눈금선). */
-function CompositionGrid() {
+// '인형과 함께' 가이드 원(머리) 지름. 구도는 사용자가 조절하지 않고 이 자리로 고정합니다.
+const DOLL_GUIDE_SIZE = 170;
+// 귀가 머리 원 바깥으로 튀어나오는 만큼 캔버스에 여유를 둡니다(안 두면 잘려서 그려짐).
+const DOLL_GUIDE_CANVAS = DOLL_GUIDE_SIZE + 40;
+const DOLL_EAR_RADIUS = DOLL_GUIDE_SIZE * 0.16;
+const GUIDE_DASH = '6,6';
+const GUIDE_STROKE = 'rgba(255,255,255,0.85)';
+
+// '원형 거울' 가이드. 사람은 포즈가 매번 달라서 고정 가이드와 안 맞지만, 거울은
+// 늘 똑같은 원형이라 화면 가이드에 거울만 맞추면 매번 같은 구도가 나옵니다.
+const MIRROR_GUIDE_SIZE = 190; // 거울(원) 지름
+const MIRROR_GUIDE_CANVAS = MIRROR_GUIDE_SIZE + 4;
+
+/**
+ * 머리 원 둘레 위의 한 점(각도 theta, 12시=0, 시계방향 +)에 반원(귀)을 그리는 SVG
+ * path를 만듭니다. 지름(A→B)이 머리 원의 접선과 나란히 놓이고, 호는 원 중심에서
+ * 먼 바깥쪽으로만 부풀도록 sweep-flag를 계산해뒀어요 — 그래서 머리 원 안쪽으로
+ * 겹치는 부분 없이 딱 튀어나온 반원만 그려집니다.
+ */
+function earArcPath(
+  headCx: number,
+  headCy: number,
+  headRadius: number,
+  theta: number,
+  earRadius: number,
+): string {
+  const outwardX = Math.sin(theta);
+  const outwardY = -Math.cos(theta);
+  // 접선 방향 = 바깥쪽 법선을 90도 회전한 벡터
+  const tangentX = -outwardY;
+  const tangentY = outwardX;
+
+  const pivotX = headCx + headRadius * outwardX;
+  const pivotY = headCy + headRadius * outwardY;
+
+  const ax = pivotX - earRadius * tangentX;
+  const ay = pivotY - earRadius * tangentY;
+  const bx = pivotX + earRadius * tangentX;
+  const by = pivotY + earRadius * tangentY;
+
+  return `M ${ax} ${ay} A ${earRadius} ${earRadius} 0 0 1 ${bx} ${by}`;
+}
+
+/**
+ * 머리 원 둘레를 fromTheta→toTheta(시계방향, 12시=0 기준)까지만 그리는 SVG path.
+ * 귀 반원 밑에 깔리는 머리 원 점선 구간을 건너뛰기 위해, 원 전체를 한 번에
+ * 그리지 않고 이 함수로 필요한 구간만 나눠서 그립니다.
+ */
+function headArcPath(
+  headCx: number,
+  headCy: number,
+  headRadius: number,
+  fromTheta: number,
+  toTheta: number,
+): string {
+  const startX = headCx + headRadius * Math.sin(fromTheta);
+  const startY = headCy - headRadius * Math.cos(fromTheta);
+  const endX = headCx + headRadius * Math.sin(toTheta);
+  const endY = headCy - headRadius * Math.cos(toTheta);
+  const largeArc = toTheta - fromTheta > Math.PI ? 1 : 0;
+
+  return `M ${startX} ${startY} A ${headRadius} ${headRadius} 0 ${largeArc} 1 ${endX} ${endY}`;
+}
+
+/**
+ * 그리드 촬영 중일 때 프리뷰 위에 겹쳐 그리는 칸 분할 오버레이.
+ *
+ * 칸 구분선은 항상 보여주고, 지금 찍는 칸(activeIndex)만 클리어하게 두고(= 매번
+ * "1번 칸 찍을 때"와 똑같은 카메라 화면), 이미 찍은 칸은 블러+체크 표시, 아직
+ * 안 찍은 칸은 블러만 표시합니다. 칸이 넘어갈 때마다 클리어한 자리가 같이 옮겨가면서
+ * 진행 상황이 눈에 보여요.
+ */
+function GridSplitOverlay({
+  slotCount,
+  activeIndex,
+}: {
+  slotCount: number;
+  activeIndex: number;
+}) {
+  const cellPercent = 100 / slotCount;
+
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFillObject}>
-      <View style={[styles.gridLineVertical, { left: '33.333%' }]} />
-      <View style={[styles.gridLineVertical, { left: '66.666%' }]} />
-      <View style={[styles.gridLineHorizontal, { top: '33.333%' }]} />
-      <View style={[styles.gridLineHorizontal, { top: '66.666%' }]} />
+      {Array.from({ length: slotCount }).map((_, i) => {
+        const isDone = i < activeIndex;
+        const isActive = i === activeIndex;
+
+        return (
+          <View
+            key={i}
+            style={[styles.gridCell, { top: `${i * cellPercent}%`, height: `${cellPercent}%` }]}
+          >
+            {!isActive && (
+              <BlurView intensity={60} tint="dark" style={StyleSheet.absoluteFillObject} />
+            )}
+            {isDone && (
+              <View style={styles.gridCellCheck}>
+                <Ionicons name="checkmark" size={14} color={COLORS.white} />
+              </View>
+            )}
+          </View>
+        );
+      })}
+      {Array.from({ length: slotCount - 1 }).map((_, i) => (
+        <View
+          key={`divider-${i}`}
+          style={[styles.gridDividerLine, { top: `${(i + 1) * cellPercent}%` }]}
+        />
+      ))}
     </View>
   );
 }
 
 /** 화면 중앙 스타일 가이드 자리 (그리드 제외 — 인형/사람 스타일용).
- * 지금은 기본 스타일만 있어서 비어있고, 나중에 여기 분기를 추가하면 돼요. */
+ * 구도를 사용자가 매번 조정하게 하면 "5초 안에 촬영 시작" 원칙과 부딪혀서,
+ * 인형/사람 모두 정해진 자리에 고정된 가이드만 보여줍니다. */
 function CenterGuide({ shootingStyle }: { shootingStyle: ShootingStyleId }) {
+  if (shootingStyle === 'doll') return <DollGuide />;
+  if (shootingStyle === 'mirror') return <MirrorGuide />;
   return null;
+}
+
+function DollGuide() {
+  const center = DOLL_GUIDE_CANVAS / 2;
+  const headRadius = DOLL_GUIDE_SIZE / 2 - 2;
+
+  // 곰돌이 귀 — 머리 원의 11시/1시 방향(정각 12시에서 좌우로 30도)에 반원이
+  // 걸치도록 각도만 좌우로 뒤집어서 넘겨줍니다.
+  const earAngle = Math.PI / 6; // 30도
+  // 반원(귀)이 머리 원 둘레를 덮는 반각. 이만큼은 머리 원 점선을 안 그립니다.
+  const earGapHalfAngle = Math.atan(DOLL_EAR_RADIUS / headRadius);
+
+  return (
+    <View style={styles.dollGuideWrap}>
+      <Svg width={DOLL_GUIDE_CANVAS} height={DOLL_GUIDE_CANVAS}>
+        <Path
+          d={earArcPath(center, center, headRadius, -earAngle, DOLL_EAR_RADIUS)}
+          stroke={GUIDE_STROKE}
+          strokeWidth={2}
+          strokeDasharray={GUIDE_DASH}
+          fill="none"
+        />
+        <Path
+          d={earArcPath(center, center, headRadius, earAngle, DOLL_EAR_RADIUS)}
+          stroke={GUIDE_STROKE}
+          strokeWidth={2}
+          strokeDasharray={GUIDE_DASH}
+          fill="none"
+        />
+        {/* 이마 — 두 귀 사이, 머리 원에서 남겨두는 구간 */}
+        <Path
+          d={headArcPath(
+            center,
+            center,
+            headRadius,
+            -earAngle + earGapHalfAngle,
+            earAngle - earGapHalfAngle,
+          )}
+          stroke={GUIDE_STROKE}
+          strokeWidth={2}
+          strokeDasharray={GUIDE_DASH}
+          fill="none"
+        />
+        {/* 나머지 머리 둘레 — 오른쪽 귀 끝에서 시계방향으로 돌아 왼쪽 귀 끝까지 */}
+        <Path
+          d={headArcPath(
+            center,
+            center,
+            headRadius,
+            earAngle + earGapHalfAngle,
+            2 * Math.PI - (earAngle + earGapHalfAngle),
+          )}
+          stroke={GUIDE_STROKE}
+          strokeWidth={2}
+          strokeDasharray={GUIDE_DASH}
+          fill="none"
+        />
+      </Svg>
+    </View>
+  );
+}
+
+function MirrorGuide() {
+  const center = MIRROR_GUIDE_CANVAS / 2;
+  const mirrorRadius = MIRROR_GUIDE_SIZE / 2 - 2;
+
+  return (
+    <View style={styles.mirrorGuideWrap}>
+      <Svg width={MIRROR_GUIDE_CANVAS} height={MIRROR_GUIDE_CANVAS}>
+        <Circle
+          cx={center}
+          cy={center}
+          r={mirrorRadius}
+          stroke={GUIDE_STROKE}
+          strokeWidth={2}
+          strokeDasharray={GUIDE_DASH}
+          fill="none"
+        />
+      </Svg>
+    </View>
+  );
+}
+
+/** 스타일 선택 시트 안, 세로 프레임 미니 프리뷰. NewTripModal에 있던 것을 그대로
+ * 옮겨왔습니다 — 텍스트 설명보다 작은 그림 하나가 더 빨리 이해돼요. */
+function StylePreview({ styleId }: { styleId: ShootingStyleId }) {
+  const w = 44;
+  const h = 78;
+
+  return (
+    <Svg width={w} height={h}>
+      <Rect
+        x={1}
+        y={1}
+        width={w - 2}
+        height={h - 2}
+        rx={6}
+        stroke={COLORS.textSecondary}
+        strokeWidth={1.5}
+        fill="none"
+      />
+
+      {styleId === 'grid' && (
+        <>
+          <Line x1={2} y1={h / 3} x2={w - 2} y2={h / 3} stroke={COLORS.accent} strokeWidth={1.5} />
+          <Line
+            x1={2}
+            y1={(h / 3) * 2}
+            x2={w - 2}
+            y2={(h / 3) * 2}
+            stroke={COLORS.accent}
+            strokeWidth={1.5}
+          />
+        </>
+      )}
+
+      {styleId === 'doll' && (
+        <Circle
+          cx={w / 2}
+          cy={h - 16}
+          r={7}
+          stroke={COLORS.accent}
+          strokeWidth={1.5}
+          strokeDasharray="2,2"
+          fill="none"
+        />
+      )}
+
+      {styleId === 'mirror' && (
+        <Circle
+          cx={w / 2}
+          cy={h / 2}
+          r={12}
+          stroke={COLORS.accent}
+          strokeWidth={1.5}
+          strokeDasharray="2,2"
+          fill="none"
+        />
+      )}
+    </Svg>
+  );
+}
+
+/** 그리드 템플릿 하나를 아주 작게 미리 보여주는 아이콘. */
+function GridTemplatePreview({ templateId }: { templateId: GridTemplateId }) {
+  const w = 32;
+  const h = 44;
+  const line = (x1: number, y1: number, x2: number, y2: number, key: string) => (
+    <Line key={key} x1={x1} y1={y1} x2={x2} y2={y2} stroke={COLORS.accent} strokeWidth={1.5} />
+  );
+
+  return (
+    <Svg width={w} height={h}>
+      <Rect
+        x={1}
+        y={1}
+        width={w - 2}
+        height={h - 2}
+        rx={4}
+        stroke={COLORS.textSecondary}
+        strokeWidth={1.2}
+        fill="none"
+      />
+      {templateId === 'rows3' && (
+        <>
+          {line(2, h / 3, w - 2, h / 3, 'a')}
+          {line(2, (h / 3) * 2, w - 2, (h / 3) * 2, 'b')}
+        </>
+      )}
+      {templateId === 'rows2' && line(2, h / 2, w - 2, h / 2, 'a')}
+      {templateId === 'cols2' && line(w / 2, 2, w / 2, h - 2, 'a')}
+      {templateId === 'grid4' && (
+        <>
+          {line(w / 2, 2, w / 2, h - 2, 'a')}
+          {line(2, h / 2, w - 2, h / 2, 'b')}
+        </>
+      )}
+    </Svg>
+  );
 }
 
 export default function CameraScreen() {
@@ -166,16 +476,31 @@ export default function CameraScreen() {
   const cameraRef = useRef<CameraView>(null);
 
   const currentTrip = useTripStore((state) => state.currentTrip);
-  const shootingStyle: ShootingStyleId = currentTrip?.shootingStyle ?? 'basic';
 
-  const rawMaxClipSeconds =
-    currentTrip?.clipLengthSeconds && currentTrip.clipLengthSeconds > 0
-      ? currentTrip.clipLengthSeconds
-      : DEFAULT_CLIP_SECONDS;
-  const maxClipSeconds = Math.min(
-    Math.max(rawMaxClipSeconds, MIN_CLIP_SECONDS),
-    MAX_CLIP_SECONDS_CAP,
-  );
+  // 촬영 스타일은 여행 만들기 단계가 아니라 이 화면에서 그때그때 고릅니다
+  // (추후 다시 수정할 예정 — 지금은 촬영 세션 동안만 쓰이는 로컬 상태예요).
+  const [shootingStyle, setShootingStyle] = useState<ShootingStyleId>('basic');
+  const [gridTemplateId, setGridTemplateId] = useState<GridTemplateId | null>(null);
+  const [styleSheetVisible, setStyleSheetVisible] = useState(false);
+
+  // 그리드 촬영 진행 상태 — 칸 1 → 칸 2 → ... 순서로 이 화면 안에서 연속 촬영하고,
+  // 마지막 칸까지 다 찍은 뒤에만 장소 확인 화면으로 한 번에 넘어갑니다.
+  const [gridSlotIndex, setGridSlotIndex] = useState(0);
+  const [gridClipUris, setGridClipUris] = useState<string[]>([]);
+  const [gridDurationsMs, setGridDurationsMs] = useState<number[]>([]);
+
+  const gridSlotCount = gridTemplateId ? GRID_TEMPLATE_SLOT_COUNTS[gridTemplateId] : 0;
+  const isGridMode = shootingStyle === 'grid' && gridSlotCount > 0;
+
+  // 그리드가 아닌 스타일로 바꾸거나 템플릿을 바꾸면 진행 중이던 그리드 촬영은
+  // 의미가 없어지니 초기화합니다.
+  useEffect(() => {
+    setGridSlotIndex(0);
+    setGridClipUris([]);
+    setGridDurationsMs([]);
+  }, [shootingStyle, gridTemplateId]);
+
+  const maxClipSeconds = RECORD_DURATION_SECONDS;
 
   const [cameraPermission, requestCameraPermission] =
     useCameraPermissions();
@@ -196,6 +521,13 @@ export default function CameraScreen() {
 
   const canRecord = clipCount < MAX_CLIPS && permissionsReady;
   const progress = Math.min(elapsedSeconds / maxClipSeconds, 1);
+
+  // 상단 스타일 트리거 pill에 보여줄 텍스트. '그리드 선택'은 어떤 분할을 골랐는지가
+  // 중요하니, 템플릿까지 정해지면 그 템플릿 이름("3분할 (가로 3단)" 등)을 대신 보여줍니다.
+  const styleTriggerLabel =
+    (shootingStyle === 'grid' && gridTemplateId
+      ? GRID_TEMPLATES.find((t) => t.id === gridTemplateId)?.label
+      : SHOOTING_STYLES.find((s) => s.id === shootingStyle)?.label) ?? '기본 스타일';
 
   // getAvailableLensesAsync()가 돌려주는 건 표시용 이름(localizedName)이라
   // 정확한 문자열을 미리 알 수 없습니다 — 키워드로 찾습니다. "wide" 계열 렌즈는
@@ -324,7 +656,33 @@ export default function CameraScreen() {
         Math.min(currentCount + 1, MAX_CLIPS),
       );
 
-      navigateToLocationConfirm(video.uri, undefined, durationMs);
+      if (isGridMode) {
+        const updatedUris = [...gridClipUris, video.uri];
+        const updatedDurations = [...gridDurationsMs, durationMs];
+        const nextSlotIndex = gridSlotIndex + 1;
+
+        if (nextSlotIndex < gridSlotCount) {
+          // 아직 찍을 칸이 남았으면 장소 확인 화면으로 넘어가지 않고, 이 화면
+          // 안에서 다음 칸 촬영으로 이어갑니다.
+          setGridClipUris(updatedUris);
+          setGridDurationsMs(updatedDurations);
+          setGridSlotIndex(nextSlotIndex);
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        } else {
+          // 마지막 칸까지 다 찍었으면 그제야 한 번에 장소 확인 화면으로 이동.
+          navigateToLocationConfirm(
+            updatedUris,
+            undefined,
+            updatedDurations,
+            `grid_${Date.now()}`,
+          );
+          setGridClipUris([]);
+          setGridDurationsMs([]);
+          setGridSlotIndex(0);
+        }
+      } else {
+        navigateToLocationConfirm(video.uri, undefined, durationMs);
+      }
     } catch (error) {
       console.error('Video recording failed:', error);
       Alert.alert('촬영에 실패했습니다', '잠시 후 다시 촬영해주세요.');
@@ -383,11 +741,13 @@ export default function CameraScreen() {
             selectedLens={selectedLens}
           />
 
-          <CompositionGrid />
-
           <View pointerEvents="none" style={styles.guideArea}>
             <CenterGuide shootingStyle={shootingStyle} />
           </View>
+
+          {isGridMode && (
+            <GridSplitOverlay slotCount={gridSlotCount} activeIndex={gridSlotIndex} />
+          )}
 
           <Pressable
             hitSlop={16}
@@ -395,6 +755,29 @@ export default function CameraScreen() {
             style={styles.closeButton}
           >
             <Ionicons name="close" size={22} color={COLORS.white} />
+          </Pressable>
+
+          {isGridMode && (
+            <View style={styles.gridProgressRow} pointerEvents="none">
+              <View style={styles.gridProgressBadge}>
+                <Text allowFontScaling={false} style={styles.gridProgressText}>
+                  {gridSlotIndex + 1} / {gridSlotCount}칸 촬영 중
+                </Text>
+              </View>
+            </View>
+          )}
+
+          {/* 촬영 스타일 선택 진입점. 여행 만들기 모달에서 하던 걸 여기로
+              옮겨서, 촬영 버튼을 누르고 들어온 이 화면에서 바로 정할 수 있어요. */}
+          <Pressable
+            hitSlop={12}
+            onPress={() => setStyleSheetVisible(true)}
+            style={styles.styleTrigger}
+          >
+            <Ionicons name="apps-outline" size={16} color={COLORS.white} />
+            <Text allowFontScaling={false} style={styles.styleTriggerText}>
+              {styleTriggerLabel}
+            </Text>
           </Pressable>
         </View>
       </View>
@@ -500,6 +883,102 @@ export default function CameraScreen() {
           />
         </Pressable>
       </View>
+
+      {/* 촬영 스타일 선택 시트 — 여행 만들기 모달 3단계에 있던 UI를 그대로
+          옮겨왔습니다(추후 다시 수정할 예정). 촬영 세션 동안만 적용되는 로컬
+          선택이라, 여행 자체에는 저장되지 않아요. */}
+      <Modal
+        visible={styleSheetVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setStyleSheetVisible(false)}
+      >
+        <Pressable
+          style={styles.styleSheetOverlay}
+          onPress={() => setStyleSheetVisible(false)}
+        >
+          <Pressable style={styles.styleSheetCard} onPress={() => {}}>
+            <Text allowFontScaling={false} style={styles.styleSheetTitle}>
+              촬영 스타일
+            </Text>
+            <Text allowFontScaling={false} style={styles.styleSheetHint}>
+              촬영할 때 화면에 보여드릴 가이드예요
+            </Text>
+
+            <View style={styles.styleGrid}>
+              {SHOOTING_STYLES.map((option) => {
+                const selected = shootingStyle === option.id;
+                return (
+                  <Pressable
+                    key={option.id}
+                    style={[styles.styleCard, selected && styles.styleCardSelected]}
+                    onPress={() => {
+                      setShootingStyle(option.id);
+                      if (option.id === 'grid') {
+                        // 그리드는 어떤 분할로 할지 하나 더 골라야 하니, 템플릿을
+                        // 고르기 전까지는 시트를 닫지 않습니다.
+                        setGridTemplateId(null);
+                      } else {
+                        setStyleSheetVisible(false);
+                      }
+                    }}
+                  >
+                    {selected && (
+                      <View style={styles.styleCardCheck}>
+                        <Ionicons name="checkmark" size={11} color={COLORS.white} />
+                      </View>
+                    )}
+                    <StylePreview styleId={option.id} />
+                    <Text allowFontScaling={false} style={styles.styleCardLabel}>
+                      {option.label}
+                    </Text>
+                    <Text allowFontScaling={false} style={styles.styleCardDescription}>
+                      {option.description}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            {shootingStyle === 'grid' && (
+              <View style={styles.gridTemplateSection}>
+                <Text allowFontScaling={false} style={styles.gridTemplateHint}>
+                  어떤 모양으로 나눌까요?
+                </Text>
+                <View style={styles.gridTemplateRow}>
+                  {GRID_TEMPLATES.map((template) => {
+                    const selected = gridTemplateId === template.id;
+                    return (
+                      <Pressable
+                        key={template.id}
+                        style={[
+                          styles.gridTemplateChip,
+                          selected && styles.gridTemplateChipSelected,
+                        ]}
+                        onPress={() => {
+                          setGridTemplateId(template.id);
+                          setStyleSheetVisible(false);
+                        }}
+                      >
+                        <GridTemplatePreview templateId={template.id} />
+                        <Text
+                          allowFontScaling={false}
+                          style={[
+                            styles.gridTemplateChipLabel,
+                            selected && styles.gridTemplateChipLabelSelected,
+                          ]}
+                        >
+                          {template.label}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+            )}
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -529,26 +1008,85 @@ const styles = StyleSheet.create({
     top: 14,
     left: 14,
   },
-
-  gridLineVertical: {
+  styleTrigger: {
     position: 'absolute',
-    top: 0,
-    bottom: 0,
-    width: StyleSheet.hairlineWidth * 2,
-    backgroundColor: COLORS.gridLine,
+    top: 14,
+    right: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: STYLE_TRIGGER_BG,
   },
-  gridLineHorizontal: {
+  styleTriggerText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.white,
+  },
+
+  // 그리드 촬영 진행 상황(위 n / m칸) 배지 — 화면 상단 중앙, 닫기/스타일 버튼과 겹치지
+  // 않도록 그 아래 줄에 둡니다.
+  gridProgressRow: {
+    position: 'absolute',
+    top: 54,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+  },
+  gridProgressBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 14,
+    backgroundColor: STYLE_TRIGGER_BG,
+  },
+  gridProgressText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.white,
+  },
+
+  // 그리드 칸 분할 오버레이 — 칸 하나(top/height는 인라인으로 계산해서 넣음)
+  gridCell: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  gridCellCheck: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.accent,
+  },
+  gridDividerLine: {
     position: 'absolute',
     left: 0,
     right: 0,
     height: StyleSheet.hairlineWidth * 2,
-    backgroundColor: COLORS.gridLine,
+    backgroundColor: 'rgba(255,255,255,0.85)',
   },
 
   guideArea: {
     ...StyleSheet.absoluteFillObject,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  // guideArea가 center 정렬이라, 하단에 고정하려면 position: absolute로 빼서
+  // bottom 오프셋을 직접 줍니다.
+  dollGuideWrap: {
+    position: 'absolute',
+    bottom: '7%',
+    alignItems: 'center',
+  },
+  mirrorGuideWrap: {
+    position: 'absolute',
+    bottom: '33%',
+    alignItems: 'center',
   },
 
   // 카메라 화면 쪽 간격(paddingTop)은 1.3배로 늘리고, 셔터 버튼 쪽 간격
@@ -626,6 +1164,108 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.accent,
   },
 
+  // 촬영 스타일 선택 시트
+  styleSheetOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'flex-end',
+  },
+  styleSheetCard: {
+    backgroundColor: COLORS.backgroundIvory,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 20,
+    paddingTop: 22,
+    paddingBottom: 28,
+  },
+  styleSheetTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: COLORS.black,
+    marginBottom: 4,
+  },
+  styleSheetHint: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    marginBottom: 16,
+  },
+  styleGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  styleCard: {
+    width: '47%',
+    borderWidth: 1.5,
+    borderColor: '#EEEEEE',
+    borderRadius: 16,
+    paddingVertical: 14,
+    alignItems: 'center',
+    gap: 6,
+  },
+  styleCardSelected: {
+    borderColor: COLORS.accent,
+  },
+  styleCardCheck: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: COLORS.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  styleCardLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.black,
+    marginTop: 4,
+  },
+  styleCardDescription: {
+    fontSize: 11,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+  },
+  gridTemplateSection: {
+    marginTop: 12,
+    backgroundColor: '#F7F7F7',
+    borderRadius: 16,
+    padding: 12,
+  },
+  gridTemplateHint: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.black,
+    marginBottom: 10,
+  },
+  gridTemplateRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  gridTemplateChip: {
+    width: '47%',
+    backgroundColor: COLORS.white,
+    borderWidth: 1.5,
+    borderColor: '#EEEEEE',
+    borderRadius: 12,
+    paddingVertical: 10,
+    alignItems: 'center',
+    gap: 4,
+  },
+  gridTemplateChipSelected: {
+    borderColor: COLORS.accent,
+  },
+  gridTemplateChipLabel: {
+    fontSize: 11,
+    color: COLORS.textSecondary,
+  },
+  gridTemplateChipLabelSelected: {
+    color: COLORS.accent,
+    fontWeight: '700',
+  },
   permissionScreen: {
     flex: 1,
     paddingHorizontal: 28,

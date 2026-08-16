@@ -22,6 +22,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { LocationOptionCard } from '@/components/location-confirm/LocationOptionCard';
 import { VideoPreview } from '@/components/location-confirm/VideoPreview';
+import { GridVideoPreview } from '@/components/location-confirm/GridVideoPreview';
 import { MOCK_LOCATION_SUGGESTIONS } from '@/constants/mockLocations';
 import { COLORS as APP_COLORS } from '@/constants/color';
 import { saveRecording } from '@/services/recordingService';
@@ -66,11 +67,36 @@ const DEFAULT_SHEET_HEIGHT = SCREEN_HEIGHT * 0.56;
  * 2. 홈 화면에서 미리 선택해둔 활성 여행(currentTrip)에 자동 저장 후 클립 관리 화면으로 이동
  */
 export default function LocationConfirmScreen() {
-  const { videoUri, durationMs } =
+  const { videoUris: videoUrisParam, durationsMs: durationsMsParam, gridGroupId } =
     useLocalSearchParams<{
-      videoUri?: string;
-      durationMs?: string;
+      videoUris?: string;
+      durationsMs?: string;
+      gridGroupId?: string;
     }>();
+
+  // 그리드 촬영이면 videoUris에 칸 수만큼 URI가 들어있고, 일반 촬영이면 1개짜리 배열.
+  const videoUris = useMemo<string[]>(() => {
+    if (!videoUrisParam) return [];
+    try {
+      return JSON.parse(videoUrisParam) as string[];
+    } catch {
+      return [];
+    }
+  }, [videoUrisParam]);
+
+  const durationsMs = useMemo<number[]>(() => {
+    if (!durationsMsParam) return [];
+    try {
+      return JSON.parse(durationsMsParam) as number[];
+    } catch {
+      return [];
+    }
+  }, [durationsMsParam]);
+
+  // 미리보기 화면 자체는 한 화면만 보여줄 수 있어서, 그리드여도 첫 번째 칸만 보여줍니다
+  // (여러 칸을 합친 실제 분할 화면 미리보기는 서버 렌더링 이후에나 볼 수 있어요).
+  const videoUri = videoUris[0];
+  const isGridSet = videoUris.length > 1;
 
   const [selectedLocationId, setSelectedLocationId] =
     useState<string | null>(null);
@@ -177,22 +203,29 @@ export default function LocationConfirmScreen() {
     const targetFolderId = currentTrip.id;
 
     try {
-      await saveRecording({
-        recordedAt: new Date().toISOString(),
-        videoUri,
-        // TODO: expo-video-thumbnails 등으로 실제 썸네일을 만들기 전까지는 영상 자체를 썸네일로 재사용합니다.
-        thumbnail: videoUri,
-        durationMs: durationMs ? Number(durationMs) : 0,
-        folderId: targetFolderId,
-        // TODO: 로그인 연동 전까지 쓰는 임시 사용자 ID입니다.
-        userId: 'guest',
-        location: {
-          // TODO: expo-location 연동 전까지 쓰는 임시 좌표입니다.
-          latitude: 0,
-          longitude: 0,
-          placeName: selectedLocation?.name,
-        },
-      });
+      // 그리드 세트면 칸 수만큼 saveRecording을 각각 호출합니다 — 클립 관리
+      // 목록엔 여전히 개별 클립으로 보여야 하고, gridGroupId로만 같은 세트임을
+      // 표시합니다(합치기는 서버가 담당).
+      for (let i = 0; i < videoUris.length; i++) {
+        const uri = videoUris[i];
+        await saveRecording({
+          recordedAt: new Date().toISOString(),
+          videoUri: uri,
+          // TODO: expo-video-thumbnails 등으로 실제 썸네일을 만들기 전까지는 영상 자체를 썸네일로 재사용합니다.
+          thumbnail: uri,
+          durationMs: durationsMs[i] ?? 0,
+          folderId: targetFolderId,
+          // TODO: 로그인 연동 전까지 쓰는 임시 사용자 ID입니다.
+          userId: 'guest',
+          location: {
+            // TODO: expo-location 연동 전까지 쓰는 임시 좌표입니다.
+            latitude: 0,
+            longitude: 0,
+            placeName: selectedLocation?.name,
+          },
+          ...(isGridSet ? { gridGroupId, gridSlotIndex: i } : {}),
+        });
+      }
 
       Alert.alert(
         '클립이 저장되었습니다',
@@ -253,9 +286,19 @@ export default function LocationConfirmScreen() {
             </Pressable>
 
             <View style={styles.videoContainer}>
-              <VideoPreview
-                videoUri={videoUri ?? null}
-              />
+              {isGridSet ? (
+                <GridVideoPreview videoUris={videoUris} />
+              ) : (
+                <VideoPreview videoUri={videoUri ?? null} />
+              )}
+              {isGridSet && (
+                <View style={styles.gridBadge} pointerEvents="none">
+                  <Ionicons name="apps-outline" size={13} color="#FFFFFF" />
+                  <Text allowFontScaling={false} style={styles.gridBadgeText}>
+                    그리드 {videoUris.length}칸 동시 재생 미리보기
+                  </Text>
+                </View>
+              )}
             </View>
           </View>
 
@@ -494,6 +537,29 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
 
     elevation: 3,
+  },
+
+  gridBadge: {
+    position: 'absolute',
+    top: 12,
+    left: 12,
+
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+
+    borderRadius: 14,
+
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  },
+
+  gridBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '700',
   },
 
   // flex 제거: Animated로 height를 직접 제어
