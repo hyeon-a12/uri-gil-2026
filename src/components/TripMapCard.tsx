@@ -13,7 +13,7 @@ import Svg, {
 } from 'react-native-svg';
 import { router } from 'expo-router';
 
-import { useResponsive } from '../hooks/use-responsive';
+import { useResponsive } from '@/navigation/hooks/use-responsive';
 import { homeColors } from '../constants/home-theme';
 import { TripRoute } from '../types/home';
 
@@ -80,7 +80,7 @@ export default function TripMapCard({
     return rest.reduce((path, marker) => {
       const previousMarker =
         normalizedMarkers[
-          normalizedMarkers.indexOf(marker) - 1
+        normalizedMarkers.indexOf(marker) - 1
         ];
 
       const controlX =
