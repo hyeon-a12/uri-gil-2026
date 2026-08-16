@@ -240,6 +240,7 @@ function formatTimer(seconds: number) {
 }
 
 async function renderVideo(exportData: {
+  folderId?: string;
   clips: Array<{
     id: string;
     videoUri: string;
@@ -252,33 +253,41 @@ async function renderVideo(exportData: {
     timeStyle: TextElementStyle;
     placeStyle: TextElementStyle;
   };
-  folderId?: string;
 }): Promise<{ success: boolean; message?: string }> {
   try {
     console.log('[renderVideo] 렌더링 시작', exportData);
 
-    /*
-    const response = await fetch('https://uri-gil-2026-production.up.railway.app/', {
+    const response = await fetch('http://172.30.1.65:3000/process-video', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(exportData)
     });
-    if (!response.ok) throw new Error('서버 렌더링 실패');
-    const { downloadUrl } = await response.json();
 
-    const localPath = FileSystem.documentDirectory + `output_${Date.now()}.mp4`;
-    await FileSystem.downloadAsync(downloadUrl, localPath);
+    if (!response.ok) throw new Error(`서버 렌더링 실패: ${response.status}`);
 
-    const { status } = await MediaLibrary.requestPermissionsAsync();
-    if (status !== 'granted') {
-      return { success: false, message: '갤러리 접근 권한이 필요합니다.' };
+    const result = await response.json();
+    console.log('[renderVideo] 서버 응답:', result);
+
+    if (!result.success) {
+      return {
+        success: false,
+        message: result.message ?? '서버 처리 실패',
+      };
     }
-    await MediaLibrary.saveToLibraryAsync(localPath);
-    */
-   
-    await new Promise((resolve) => setTimeout(resolve, 3000));
-    console.log('[renderVideo] 완료');
-    return { success: true};
+
+    const { downloadUrl } = await response.json();
+    if (result.downloadUrl) {
+      const localPath = FileSystem.documentDirectory + `output_${Date.now()}.mp4`;
+      await FileSystem.downloadAsync(downloadUrl, localPath);
+
+      const { status } = await MediaLibrary.requestPermissionsAsync();
+      if (status !== 'granted') {
+        return { success: false, message: '갤러리 접근 권한이 필요합니다.' };
+      }
+      await MediaLibrary.saveToLibraryAsync(localPath);
+    }
+
+    return { success: true };
   } catch (error) {
     console.error('[renderVideo] 실패:', error);
     return {
