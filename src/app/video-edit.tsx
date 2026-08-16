@@ -1982,7 +1982,9 @@ const styles = StyleSheet.create({
   },
   playheadDot: {
     position: 'absolute',
-    top: -1,
+    // rulerRow의 실제 높이(가장 큰 눈금 기준)에 상관없이 항상 세로 중앙에 오도록.
+    top: '50%',
+    marginTop: -PLAYHEAD_SIZE / 2,
     width: PLAYHEAD_SIZE,
     height: PLAYHEAD_SIZE,
     borderRadius: PLAYHEAD_SIZE / 2,
