@@ -14,17 +14,18 @@ import { Image } from 'expo-image';
 import { getAllFolders, saveFolder, type FolderItem } from '@/services/folderService';
 import { selectCurrentTrip, useTripStore } from '@/store/useTripStore';
 import NewTripModal from '@/components/NewTripModal';
+import { COLORS as SHARED_COLORS } from '@/constants/color';
 
 const COLORS = {
-  background: '#FFFFFF',
-  card: '#FFFFFF',
-  primary: '#FF7F5C',
-  primaryDark: '#E97B1F',
-  primarySoft: '#FFF3DF',
-  textPrimary: '#222222',
-  textSecondary: '#8A8A8A',
-  textTertiary: '#8A8A8A',
-  border: '#EEEEEE',
+  background: SHARED_COLORS.background,
+  card: SHARED_COLORS.background,
+  primary: SHARED_COLORS.accent,
+  primaryDark: SHARED_COLORS.accentPressed,
+  primarySoft: SHARED_COLORS.main,
+  textPrimary: SHARED_COLORS.textPrimary,
+  textSecondary: SHARED_COLORS.textSecondary,
+  textTertiary: SHARED_COLORS.textSecondary,
+  border: SHARED_COLORS.border, // 기존 #EEEEEE 폐기 → 공용 border(#DDDDDD)로 통일
   overlay: 'rgba(20,20,18,0.35)',
 };
 

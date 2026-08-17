@@ -4,7 +4,6 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Text,
   View,
   TouchableOpacity,
   FlatList,
@@ -12,46 +11,40 @@ import {
   Modal,
   TouchableWithoutFeedback,
 } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { AppText as Text } from '@/components/AppText';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { Ionicons, Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as MediaLibrary from 'expo-media-library';
 
-import { navigateToCamera } from '@/navigation/recordingNavigation';
+import { ClipPreviewModal } from '@/app/clip-preview'
 import { deleteRecording, getRecordingsByFolder } from '@/services/recordingService';
 import { useTripStore } from '@/store/useTripStore';
+import { ClipItem } from '@/types/home';
+import { COLORS as SHARED_COLORS } from '@/constants/color';
 
 const COLORS = {
-  background: '#FFFFFF',
-  card: '#FFFFFF',
+  background: SHARED_COLORS.background,
+  card: SHARED_COLORS.background,
 
-  primary: '#FF7F5C',
-  primaryPressed: '#ED8A20',
-  primarySoft: '#FFF3DF',
+  primary: SHARED_COLORS.accent,
+  primaryPressed: SHARED_COLORS.accentPressed,
+  primarySoft: SHARED_COLORS.main,
 
-  textPrimary: '#222222',
-  textSecondary: '#8A8A8A',
-  textTertiary: '#8A8A8A',
+  textPrimary: SHARED_COLORS.textPrimary,
+  textSecondary: SHARED_COLORS.textSecondary,
+  textTertiary: SHARED_COLORS.textSecondary,
 
-  border: '#DDDDDD',
-  divider: '#DDDDDD',
+  border: SHARED_COLORS.border,
+  divider: SHARED_COLORS.border,
 
   unchecked: '#B5B5AF',
-  delete: '#E46F61',
-  shadow: '#4B4138',
+  delete: SHARED_COLORS.danger,
+  shadow: SHARED_COLORS.shadow,
   disabled: '#D8D5CF',
 
   overlay: 'rgba(0,0,0,0.25)',
 };
-
-interface ClipItem {
-  id: string;
-  title: string;
-  recordedAt: string;
-  durationSeconds: number;
-  thumbnail: string;
-  uri: string;
-}
 
 const FOOTER_HEIGHT = 88;
 
@@ -167,7 +160,7 @@ function ClipSelectionCard({
               allowFontScaling={false}
               style={styles.durationText}
             >
-              {formatDuration(clip.durationSeconds)}
+              {formatDuration(clip.durationSeconds ?? 0)}
             </Text>
           </View>
         </View>
@@ -182,34 +175,30 @@ function ClipSelectionCard({
   );
 }
 
+/** 클립 목록에 실제로 그리는 항목 — 낱개 클립이거나, 같은 그리드 세트끼리 묶인 카드. */
+type DisplayItem =
+  | { kind: 'single'; clip: ClipItem }
+  | { kind: 'grid'; groupId: string; members: ClipItem[] };
+
 export default function ClipSelectScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { id: paramFolderId, title: folderTitle } = useLocalSearchParams<{
+  const { id: paramFolderId } = useLocalSearchParams<{
     id?: string;
-    title?: string;
   }>();
 
-  // 명시적 route param(clip-manage.tsx에서 폴더를 눌러 들어온 경우)이 있으면 그게
-  // 우선이고, 파라미터 없이(예: navigateToClip() 호출부에서 folderId를 안 넘긴 경우)
-  // 들어온 경우엔 현재 활성 여행을 기본값으로 씁니다.
   const currentTrip = useTripStore((state) => state.currentTrip);
   const folderId = paramFolderId ?? currentTrip?.id;
 
   const [clips, setClips] = useState<ClipItem[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [selectedClipForMenu, setSelectedClipForMenu] = useState<ClipItem | null>(null);
+  // 그리드 클립은 여러 장을 한 번에 다운로드/삭제해야 해서 배열로 들고 있습니다
+  // (일반 클립은 항상 길이 1짜리 배열).
+  const [selectedMenuClips, setSelectedMenuClips] = useState<ClipItem[] | null>(null);
 
-  const selectedCount = selectedIds.size;
-  const allSelected = clips.length > 0 && selectedCount === clips.length;
+  const [previewClips, setPreviewClips] = useState<ClipItem[] | null>(null);
 
-  useFocusEffect(
-    useCallback(() => {
-      void loadClips();
-    }, [folderId]),
-  );
-
-  const loadClips = async () => {
+  const loadClips = useCallback(async () => {
     if (!folderId) {
       setClips([]);
       return;
@@ -224,13 +213,22 @@ export default function ClipSelectScreen() {
         durationSeconds: Math.floor((r.durationMs ?? 0) / 1000),
         thumbnail: r.thumbnail,
         uri: r.videoUri,
+        gridGroupId: r.gridGroupId,
+        gridSlotIndex: r.gridSlotIndex,
       }));
       setClips(items);
     } catch (error) {
       console.error('[loadClips] 로딩 실패:', error);
       setClips([]);
     }
-  };
+  }, [folderId]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadClips();
+    }, [loadClips]),
+  );
+
 
   const toggleSelect = (id: string) => {
     setSelectedIds((prev) => {
@@ -240,6 +238,17 @@ export default function ClipSelectScreen() {
       } else {
         next.add(id);
       }
+      return next;
+    });
+  };
+
+  /** 그리드 클립 여러 개를 한 번에 선택/해제합니다. 하나라도 선택 안 돼 있으면
+   * 전부 선택, 전부 선택돼 있으면 전부 해제 — 카드 하나로 보이니 선택도 하나처럼. */
+  const toggleSelectMany = (ids: string[]) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      const allSelected = ids.every((id) => next.has(id));
+      ids.forEach((id) => (allSelected ? next.delete(id) : next.add(id)));
       return next;
     });
   };
@@ -254,19 +263,73 @@ export default function ClipSelectScreen() {
     return `${yyyy}.${mm}.${dd} ${hh}:${min}`;
   };
 
-  const sumSeconds = (items: ClipItem[]) =>
-    items.reduce((acc, c) => acc + (c.durationSeconds ?? 0), 0);
-
   const selectedClips = useMemo(
     () => clips.filter((c) => selectedIds.has(c.id)),
     [clips, selectedIds],
   );
 
-  const totalCount = clips.length;
-  const totalSeconds = sumSeconds(clips);
-  const selectedSeconds = sumSeconds(selectedClips);
+  // 같은 gridGroupId를 가진 클립들(그리드로 나눠 찍은 칸들)은 목록에서 카드 하나로
+  // 묶어서 보여줍니다. 첫 번째로 등장하는 위치에 그룹 카드가 자리잡고, 이후 같은
+  // 그룹의 클립은 건너뜁니다 — 저장 순서상 항상 붙어있지만 순서에 의존하지 않게
+  // Map으로 먼저 다 모아둔 뒤 순회합니다.
+  const displayItems = useMemo<DisplayItem[]>(() => {
+    const membersByGroup = new Map<string, ClipItem[]>();
+    for (const clip of clips) {
+      if (!clip.gridGroupId) continue;
+      const list = membersByGroup.get(clip.gridGroupId) ?? [];
+      list.push(clip);
+      membersByGroup.set(clip.gridGroupId, list);
+    }
 
-  const renderClipItem = ({ item }: { item: ClipItem }) => {
+    const items: DisplayItem[] = [];
+    const renderedGroups = new Set<string>();
+
+    for (const clip of clips) {
+      if (!clip.gridGroupId) {
+        items.push({ kind: 'single', clip });
+        continue;
+      }
+      if (renderedGroups.has(clip.gridGroupId)) continue;
+      renderedGroups.add(clip.gridGroupId);
+
+      const members = [...(membersByGroup.get(clip.gridGroupId) ?? [])].sort(
+        (a, b) => (a.gridSlotIndex ?? 0) - (b.gridSlotIndex ?? 0),
+      );
+      items.push({ kind: 'grid', groupId: clip.gridGroupId, members });
+    }
+
+    return items;
+  }, [clips]);
+
+  // 카드 하나(그리드 세트 포함)가 최종 영상에서 차지하는 길이. 그리드 세트는 칸들이
+  // 동시에 재생되니 다 더하면 실제보다 길어져요 — 가장 긴 칸 하나의 길이만큼만
+  // 차지합니다. 개수/선택 개수도 마찬가지로 "클립 개수"가 아니라 "카드 개수"
+  // 기준으로 세야 목록에 보이는 카드 수와 화면 아래 숫자가 일치해요.
+  const getItemDurationSeconds = (item: DisplayItem): number =>
+    item.kind === 'single'
+      ? item.clip.durationSeconds ?? 0
+      : Math.max(0, ...item.members.map((m) => m.durationSeconds ?? 0));
+
+  const isItemSelected = (item: DisplayItem): boolean =>
+    item.kind === 'single'
+      ? selectedIds.has(item.clip.id)
+      : item.members.every((m) => selectedIds.has(m.id));
+
+  const selectedDisplayItems = displayItems.filter(isItemSelected);
+
+  const totalCount = displayItems.length;
+  const totalSeconds = displayItems.reduce(
+    (sum, item) => sum + getItemDurationSeconds(item),
+    0,
+  );
+  const selectedCount = selectedDisplayItems.length;
+  const selectedSeconds = selectedDisplayItems.reduce(
+    (sum, item) => sum + getItemDurationSeconds(item),
+    0,
+  );
+  const allSelected = displayItems.length > 0 && selectedCount === totalCount;
+
+  const renderSingleClip = (item: ClipItem) => {
     const isSelected = selectedIds.has(item.id);
     return (
       <View style={styles.clipItemContainer}>
@@ -286,12 +349,18 @@ export default function ClipSelectScreen() {
           activeOpacity={1}
           onPress={() => toggleSelect(item.id)}
         >
-          <View style={styles.thumbnailContainer}>
+          <Pressable
+            onPress={(e) => {
+              e.stopPropagation();
+              setPreviewClips([item]);
+            }}
+            style={styles.thumbnailContainer}
+          >
             <Image source={{ uri: item.uri }} style={styles.thumbnail} />
             <View style={styles.playOverlay}>
               <Ionicons name="play" size={16} color="#FFFFFF" />
             </View>
-          </View>
+          </Pressable>
 
           <View style={styles.cardInfo}>
             <Text style={styles.clipTitle} numberOfLines={1}>
@@ -305,7 +374,7 @@ export default function ClipSelectScreen() {
                 color={ COLORS?.textSecondary || '#8E8E93' }
               />
               <Text style={styles.durationText}>
-                {formatDuration(item.durationSeconds)}
+                {formatDuration(item.durationSeconds ?? 0)}
               </Text>
             </View>
           </View>
@@ -315,7 +384,7 @@ export default function ClipSelectScreen() {
             hitSlop={10}
             onPress={(e) => {
               e.stopPropagation();
-              setSelectedClipForMenu(item);
+              setSelectedMenuClips([item]);
             }}
           >
             <Feather name="menu" size={20} color={COLORS.textTertiary} />
@@ -324,6 +393,90 @@ export default function ClipSelectScreen() {
       </View>
     );
   };
+
+  /** 그리드로 나눠 찍은 클립들을 카드 하나로 묶어서 보여줍니다. 썸네일을 칸 개수만큼
+   * 세로로 쌓아서, 촬영 화면에서 봤던 분할 구도가 목록에서도 그대로 느껴지게 했어요. */
+  const renderGridGroupItem = (members: ClipItem[]) => {
+    const ids = members.map((m) => m.id);
+    const isSelected = ids.every((id) => selectedIds.has(id));
+    const cellPercent = 100 / members.length;
+    const first = members[0];
+
+    return (
+      <View style={styles.clipItemContainer}>
+        <TouchableOpacity
+          style={[
+            styles.badgeCheck,
+            isSelected ? styles.badgeCheckActive : styles.badgeCheckInactive,
+          ]}
+          onPress={() => toggleSelectMany(ids)}>
+          {isSelected ? (
+            <Ionicons name="checkmark" size={16} color="#FFFFFF" />
+          ) : null}
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.card}
+          activeOpacity={1}
+          onPress={() => toggleSelectMany(ids)}
+        >
+          <Pressable
+            onPress={(e) => {
+              e.stopPropagation();
+              setPreviewClips(members);
+            }}
+            style={styles.thumbnailContainer}
+          >
+            {members.map((member, index) => (
+              <View
+                key={member.id}
+                style={[
+                  styles.gridThumbnailCell,
+                  { top: `${index * cellPercent}%`, height: `${cellPercent}%` },
+                ]}
+              >
+                <Image source={{ uri: member.uri }} style={styles.thumbnail} />
+              </View>
+            ))}
+            <View style={styles.playOverlay}>
+              <Ionicons name="play" size={16} color="#FFFFFF" />
+            </View>
+          </Pressable>
+
+          <View style={styles.cardInfo}>
+            <Text style={styles.clipTitle} numberOfLines={1}>
+              {first.title ?? '제목 없음'}
+            </Text>
+            <Text style={styles.clipDate}>{formatDate(first.recordedAt)}</Text>
+            <View style={styles.durationRow}>
+              <Ionicons
+                name="apps-outline"
+                size={12}
+                color={ COLORS?.textSecondary || '#8E8E93' }
+              />
+              <Text style={styles.durationText}>
+                그리드 {members.length}칸 · 동시재생
+              </Text>
+            </View>
+          </View>
+
+          <TouchableOpacity
+            style={styles.dragHandle}
+            hitSlop={10}
+            onPress={(e) => {
+              e.stopPropagation();
+              setSelectedMenuClips(members);
+            }}
+          >
+            <Feather name="menu" size={20} color={COLORS.textTertiary} />
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </View>
+    );
+  };
+
+  const renderDisplayItem = ({ item }: { item: DisplayItem }) =>
+    item.kind === 'grid' ? renderGridGroupItem(item.members) : renderSingleClip(item.clip);
 
   const toggleSelectAll = () => {
     if (allSelected) {
@@ -335,13 +488,18 @@ export default function ClipSelectScreen() {
   };
 
   const handleDownloadClip = () => {
-    if (!selectedClipForMenu) return;
-    const clip = selectedClipForMenu;
-    setSelectedClipForMenu(null);
+    if (!selectedMenuClips || selectedMenuClips.length === 0) return;
+    const targetClips = selectedMenuClips;
+    setSelectedMenuClips(null);
+
+    const isGroup = targetClips.length > 1;
+    const label = isGroup
+      ? `그리드 ${targetClips.length}개 영상을`
+      : `${targetClips[0].title} 영상을`;
 
     Alert.alert(
       '다운로드',
-      `${clip.title} 영상을 갤러리에 저장할까요?`,
+      `${label} 갤러리에 저장할까요?`,
       [
         {text: '취소', style: 'cancel'},
         {text: '저장', onPress: async () => {
@@ -352,12 +510,10 @@ export default function ClipSelectScreen() {
               return;
             }
 
-            if (!clip.uri) {
-              Alert.alert('저장 실패', '영상 파일 경로를 찾을 수 없습니다.');
-              return;
+            for (const clip of targetClips) {
+              if (!clip.uri) continue;
+              await MediaLibrary.saveToLibraryAsync(clip.uri);
             }
-
-            await MediaLibrary.saveToLibraryAsync(clip.uri);
             Alert.alert('저장 완료', '갤러리에 저장되었습니다.');
           } catch (error) {
             console.error('[handleDownloadClip] 실패:', error);
@@ -375,23 +531,31 @@ export default function ClipSelectScreen() {
   };
 
   const handleDelete = () => {
-    if (!selectedClipForMenu) return;
-    const clip = selectedClipForMenu;
-    setSelectedClipForMenu(null);
+    if (!selectedMenuClips || selectedMenuClips.length === 0) return;
+    const targetClips = selectedMenuClips;
+    setSelectedMenuClips(null);
+
+    const isGroup = targetClips.length > 1;
+    const message = isGroup
+      ? `그리드 ${targetClips.length}개 클립을 모두 삭제할까요?`
+      : `${targetClips[0].title} 클립을 삭제할까요?`;
 
     Alert.alert(
       '클립 삭제',
-      `${clip.title} 클립을 삭제할까요?`,
+      message,
       [
         {text: '취소', style: 'cancel'},
         {
           text: '삭제', style: 'destructive', onPress: async () => {
             try {
-              await deleteRecording(clip.id);
-              setClips((prev) => prev.filter((c) => c.id != clip.id));
+              for (const clip of targetClips) {
+                await deleteRecording(clip.id);
+              }
+              const targetIds = new Set(targetClips.map((c) => c.id));
+              setClips((prev) => prev.filter((c) => !targetIds.has(c.id)));
               setSelectedIds((prev) => {
                 const next = new Set(prev);
-                next.delete(clip.id);
+                targetIds.forEach((id) => next.delete(id));
                 return next;
               });
             } catch (error) {
@@ -418,32 +582,23 @@ export default function ClipSelectScreen() {
 
     Alert.alert(
       '클립 선택 완료',
-      `${selectedCount}개의 클립으로 영상을 만들까요?`,
+      `${selectedCount}개의 클립으로 영상을 생성할까요?`,
       [
+        { text: '취소', style: 'cancel' },
         {
-          text: '취소',
-          style: 'cancel',
-        },
-        {
-          text: '영상 만들기',
+          text: '생성하기',
           onPress: () => {
-            console.log(
-              '선택된 클립:',
-              selectedClips.map((clip) => clip.id),
-            );
-
-            Alert.alert(
-              '영상 만들기',
-              '영상 생성 화면으로 연결할 예정입니다.',
-            );
-
-            // 영상 생성 화면이 있으면 아래처럼 연결
-            // router.push({
-            //   pathname: '/video-create',
-            //   params: {
-            //     clipIds: selectedIds.join(','),
-            //   },
-            // });
+            const clipIdList = selectedClips
+              .map((clip) => clip.id)
+              .join(',');
+            
+            router.push({
+              pathname: '/video-edit',
+              params: {
+                clipIds: clipIdList,
+                folderId: folderId,
+              },
+            });
           },
         },
       ],
@@ -505,9 +660,9 @@ export default function ClipSelectScreen() {
       </View>
 
       <FlatList
-        data={clips}
-        keyExtractor={(item) => item.id}
-        renderItem={renderClipItem}
+        data={displayItems}
+        keyExtractor={(item) => (item.kind === 'grid' ? item.groupId : item.clip.id)}
+        renderItem={renderDisplayItem}
         contentContainerStyle={[
           styles.listContent,
           { paddingBottom: FOOTER_HEIGHT + insets.bottom + 16 },
@@ -543,18 +698,19 @@ export default function ClipSelectScreen() {
             styles.createButton,
             selectedCount === 0 && styles.createButtonDisabled,
           ]}
-          disabled={selectedCount === 0}>
+          disabled={selectedCount === 0}
+          onPress={handleComplete}>
             <Text style={styles.createButtonText}>영상 생성</Text>
           </TouchableOpacity>
       </View>
 
       <Modal
-        visible={!!selectedClipForMenu}
+        visible={!!selectedMenuClips}
         transparent
         animationType="fade"
-        onRequestClose={() => setSelectedClipForMenu(null)}
+        onRequestClose={() => setSelectedMenuClips(null)}
       >
-        <TouchableWithoutFeedback onPress={() => setSelectedClipForMenu(null)}>
+        <TouchableWithoutFeedback onPress={() => setSelectedMenuClips(null)}>
           <View style={styles.modalOverlay}>
             <TouchableWithoutFeedback>
               <View style={styles.menuBox}>
@@ -592,6 +748,11 @@ export default function ClipSelectScreen() {
           </View>
         </TouchableWithoutFeedback>
       </Modal>
+
+      <ClipPreviewModal
+        clips={previewClips}
+        onClose={() => setPreviewClips(null)}
+      />
     </View>
   );
 }
@@ -1038,6 +1199,12 @@ const styles = StyleSheet.create({
   thumbnail: {
     width: '100%',
     height: '100%',
+  },
+  // 그리드 카드 썸네일 — 칸 하나(top/height는 인라인으로 계산해서 넣음)
+  gridThumbnailCell: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
   },
   playOverlay: {
     ...StyleSheet.absoluteFillObject,

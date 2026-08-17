@@ -25,7 +25,7 @@ import {
   type FolderItem,
   type FolderStatus,
 } from '@/services/folderService';
-import { getRecordingsByFolder } from '@/services/recordingService';
+import { countDisplayItems, getRecordingsByFolder } from '@/services/recordingService';
 
 const fabShadow = Platform.select({
   ios: {
@@ -112,7 +112,7 @@ export default function MyRoutesScreen() {
             dateRange: folder.dateRange,
             status: getFolderStatus(folder),
             visitedCount,
-            clipCount: recordings.length,
+            clipCount: countDisplayItems(recordings),
           };
         }),
       );

@@ -8,18 +8,33 @@ export function navigateToCamera(folderId?: string) {
   });
 }
 
-/** 카메라 촬영 완료 후 장소 확인 화면으로 이동 */
+/**
+ * 카메라 촬영 완료 후 장소 확인 화면으로 이동.
+ *
+ * 그리드 촬영(칸을 나눠 순서대로 찍는 모드)은 클립을 여러 개 한 번에 넘겨야 해서
+ * videoUri/durationMs에 배열도 받을 수 있게 했습니다. 기존처럼 문자열/숫자 하나만
+ * 넘기던 호출부는 그대로 동작해요(내부에서 배열 하나짜리로 감싸줌).
+ */
 export function navigateToLocationConfirm(
-  videoUri: string,
+  videoUri: string | string[],
   folderId?: string,
-  durationMs?: number,
+  durationMs?: number | number[],
+  gridGroupId?: string,
 ) {
+  const videoUris = Array.isArray(videoUri) ? videoUri : [videoUri];
+  const durationsMs = Array.isArray(durationMs)
+    ? durationMs
+    : durationMs !== undefined
+      ? [durationMs]
+      : undefined;
+
   router.push({
     pathname: '/location-confirm',
     params: {
-      videoUri,
+      videoUris: JSON.stringify(videoUris),
       folderId,
-      durationMs: durationMs?.toString(),
+      durationsMs: durationsMs ? JSON.stringify(durationsMs) : undefined,
+      gridGroupId,
     },
   });
 }

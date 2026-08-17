@@ -25,30 +25,32 @@ import Svg, {
   Circle,
   Path,
 } from 'react-native-svg';
+import { COLORS as SHARED_COLORS, MAP_COLORS } from '@/constants/color';
 
 const COLORS = {
-  background: '#FFFFFF',
-  card: '#FFFFFF',
+  background: SHARED_COLORS.background,
+  card: SHARED_COLORS.background,
 
-  primary: '#FF7F5C',
-  primaryDark: '#E97B1F',
-  primarySoft: '#FFF3DF',
+  primary: SHARED_COLORS.accent,
+  primaryDark: SHARED_COLORS.accentPressed,
+  primarySoft: SHARED_COLORS.main,
 
-  textPrimary: '#222222',
-  textSecondary: '#8A8A8A',
-  textTertiary: '#8A8A8A',
+  textPrimary: SHARED_COLORS.textPrimary,
+  textSecondary: SHARED_COLORS.textSecondary,
+  textTertiary: SHARED_COLORS.textSecondary,
 
-  border: '#DDDDDD',
-  divider: '#DDDDDD',
+  border: SHARED_COLORS.border,
+  divider: SHARED_COLORS.border,
 
   route: '#F6784D',
   routeSoft: '#FFD2C2',
 
-  mapBlue: '#DDF3F2',
-  mapGreen: '#E6F2D8',
-  mapCream: '#F7F0DA',
+  // 지도 지형 톤 — my-route 화면 전용 확장 토큰(MAP_COLORS)에서 가져옴
+  mapBlue: MAP_COLORS.mapBlue,
+  mapGreen: MAP_COLORS.mapGreen,
+  mapCream: MAP_COLORS.mapCream,
 
-  shadow: '#443A31',
+  shadow: SHARED_COLORS.shadow,
 };
 
 // 사용자 흐름을 단순화해 '일정'과 '지도' 두 가지 보기만 제공합니다.
