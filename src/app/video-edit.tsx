@@ -279,8 +279,11 @@ async function renderVideo(exportData: {
     placeStyle: TextElementStyle;
   };
 }): Promise<{ success: boolean; message?: string }> {
-  const SERVER_URL = 'http://172.30.1.65:3000/process-video';
-  
+  if (!process.env.EXPO_PUBLIC_SERVER_URL) {
+    return { success: false, message: '.env에 EXPO_PUBLIC_SERVER_URL이 설정되어 있지 않습니다. .env.example을 참고해 자신의 PC IP로 채워주세요.' };
+  }
+  const SERVER_URL = `${process.env.EXPO_PUBLIC_SERVER_URL}/process-video`;
+
   try {
     console.log('multipart 요청 시작');
 
