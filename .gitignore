@@ -49,3 +49,5 @@ example
 # Secret files
 .env
 
+# server
+*.mp4
