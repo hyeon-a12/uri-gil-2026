@@ -129,6 +129,7 @@ function buildTodayMoments(recordings: RecordingData[]): ClipItem[] {
   return todayRecordings.map((r, index) => ({
     id: r.id,
     recordedAt: r.recordedAt ?? new Date().toISOString(),
+    durationSeconds: Math.floor((r.durationMs ?? 0) / 1000),
     thumbnail: r.thumbnail ?? r.thumbnail,
     uri: r.videoUri ?? '',
 
