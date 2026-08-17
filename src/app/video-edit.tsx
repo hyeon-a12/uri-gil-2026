@@ -254,18 +254,51 @@ async function renderVideo(exportData: {
     placeStyle: TextElementStyle;
   };
 }): Promise<{ success: boolean; message?: string }> {
+  const SERVER_URL = 'http://172.30.1.65:3000/process-video';
+  
   try {
-    console.log('[renderVideo] 렌더링 시작', exportData);
+    console.log('multipart 요청 시작');
 
-    const response = await fetch('http://172.30.1.65:3000/process-video', {
+    const formData = new FormData();
+
+    for (let i=0; i<exportData.clips.length; i++) {
+      const clip = exportData.clips[i];
+      if (!clip.videoUri) continue;
+
+      formData.append('videos', {
+        uri: clip.videoUri,
+        name: `${clip.id}.mp4`,
+        type: 'video/mp4',
+      } as any);
+    }
+
+    formData.append('settings', JSON.stringify(exportData.globalSetting));
+    formData.append('clipMetadata', JSON.stringify(exportData.clips.map((c: any) => ({
+      id: c.id,
+      isMuted: c.isMuted,
+    }))));
+
+    if (exportData.folderId) {
+      formData.append('folderId', exportData.folderId);
+    }
+
+    console.log('FormData 준비 완료');
+
+    const response = await fetch(SERVER_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(exportData)
+      body: formData,
     });
 
-    if (!response.ok) throw new Error(`서버 렌더링 실패: ${response.status}`);
+    console.log('응답 받음')
+    console.log('[status]', response.status);
+    console.log('[statusText]', response.statusText);
 
-    const result = await response.json();
+    const responseText = await response.text();
+    console.log('[응답 본문]', responseText);
+
+    if (!response.ok) throw new Error(`서버 렌더링 실패: ${responseText.slice(0,200)}`);
+
+    const result = JSON.parse(responseText);
     console.log('[renderVideo] 서버 응답:', result);
 
     if (!result.success) {
@@ -275,16 +308,24 @@ async function renderVideo(exportData: {
       };
     }
 
-    const { downloadUrl } = await response.json();
     if (result.downloadUrl) {
-      const localPath = FileSystem.documentDirectory + `output_${Date.now()}.mp4`;
-      await FileSystem.downloadAsync(downloadUrl, localPath);
+      console.log('[rendervideo] 다운로드 시작', result.downloadUrl);
 
-      const { status } = await MediaLibrary.requestPermissionsAsync();
+      const localPath = FileSystem.documentDirectory + `output_${Date.now()}.mp4`;
+      await FileSystem.downloadAsync(result.downloadUrl, localPath);
+
+      console.log('[rendervideo] 다운로드 완료', localPath);
+
+      // 갤러리 저장
+      const { status } = await MediaLibrary.requestPermissionsAsync(true);
       if (status !== 'granted') {
-        return { success: false, message: '갤러리 접근 권한이 필요합니다.' };
+        return {
+          success: false,
+          message: '갤러리 접근 권한이 필요합니다.'
+        };
       }
       await MediaLibrary.saveToLibraryAsync(localPath);
+      console.log('[renderVideo] 갤러리 저장 완료');
     }
 
     return { success: true };
