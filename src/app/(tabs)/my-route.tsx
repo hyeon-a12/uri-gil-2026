@@ -1,11 +1,18 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { useFocusEffect } from "expo-router";
+import { useFocusEffect, useLocalSearchParams } from "expo-router";
 import { parseDateRange, type FolderItem } from "@/services/folderService";
 import { getRecordingsByFolder } from "@/services/recordingService";
 import {
   getTripScheduleStops,
   type TripScheduleStop,
 } from "@/services/trip-schedule-service";
+import {
+  addTransitLog,
+  getTransitLogs,
+  removeTransitLog,
+  type NewTransitLog,
+  type TransitLog,
+} from "@/services/transit-log-service";
 import type { RecordingData } from "@/types/recording";
 import { useTripStore } from "@/store/useTripStore";
 import {
@@ -15,12 +22,15 @@ import {
   ScrollView,
   Share,
   StyleSheet,
+  Platform,
   TextInput,
   View,
   useWindowDimensions,
 } from "react-native";
 import { AppText as Text } from "@/components/AppText";
 import { Image } from "expo-image";
+import * as ImagePicker from "expo-image-picker";
+import * as MediaLibrary from "expo-media-library";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Circle, Path } from "react-native-svg";
@@ -32,6 +42,8 @@ const COLORS = {
   primary: "#FF7F5C",
   primaryDark: "#E97B1F",
   primarySoft: "#FFF3DF",
+  // 이동 사진 기록 삭제처럼 되돌리기 어려운 동작에만 사용하는 경고 색상입니다.
+  record: "#E14D3F",
 
   textPrimary: "#222222",
   textSecondary: "#8A8A8A",
@@ -763,11 +775,411 @@ function MemoEditorModal({
   );
 }
 
+type QuickTransitLogModalProps = {
+  visible: boolean;
+  saving: boolean;
+  onClose: () => void;
+  onSave: (log: NewTransitLog) => Promise<void>;
+};
+
+function QuickTransitLogModal({
+  visible,
+  saving,
+  onClose,
+  onSave,
+}: QuickTransitLogModalProps) {
+  const [assetUri, setAssetUri] = useState<string | undefined>();
+  const [mediaLibraryAssetId, setMediaLibraryAssetId] = useState<
+    string | undefined
+  >();
+  const [note, setNote] = useState("");
+
+  useEffect(() => {
+    if (visible) {
+      setAssetUri(undefined);
+      setMediaLibraryAssetId(undefined);
+      setNote("");
+    }
+  }, [visible]);
+
+  const pickPhoto = async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert(
+        "사진 접근 권한 필요",
+        "이동 중 사진을 추가하려면 사진 접근을 허용해주세요.",
+      );
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images"],
+      allowsEditing: false,
+      quality: 0.82,
+    });
+
+    if (!result.canceled) {
+      const asset = result.assets[0];
+      setAssetUri(asset?.uri);
+      // 사진첩 선택 결과에 assetId가 있을 때에만 기기 원본 삭제를 지원합니다.
+      setMediaLibraryAssetId(asset?.assetId ?? undefined);
+    }
+  };
+
+  const takePhoto = async () => {
+    const permission = await ImagePicker.requestCameraPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert(
+        "카메라 권한 필요",
+        "이동 중 사진을 촬영하려면 카메라 접근을 허용해주세요.",
+      );
+      return;
+    }
+
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ["images"],
+      allowsEditing: false,
+      quality: 0.82,
+    });
+
+    if (!result.canceled) {
+      const asset = result.assets[0];
+      setAssetUri(asset?.uri);
+
+      // 카메라 결과는 캐시 파일일 수 있어, 모바일에서는 사진첩 자산으로 등록한 뒤
+      // 그 ID를 저장합니다. 웹은 브라우저 저장소 정책상 사진첩 원본 삭제를 지원하지 않습니다.
+      if (asset?.uri && Platform.OS !== "web") {
+        try {
+          const mediaPermission = await MediaLibrary.requestPermissionsAsync();
+          if (mediaPermission.granted) {
+            const mediaAsset = await MediaLibrary.Asset.create(asset.uri);
+            setMediaLibraryAssetId(mediaAsset.id);
+          }
+        } catch (error) {
+          console.warn("[QuickTransitLogModal] 사진첩 자산 생성 실패:", error);
+        }
+      }
+    }
+  };
+
+  const handleSave = async () => {
+    const text = note.trim();
+    if (!assetUri) {
+      Alert.alert("사진을 선택해주세요", "이동 중 사진을 한 장 추가해주세요.");
+      return;
+    }
+
+    await onSave({
+      kind: "photo",
+      assetUri,
+      mediaLibraryAssetId,
+      text: text || undefined,
+      recordedAt: new Date().toISOString(),
+      day: 1,
+    });
+  };
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={saving ? undefined : onClose}
+    >
+      <Pressable
+        disabled={saving}
+        onPress={onClose}
+        style={styles.transitModalBackdrop}
+      >
+        <Pressable onPress={() => undefined} style={styles.transitModalSheet}>
+          <View style={styles.transitModalHandle} />
+          <Text allowFontScaling={false} style={styles.transitModalTitle}>
+            이동 중 기록 남기기
+          </Text>
+          <Text allowFontScaling={false} style={styles.transitModalDescription}>
+            장소에 도착하기 전의 풍경을 사진과 짧은 텍스트로 남겨보세요.
+          </Text>
+
+          <View style={styles.transitPhotoSourceRow}>
+            <Pressable
+              onPress={() => void takePhoto()}
+              style={styles.transitPhotoSourceButton}
+            >
+              <Ionicons
+                name="camera-outline"
+                size={18}
+                color={COLORS.primary}
+              />
+              <Text
+                allowFontScaling={false}
+                style={styles.transitPhotoSourceText}
+              >
+                사진 촬영
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => void pickPhoto()}
+              style={styles.transitPhotoSourceButton}
+            >
+              <Ionicons
+                name="images-outline"
+                size={18}
+                color={COLORS.primary}
+              />
+              <Text
+                allowFontScaling={false}
+                style={styles.transitPhotoSourceText}
+              >
+                갤러리 선택
+              </Text>
+            </Pressable>
+          </View>
+
+          <Pressable
+            onPress={() => void pickPhoto()}
+            style={({ pressed }) => [
+              styles.transitPhotoPicker,
+              pressed && styles.cardPressed,
+            ]}
+          >
+            {assetUri ? (
+              <Image
+                source={{ uri: assetUri }}
+                style={styles.transitPhotoPreview}
+                contentFit="cover"
+              />
+            ) : (
+              <>
+                <Ionicons
+                  name="image-outline"
+                  size={28}
+                  color={COLORS.primary}
+                />
+                <Text
+                  allowFontScaling={false}
+                  style={styles.transitPhotoPickerText}
+                >
+                  이동 중 사진을 추가하세요
+                </Text>
+              </>
+            )}
+          </Pressable>
+
+          <TextInput
+            value={note}
+            onChangeText={setNote}
+            placeholder="선택 사항 · 예: 버스 창밖으로 노을이 예뻤다"
+            placeholderTextColor={COLORS.textTertiary}
+            maxLength={120}
+            multiline
+            style={styles.transitNoteInput}
+          />
+
+          <View style={styles.transitModalActionRow}>
+            <Pressable
+              disabled={saving}
+              onPress={onClose}
+              style={styles.transitModalCancelButton}
+            >
+              <Text
+                allowFontScaling={false}
+                style={styles.transitModalCancelText}
+              >
+                취소
+              </Text>
+            </Pressable>
+            <Pressable
+              disabled={saving}
+              onPress={() => void handleSave()}
+              style={[
+                styles.transitModalSaveButton,
+                saving && styles.transitModalSaveButtonDisabled,
+              ]}
+            >
+              <Text
+                allowFontScaling={false}
+                style={styles.transitModalSaveText}
+              >
+                {saving ? "저장 중..." : "기록 저장"}
+              </Text>
+            </Pressable>
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+type TransitLogDetailModalProps = {
+  log: TransitLog | null;
+  deleting: boolean;
+  onClose: () => void;
+  onDelete: (log: TransitLog, deleteFromDevice: boolean) => void;
+};
+
+function TransitLogDetailModal({
+  log,
+  deleting,
+  onClose,
+  onDelete,
+}: TransitLogDetailModalProps) {
+  return (
+    <Modal
+      visible={!!log}
+      transparent
+      animationType="fade"
+      onRequestClose={onClose}
+    >
+      <Pressable onPress={onClose} style={styles.transitDetailBackdrop}>
+        <Pressable onPress={() => undefined} style={styles.transitDetailSheet}>
+          <View style={styles.transitDetailHeader}>
+            <View>
+              <Text allowFontScaling={false} style={styles.transitDetailTitle}>
+                이동 중 기록
+              </Text>
+              <Text allowFontScaling={false} style={styles.transitDetailMeta}>
+                {log
+                  ? `Day ${log.day} · ${formatClipTime(log.recordedAt)}`
+                  : ""}
+              </Text>
+            </View>
+            <Pressable
+              hitSlop={10}
+              onPress={onClose}
+              style={styles.transitDetailCloseButton}
+            >
+              <Ionicons name="close" size={20} color={COLORS.textPrimary} />
+            </Pressable>
+          </View>
+
+          {log?.assetUri ? (
+            <Image
+              source={{ uri: log.assetUri }}
+              style={styles.transitDetailImage}
+              contentFit="contain"
+              transition={150}
+            />
+          ) : (
+            <View style={styles.transitDetailMissingImage}>
+              <Ionicons
+                name="image-outline"
+                size={32}
+                color={COLORS.textTertiary}
+              />
+              <Text
+                allowFontScaling={false}
+                style={styles.transitDetailMissingText}
+              >
+                사진을 불러올 수 없어요.
+              </Text>
+            </View>
+          )}
+
+          {log?.text ? (
+            <View style={styles.transitDetailCaptionBox}>
+              <Ionicons
+                name="chatbubble-outline"
+                size={16}
+                color={COLORS.primary}
+              />
+              <Text
+                allowFontScaling={false}
+                style={styles.transitDetailCaption}
+              >
+                {log.text}
+              </Text>
+            </View>
+          ) : (
+            <Text
+              allowFontScaling={false}
+              style={styles.transitDetailNoCaption}
+            >
+              남긴 메모가 없어요.
+            </Text>
+          )}
+
+          <Pressable
+            disabled={!log || deleting}
+            onPress={() => {
+              if (!log || deleting) return;
+
+              Alert.alert(
+                "이동 사진 삭제",
+                "이 사진 기록과 메모를 일정 갤러리에서 삭제할까요?",
+                [
+                  { text: "취소", style: "cancel" },
+                  {
+                    text: "삭제",
+                    style: "destructive",
+                    onPress: () => onDelete(log, false),
+                  },
+                ],
+              );
+            }}
+            style={({ pressed }) => [
+              styles.transitDetailDeleteButton,
+              (pressed || deleting) && styles.transitDetailDeleteButtonPressed,
+            ]}
+          >
+            <Ionicons name="trash-outline" size={16} color={COLORS.record} />
+            <Text
+              allowFontScaling={false}
+              style={styles.transitDetailDeleteText}
+            >
+              {deleting ? "삭제 중..." : "사진 기록 삭제"}
+            </Text>
+          </Pressable>
+
+          {log?.mediaLibraryAssetId && Platform.OS !== "web" ? (
+            <Pressable
+              disabled={deleting}
+              onPress={() => {
+                if (!log || deleting) return;
+
+                Alert.alert(
+                  "기기 사진첩에서도 삭제",
+                  "이 사진은 기기 사진첩에서도 영구 삭제되며, 이동 중 기록에서도 함께 사라집니다. 계속할까요?",
+                  [
+                    { text: "취소", style: "cancel" },
+                    {
+                      text: "사진첩에서 삭제",
+                      style: "destructive",
+                      onPress: () => onDelete(log, true),
+                    },
+                  ],
+                );
+              }}
+              style={({ pressed }) => [
+                styles.transitDetailDeviceDeleteButton,
+                (pressed || deleting) &&
+                  styles.transitDetailDeleteButtonPressed,
+              ]}
+            >
+              <Ionicons name="trash" size={16} color="#FFFFFF" />
+              <Text
+                allowFontScaling={false}
+                style={styles.transitDetailDeviceDeleteText}
+              >
+                사진첩에서도 삭제
+              </Text>
+            </Pressable>
+          ) : null}
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
 type RoutePlanViewProps = {
   hasTrip: boolean;
   stops: PlanStop[];
-  travelLogs: PlanTravelLog[];
+  savedTransitLogs: TransitLog[];
   dayNumbers: number[];
+  onCreateTransitLog: (log: NewTransitLog) => Promise<void>;
+  onDeleteTransitLog: (
+    log: TransitLog,
+    deleteFromDevice: boolean,
+  ) => Promise<void>;
 };
 
 // '루트 정보' 탭 대신 들어가는 새 화면: day별 일정 타임라인 + 장소별 메모 + 이동 중 기록
@@ -778,8 +1190,10 @@ type RoutePlanViewProps = {
 function RoutePlanView({
   hasTrip,
   stops,
-  travelLogs,
+  savedTransitLogs,
   dayNumbers,
+  onCreateTransitLog,
+  onDeleteTransitLog,
 }: RoutePlanViewProps) {
   const [selectedDay, setSelectedDay] = useState(dayNumbers[0] ?? 1);
 
@@ -788,6 +1202,11 @@ function RoutePlanView({
   const [memoModalVisible, setMemoModalVisible] = useState(false);
   const [activeStopId, setActiveStopId] = useState<string | null>(null);
   const [memoDraft, setMemoDraft] = useState("");
+  const [transitModalVisible, setTransitModalVisible] = useState(false);
+  const [isTransitSaving, setIsTransitSaving] = useState(false);
+  const [isTransitDeleting, setIsTransitDeleting] = useState(false);
+  const [selectedTransitLog, setSelectedTransitLog] =
+    useState<TransitLog | null>(null);
 
   // 여행을 전환해서 날짜 목록 자체가 바뀌면, 이전 여행의 day 선택이 남아있지
   // 않도록 첫 번째 날로 되돌립니다.
@@ -804,11 +1223,6 @@ function RoutePlanView({
         .filter((stop) => stop.day === selectedDay)
         .sort((a, b) => a.order - b.order),
     [stops, selectedDay],
-  );
-
-  const dayLogs = useMemo(
-    () => travelLogs.filter((log) => log.day === selectedDay),
-    [travelLogs, selectedDay],
   );
 
   const activeStop = useMemo(
@@ -846,6 +1260,41 @@ function RoutePlanView({
     setMemoModalVisible(false);
   };
 
+  const saveTransitLog = async (log: NewTransitLog) => {
+    try {
+      setIsTransitSaving(true);
+      await onCreateTransitLog({ ...log, day: selectedDay });
+      setTransitModalVisible(false);
+    } catch (error) {
+      console.error("[RoutePlanView] 이동 중 기록 저장 실패:", error);
+      Alert.alert(
+        "기록 저장 실패",
+        "이동 중 기록을 저장하지 못했습니다. 다시 시도해주세요.",
+      );
+    } finally {
+      setIsTransitSaving(false);
+    }
+  };
+
+  const deleteSelectedTransitLog = async (
+    log: TransitLog,
+    deleteFromDevice: boolean,
+  ) => {
+    try {
+      setIsTransitDeleting(true);
+      await onDeleteTransitLog(log, deleteFromDevice);
+      setSelectedTransitLog(null);
+    } catch (error) {
+      console.error("[RoutePlanView] 이동 사진 삭제 실패:", error);
+      Alert.alert(
+        "사진 삭제 실패",
+        "사진 기록을 삭제하지 못했습니다. 다시 시도해주세요.",
+      );
+    } finally {
+      setIsTransitDeleting(false);
+    }
+  };
+
   if (!hasTrip) {
     return (
       <View style={styles.planEmptyState}>
@@ -864,7 +1313,7 @@ function RoutePlanView({
     );
   }
 
-  if (stops.length === 0 && travelLogs.length === 0) {
+  if (stops.length === 0 && savedTransitLogs.length === 0) {
     return (
       <View style={styles.planEmptyState}>
         <Ionicons
@@ -1071,7 +1520,7 @@ function RoutePlanView({
             </Text>
 
             <Text allowFontScaling={false} style={styles.travelLogSubtitle}>
-              여행하며 바로 남기기
+              이동 중 사진 갤러리
             </Text>
           </View>
 
@@ -1080,78 +1529,129 @@ function RoutePlanView({
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.travelLogList}
           >
-            {dayLogs.map((log) => (
-              <Pressable
-                key={log.id}
-                onPress={() => {
-                  Alert.alert(
-                    "미분류 기록",
-                    "촬영 시 장소를 입력하지 않은 클립이에요. 눌러서 장소로 등록할 수 있습니다.",
-                  );
-                }}
-                style={styles.travelLogItem}
-              >
-                <View style={styles.travelLogThumbWrapper}>
-                  <Image
-                    source={{ uri: log.thumbnail }}
-                    style={styles.travelLogThumb}
-                    contentFit="cover"
-                    transition={150}
-                  />
-
-                  <View
-                    style={[
-                      styles.travelLogBadge,
-                      styles.travelLogBadgeUnmatched,
-                    ]}
-                  >
-                    <Ionicons
-                      name="location-outline"
-                      size={9}
-                      color={COLORS.textSecondary}
-                    />
-                  </View>
-                </View>
-
-                <Text
-                  numberOfLines={1}
-                  allowFontScaling={false}
-                  style={styles.travelLogTime}
+            {savedTransitLogs
+              .filter((log) => log.day === selectedDay)
+              .map((log) => (
+                <Pressable
+                  key={log.id}
+                  onPress={() => setSelectedTransitLog(log)}
+                  style={styles.travelLogItem}
                 >
-                  미분류 · {log.time}
+                  <View style={styles.travelLogThumbWrapper}>
+                    {log.kind === "photo" && log.assetUri ? (
+                      <Image
+                        source={{ uri: log.assetUri }}
+                        style={styles.travelLogThumb}
+                        contentFit="cover"
+                        transition={150}
+                      />
+                    ) : (
+                      <View style={styles.transitNoteThumb}>
+                        <Ionicons
+                          name="create-outline"
+                          size={25}
+                          color={COLORS.primary}
+                        />
+                      </View>
+                    )}
+                    <View style={styles.travelLogBadge}>
+                      <Ionicons
+                        name={
+                          log.kind === "photo"
+                            ? "image-outline"
+                            : "create-outline"
+                        }
+                        size={9}
+                        color={COLORS.primary}
+                      />
+                    </View>
+                  </View>
+                  <Text
+                    numberOfLines={1}
+                    allowFontScaling={false}
+                    style={styles.travelLogTime}
+                  >
+                    사진 · {formatClipTime(log.recordedAt)}
+                  </Text>
+                  {log.text ? (
+                    <Text
+                      numberOfLines={2}
+                      allowFontScaling={false}
+                      style={styles.transitLogCaption}
+                    >
+                      {log.text}
+                    </Text>
+                  ) : null}
+                </Pressable>
+              ))}
+
+            {savedTransitLogs.filter((log) => log.day === selectedDay)
+              .length === 0 ? (
+              <Pressable
+                onPress={() => setTransitModalVisible(true)}
+                style={({ pressed }) => [
+                  styles.transitEmptyCard,
+                  pressed && styles.cardPressed,
+                ]}
+              >
+                <Ionicons
+                  name="image-outline"
+                  size={22}
+                  color={COLORS.primary}
+                />
+                <Text allowFontScaling={false} style={styles.transitEmptyTitle}>
+                  이동 순간 사진 남기기
+                </Text>
+                <Text allowFontScaling={false} style={styles.transitEmptyText}>
+                  장소에 도착하기 전의 풍경을 사진으로 기록해보세요.
                 </Text>
               </Pressable>
-            ))}
+            ) : null}
 
             <Pressable
-              onPress={() => {
-                Alert.alert(
-                  "기록 추가",
-                  "카메라를 열어 새 기록을 남길 예정입니다.",
-                );
-              }}
+              onPress={() => setTransitModalVisible(true)}
               style={({ pressed }) => [
                 styles.travelLogAddButton,
                 pressed && styles.cardPressed,
               ]}
             >
-              <Ionicons name="add" size={22} color={COLORS.textSecondary} />
+              <Ionicons
+                name="camera-outline"
+                size={22}
+                color={COLORS.primary}
+              />
             </Pressable>
           </ScrollView>
         </View>
       </ScrollView>
 
       <Pressable
-        onPress={() => {
-          Alert.alert("기록하기", "카메라를 열어 새 기록을 남길 예정입니다.");
-        }}
+        onPress={() => setTransitModalVisible(true)}
         style={({ pressed }) => [
           styles.travelLogFab,
           pressed && styles.cardPressed,
         ]}
       >
-        <Ionicons name="camera" size={24} color="#FFFFFF" />
+        <Ionicons name="camera-outline" size={24} color="#FFFFFF" />
       </Pressable>
+
+      <TransitLogDetailModal
+        log={selectedTransitLog}
+        deleting={isTransitDeleting}
+        onClose={() => {
+          if (!isTransitDeleting) setSelectedTransitLog(null);
+        }}
+        onDelete={(log, deleteFromDevice) =>
+          void deleteSelectedTransitLog(log, deleteFromDevice)
+        }
+      />
+
+      <QuickTransitLogModal
+        visible={transitModalVisible}
+        saving={isTransitSaving}
+        onClose={() => setTransitModalVisible(false)}
+        onSave={saveTransitLog}
+      />
 
       <MemoEditorModal
         visible={memoModalVisible}
@@ -1410,6 +1910,10 @@ function ShareActionRow({
 }
 
 export default function MyRouteScreen() {
+  const { view, saved } = useLocalSearchParams<{
+    view?: string;
+    saved?: string;
+  }>();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
 
@@ -1421,6 +1925,7 @@ export default function MyRouteScreen() {
   const [savedScheduleStops, setSavedScheduleStops] = useState<
     TripScheduleStop[]
   >([]);
+  const [transitLogs, setTransitLogs] = useState<TransitLog[]>([]);
 
   useFocusEffect(
     useCallback(() => {
@@ -1431,18 +1936,21 @@ export default function MyRouteScreen() {
           if (isActive) {
             setRecordings([]);
             setSavedScheduleStops([]);
+            setTransitLogs([]);
           }
           return;
         }
 
         try {
-          const [records, scheduleStops] = await Promise.all([
+          const [records, scheduleStops, savedTransitLogs] = await Promise.all([
             getRecordingsByFolder(currentTrip.id),
             getTripScheduleStops(currentTrip.id),
+            getTransitLogs(currentTrip.id),
           ]);
           if (isActive) {
             setRecordings(records);
             setSavedScheduleStops(scheduleStops);
+            setTransitLogs(savedTransitLogs);
           }
         } catch (error) {
           console.error(
@@ -1452,6 +1960,7 @@ export default function MyRouteScreen() {
           if (isActive) {
             setRecordings([]);
             setSavedScheduleStops([]);
+            setTransitLogs([]);
           }
         }
       })();
@@ -1477,7 +1986,53 @@ export default function MyRouteScreen() {
     );
   }, [currentTrip]);
 
+  const handleCreateTransitLog = useCallback(
+    async (log: NewTransitLog) => {
+      if (!currentTrip) {
+        throw new Error("선택된 여행이 없습니다.");
+      }
+
+      const saved = await addTransitLog(currentTrip.id, log);
+      setTransitLogs((previous) => [saved, ...previous]);
+    },
+    [currentTrip],
+  );
+
+  const handleDeleteTransitLog = useCallback(
+    async (log: TransitLog, deleteFromDevice: boolean) => {
+      if (!currentTrip) {
+        throw new Error("선택된 여행이 없습니다.");
+      }
+
+      if (deleteFromDevice) {
+        if (Platform.OS === "web" || !log.mediaLibraryAssetId) {
+          throw new Error("기기 사진첩 원본을 삭제할 수 없는 사진입니다.");
+        }
+
+        const permission = await MediaLibrary.requestPermissionsAsync();
+        if (!permission.granted) {
+          throw new Error("기기 사진첩 삭제 권한이 필요합니다.");
+        }
+
+        // 저장 시 보관한 asset ID로 기기 사진첩의 같은 원본 자산을 삭제합니다.
+        const mediaAsset = new MediaLibrary.Asset(log.mediaLibraryAssetId);
+        await mediaAsset.delete();
+      }
+
+      const remaining = await removeTransitLog(currentTrip.id, log.id);
+      setTransitLogs(remaining);
+    },
+    [currentTrip],
+  );
+
   const [selectedMode, setSelectedMode] = useState<RouteViewMode>("info");
+
+  // 홈에서 AI 추천 일정을 확정하고 넘어온 경우, 이전 탭 상태와 무관하게 일정 탭을 엽니다.
+  useEffect(() => {
+    if (view === "schedule") {
+      setSelectedMode("info");
+    }
+  }, [saved, view]);
 
   const [isShareSheetVisible, setIsShareSheetVisible] = useState(false);
 
@@ -1606,8 +2161,10 @@ export default function MyRouteScreen() {
           <RoutePlanView
             hasTrip={!!currentTrip}
             stops={planData.stops}
-            travelLogs={planData.travelLogs}
+            savedTransitLogs={transitLogs}
             dayNumbers={planData.dayNumbers}
+            onCreateTransitLog={handleCreateTransitLog}
+            onDeleteTransitLog={handleDeleteTransitLog}
           />
         )}
       </View>
@@ -2713,6 +3270,290 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
 
     elevation: 6,
+  },
+
+  transitLogCaption: {
+    color: COLORS.textSecondary,
+    fontSize: 10,
+    lineHeight: 14,
+    marginTop: 3,
+    textAlign: "center",
+  },
+  transitNoteThumb: {
+    alignItems: "center",
+    backgroundColor: COLORS.primarySoft,
+    borderRadius: 14,
+    height: 68,
+    justifyContent: "center",
+    width: 68,
+  },
+  transitEmptyCard: {
+    alignItems: "center",
+    borderColor: COLORS.border,
+    borderRadius: 14,
+    borderStyle: "dashed",
+    borderWidth: 1,
+    justifyContent: "center",
+    minHeight: 104,
+    paddingHorizontal: 16,
+    width: 176,
+  },
+  transitEmptyTitle: {
+    color: COLORS.textPrimary,
+    fontSize: 11,
+    fontWeight: "800",
+    marginTop: 7,
+  },
+  transitEmptyText: {
+    color: COLORS.textTertiary,
+    fontSize: 9,
+    lineHeight: 13,
+    marginTop: 3,
+    textAlign: "center",
+  },
+
+  // 장소 영상과 분리된 이동 사진·짧은 텍스트 저장 시트
+  transitModalBackdrop: {
+    alignItems: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.38)",
+    flex: 1,
+    justifyContent: "flex-end",
+    padding: 14,
+  },
+  transitModalSheet: {
+    backgroundColor: COLORS.card,
+    borderRadius: 26,
+    maxWidth: 520,
+    paddingBottom: 20,
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    width: "100%",
+  },
+  transitModalHandle: {
+    alignSelf: "center",
+    backgroundColor: "#D7D7D7",
+    borderRadius: 3,
+    height: 5,
+    width: 46,
+  },
+  transitModalTitle: {
+    color: COLORS.textPrimary,
+    fontSize: 21,
+    fontWeight: "800",
+    marginTop: 16,
+  },
+  transitModalDescription: {
+    color: COLORS.textSecondary,
+    fontSize: 13,
+    lineHeight: 19,
+    marginTop: 6,
+  },
+  transitPhotoSourceRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 16,
+  },
+  transitPhotoSourceButton: {
+    alignItems: "center",
+    backgroundColor: COLORS.primarySoft,
+    borderColor: "#F4D6C8",
+    borderRadius: 12,
+    borderWidth: 1,
+    flex: 1,
+    flexDirection: "row",
+    gap: 7,
+    height: 43,
+    justifyContent: "center",
+  },
+  transitPhotoSourceText: {
+    color: COLORS.primaryDark,
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  transitPhotoPicker: {
+    alignItems: "center",
+    backgroundColor: "#FAFAFA",
+    borderColor: COLORS.border,
+    borderRadius: 16,
+    borderStyle: "dashed",
+    borderWidth: 1,
+    height: 142,
+    justifyContent: "center",
+    marginTop: 10,
+    overflow: "hidden",
+  },
+  transitPhotoPreview: {
+    height: "100%",
+    width: "100%",
+  },
+  transitPhotoPickerText: {
+    color: COLORS.textSecondary,
+    fontSize: 12,
+    fontWeight: "700",
+    marginTop: 7,
+  },
+  transitNoteInput: {
+    backgroundColor: "#FAFAFA",
+    borderColor: COLORS.border,
+    borderRadius: 14,
+    borderWidth: 1,
+    color: COLORS.textPrimary,
+    fontSize: 13,
+    lineHeight: 19,
+    marginTop: 10,
+    minHeight: 72,
+    padding: 12,
+    textAlignVertical: "top",
+  },
+  transitModalActionRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 16,
+  },
+  transitModalCancelButton: {
+    alignItems: "center",
+    backgroundColor: "#F2F2F2",
+    borderRadius: 14,
+    flex: 1,
+    height: 50,
+    justifyContent: "center",
+  },
+  transitModalCancelText: {
+    color: COLORS.textSecondary,
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  transitModalSaveButton: {
+    alignItems: "center",
+    backgroundColor: COLORS.primary,
+    borderRadius: 14,
+    flex: 1.4,
+    height: 50,
+    justifyContent: "center",
+  },
+  transitModalSaveButtonDisabled: {
+    backgroundColor: "#F1B7A3",
+  },
+  transitModalSaveText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "800",
+  },
+
+  transitDetailBackdrop: {
+    alignItems: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.56)",
+    flex: 1,
+    justifyContent: "center",
+    padding: 20,
+  },
+  transitDetailSheet: {
+    backgroundColor: COLORS.card,
+    borderRadius: 24,
+    maxWidth: 520,
+    overflow: "hidden",
+    paddingBottom: 20,
+    width: "100%",
+  },
+  transitDetailHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingHorizontal: 18,
+    paddingVertical: 16,
+  },
+  transitDetailTitle: {
+    color: COLORS.textPrimary,
+    fontSize: 17,
+    fontWeight: "800",
+  },
+  transitDetailMeta: {
+    color: COLORS.textSecondary,
+    fontSize: 12,
+    marginTop: 3,
+  },
+  transitDetailCloseButton: {
+    alignItems: "center",
+    backgroundColor: "#F4F4F4",
+    borderRadius: 18,
+    height: 36,
+    justifyContent: "center",
+    width: 36,
+  },
+  transitDetailImage: {
+    backgroundColor: "#171717",
+    height: 340,
+    width: "100%",
+  },
+  transitDetailMissingImage: {
+    alignItems: "center",
+    backgroundColor: "#F5F5F5",
+    height: 220,
+    justifyContent: "center",
+  },
+  transitDetailMissingText: {
+    color: COLORS.textSecondary,
+    fontSize: 12,
+    marginTop: 8,
+  },
+  transitDetailCaptionBox: {
+    alignItems: "flex-start",
+    backgroundColor: COLORS.primarySoft,
+    borderRadius: 14,
+    flexDirection: "row",
+    gap: 8,
+    marginHorizontal: 18,
+    marginTop: 16,
+    padding: 13,
+  },
+  transitDetailCaption: {
+    color: COLORS.textPrimary,
+    flex: 1,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  transitDetailNoCaption: {
+    color: COLORS.textTertiary,
+    fontSize: 12,
+    marginHorizontal: 18,
+    marginTop: 16,
+  },
+  transitDetailDeleteButton: {
+    alignItems: "center",
+    borderColor: "#F2C7C0",
+    borderRadius: 12,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 6,
+    justifyContent: "center",
+    marginHorizontal: 18,
+    marginTop: 16,
+    minHeight: 46,
+  },
+  transitDetailDeleteButtonPressed: {
+    backgroundColor: "#FFF4F1",
+    opacity: 0.7,
+  },
+  transitDetailDeleteText: {
+    color: COLORS.record,
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  transitDetailDeviceDeleteButton: {
+    alignItems: "center",
+    backgroundColor: COLORS.record,
+    borderRadius: 12,
+    flexDirection: "row",
+    gap: 6,
+    justifyContent: "center",
+    marginHorizontal: 18,
+    marginTop: 10,
+    minHeight: 46,
+  },
+  transitDetailDeviceDeleteText: {
+    color: COLORS.white,
+    fontSize: 14,
+    fontWeight: "800",
   },
 
   memoModalBackdrop: {

@@ -16,7 +16,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import * as Location from "expo-location";
-import { useFocusEffect } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import KakaoMapView, {
   KakaoMapPin,
   KakaoMapCurrentLocation,
@@ -1467,6 +1467,7 @@ function AiPlanConfirmModal({
 }
 
 export default function TripHomeScreen() {
+  const router = useRouter();
   const currentTrip = useTripStore((state) => state.currentTrip);
 
   const [currentLocation, setCurrentLocation] =
@@ -1943,10 +1944,11 @@ export default function TripHomeScreen() {
       setSearchResults([]);
       setSearchFocused(false);
 
-      Alert.alert(
-        "내 일정에 담았어요",
-        `${selectedPlaces.length}곳이 ${getTripDisplayName(currentTrip)} 여행 일정에 저장됐습니다.`,
-      );
+      // MyRoute가 이미 열려 있어도 일정 탭을 강제합니다.
+      router.navigate({
+        pathname: "/(tabs)/my-route",
+        params: { view: "schedule", saved: String(Date.now()) },
+      });
     } catch (error) {
       console.error("[HomeScreen] AI 추천 일정 저장 실패:", error);
       Alert.alert(
@@ -1956,7 +1958,7 @@ export default function TripHomeScreen() {
     } finally {
       setIsAiPlanSaving(false);
     }
-  }, [aiPlanPlaces, aiPlanSelectedIds, currentTrip, isAiPlanSaving]);
+  }, [aiPlanPlaces, aiPlanSelectedIds, currentTrip, isAiPlanSaving, router]);
 
   const handleSubmitSearch = async () => {
     const keyword = searchQuery.trim();
