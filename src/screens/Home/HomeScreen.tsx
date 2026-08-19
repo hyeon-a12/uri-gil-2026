@@ -917,7 +917,7 @@ type AiRecommendationScreenProps = {
   currentLocation: KakaoMapCurrentLocation | null;
   places: SearchResultItem[];
   selectedIds: string[];
-  onClose: () => void;
+  onExitAnimationComplete: () => void;
   onRefresh: () => void;
   onTogglePlace: (id: string) => void;
   onApplyPlan: () => void;
@@ -929,16 +929,151 @@ function AiRecommendationScreen({
   currentLocation,
   places,
   selectedIds,
-  onClose,
+  onExitAnimationComplete,
   onRefresh,
   onTogglePlace,
   onApplyPlan,
 }: AiRecommendationScreenProps) {
   const [filter, setFilter] = useState<AiPlanFilter>("all");
+  const [aiSearchTerm, setAiSearchTerm] = useState("");
+  const [isAiTopBarFocused, setIsAiTopBarFocused] = useState(true);
+  const [isAiExiting, setIsAiExiting] = useState(false);
+  const aiExitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const AI_DEFAULT_TRANSLATE = SHEET_PEEK_HEIGHT - SHEET_EXPANDED_TOP_OFFSET;
+  const AI_MAP_FOCUS_TRANSLATE =
+    SCREEN_HEIGHT - SHEET_EXPANDED_TOP_OFFSET - SHEET_MAP_FOCUS_VISIBLE_HEIGHT;
+  const AI_SNAP_POINTS = [0, AI_DEFAULT_TRANSLATE, AI_MAP_FOCUS_TRANSLATE];
+  const aiSheetTranslateY = useRef(
+    new Animated.Value(AI_DEFAULT_TRANSLATE),
+  ).current;
+  const aiSheetCurrentValueRef = useRef(AI_DEFAULT_TRANSLATE);
+  const aiSheetDragStartRef = useRef(AI_DEFAULT_TRANSLATE);
+  const aiSheetScrollOffsetRef = useRef(0);
 
   useEffect(() => {
-    if (visible) setFilter("all");
-  }, [visible]);
+    const listenerId = aiSheetTranslateY.addListener(({ value }) => {
+      aiSheetCurrentValueRef.current = value;
+    });
+    return () => aiSheetTranslateY.removeListener(listenerId);
+  }, [aiSheetTranslateY]);
+
+  useEffect(() => {
+    if (visible) {
+      setFilter("all");
+      setAiSearchTerm("");
+      setIsAiTopBarFocused(true);
+      setIsAiExiting(false);
+      aiSheetTranslateY.setValue(AI_DEFAULT_TRANSLATE);
+      aiSheetCurrentValueRef.current = AI_DEFAULT_TRANSLATE;
+      aiSheetScrollOffsetRef.current = 0;
+    }
+  }, [AI_DEFAULT_TRANSLATE, aiSheetTranslateY, visible]);
+
+  useEffect(
+    () => () => {
+      if (aiExitTimerRef.current) clearTimeout(aiExitTimerRef.current);
+    },
+    [],
+  );
+
+  const handleAiBackToHome = () => {
+    if (isAiExiting) return;
+
+    // AI 화면을 바로 닫지 않고, 홈과 동일한 260ms 축소 애니메이션을 먼저 보여줍니다.
+    setIsAiExiting(true);
+    Keyboard.dismiss();
+    setIsAiTopBarFocused(false);
+    aiExitTimerRef.current = setTimeout(() => {
+      onExitAnimationComplete();
+    }, 260);
+  };
+
+  const beginAiSheetDrag = () => {
+    aiSheetDragStartRef.current = aiSheetCurrentValueRef.current;
+  };
+
+  const moveAiSheetDrag = (dy: number) => {
+    aiSheetTranslateY.setValue(
+      clamp(aiSheetDragStartRef.current + dy, 0, AI_MAP_FOCUS_TRANSLATE),
+    );
+  };
+
+  const snapAiSheetTo = (target: number) => {
+    Animated.spring(aiSheetTranslateY, {
+      toValue: target,
+      useNativeDriver: false,
+      bounciness: 4,
+    }).start();
+  };
+
+  const endAiSheetDrag = (dy: number, vy: number) => {
+    const released = clamp(
+      aiSheetDragStartRef.current + dy,
+      0,
+      AI_MAP_FOCUS_TRANSLATE,
+    );
+    const currentSnapIndex = AI_SNAP_POINTS.reduce(
+      (closestIndex, point, index) =>
+        Math.abs(point - aiSheetDragStartRef.current) <
+        Math.abs(AI_SNAP_POINTS[closestIndex] - aiSheetDragStartRef.current)
+          ? index
+          : closestIndex,
+      0,
+    );
+
+    // 홈 화면과 같이 큰 드래그도 인접 단계로만 이동해 극단적으로 튀지 않습니다.
+    if (dy > 105 || vy > 0.72) {
+      snapAiSheetTo(
+        AI_SNAP_POINTS[
+          Math.min(currentSnapIndex + 1, AI_SNAP_POINTS.length - 1)
+        ],
+      );
+      return;
+    }
+    if (dy < -105 || vy < -0.72) {
+      snapAiSheetTo(AI_SNAP_POINTS[Math.max(currentSnapIndex - 1, 0)]);
+      return;
+    }
+
+    snapAiSheetTo(
+      AI_SNAP_POINTS.reduce((closest, point) =>
+        Math.abs(point - released) < Math.abs(closest - released)
+          ? point
+          : closest,
+      ),
+    );
+  };
+
+  const aiSheetHandlePanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gesture) => Math.abs(gesture.dy) > 4,
+      onPanResponderGrant: beginAiSheetDrag,
+      onPanResponderMove: (_, gesture) => moveAiSheetDrag(gesture.dy),
+      onPanResponderRelease: (_, gesture) =>
+        endAiSheetDrag(gesture.dy, gesture.vy),
+      onPanResponderTerminate: (_, gesture) =>
+        endAiSheetDrag(gesture.dy, gesture.vy),
+    }),
+  ).current;
+
+  const aiSheetContentPanResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponderCapture: (_, gesture) => {
+        const isVertical = Math.abs(gesture.dy) > Math.abs(gesture.dx);
+        const pullingDown =
+          aiSheetScrollOffsetRef.current <= 0 && gesture.dy > 8;
+        const pushingUp = aiSheetCurrentValueRef.current > 0 && gesture.dy < -8;
+        return isVertical && (pullingDown || pushingUp);
+      },
+      onPanResponderGrant: beginAiSheetDrag,
+      onPanResponderMove: (_, gesture) => moveAiSheetDrag(gesture.dy),
+      onPanResponderRelease: (_, gesture) =>
+        endAiSheetDrag(gesture.dy, gesture.vy),
+      onPanResponderTerminate: (_, gesture) =>
+        endAiSheetDrag(gesture.dy, gesture.vy),
+    }),
+  ).current;
 
   if (!visible) return null;
 
@@ -972,38 +1107,32 @@ function AiRecommendationScreen({
         <KakaoMapView
           pins={mapPins}
           currentLocation={currentLocation}
-          height={MAP_HEIGHT}
+          height={SCREEN_HEIGHT}
           pathColor="#7B61FF"
         />
 
-        <View style={styles.aiPlannerHeader}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="AI 추천 화면 닫기"
-            onPress={onClose}
-            style={styles.aiBackButton}
-          >
-            <Ionicons
-              name="chevron-back"
-              size={25}
-              color={COLORS.textPrimary}
-            />
-          </Pressable>
-          <View style={styles.aiHeaderTitleArea}>
-            <Text style={styles.aiHeaderEyebrow}>AI SMART ROUTE</Text>
-            <Text style={styles.aiHeaderTitle}>내 주변 일정 추천</Text>
-          </View>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="AI 추천 새로고침"
-            onPress={onRefresh}
-            style={styles.aiRefreshButton}
-          >
-            <Ionicons name="refresh" size={20} color={COLORS.textPrimary} />
-          </Pressable>
-        </View>
+        <HomeTopBar
+          query={aiSearchTerm}
+          results={[]}
+          searchFocused={isAiTopBarFocused}
+          isSearching={loading}
+          tripTitle="나의 여행"
+          onChangeQuery={setAiSearchTerm}
+          onFocusSearch={() => {
+            if (!isAiExiting) setIsAiTopBarFocused(true);
+          }}
+          // 뒤로가기는 검색창을 홈 기본 폭으로 축소한 뒤 AI 오버레이를 닫습니다.
+          onBlurSearch={handleAiBackToHome}
+          onSubmitSearch={() => undefined}
+          onSelectResult={() => undefined}
+          onClearSearch={() => setAiSearchTerm("")}
+          onPressMyTrip={() => undefined}
+          onPressCategory={(category) => {
+            if (category === "AI") void onRefresh();
+          }}
+        />
 
-        <View style={styles.aiLocationPill}>
+        <View pointerEvents="none" style={styles.aiLocationPill}>
           <View style={styles.aiLocationDot} />
           <Text style={styles.aiLocationPillText}>
             {currentLocation
@@ -1013,201 +1142,228 @@ function AiRecommendationScreen({
         </View>
       </View>
 
-      <View style={styles.aiPlannerSheet}>
-        <View style={styles.aiSheetHandle} />
-        <View style={styles.aiSheetTitleRow}>
-          <View style={styles.aiSheetTitleArea}>
-            <Text style={styles.aiSheetTitle}>오늘의 추천 동선</Text>
-            <Text style={styles.aiSheetDescription}>
-              {currentLocation
-                ? "이동 거리와 시간대에 맞춰 AI가 순서를 정했어요."
-                : "위치 권한을 연결하면 실제 주변 장소로 자동 갱신돼요."}
-            </Text>
-          </View>
-          <View style={styles.aiRouteSummary}>
-            <Ionicons name="navigate" size={15} color="#6A4CF5" />
-            <Text style={styles.aiRouteSummaryText}>{places.length}곳</Text>
-          </View>
-        </View>
-
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.aiFilterRow}
-          style={styles.aiFilterScroll}
+      <Animated.View
+        style={[
+          styles.aiPlannerSheet,
+          {
+            top: SHEET_EXPANDED_TOP_OFFSET,
+            height: SCREEN_HEIGHT - SHEET_EXPANDED_TOP_OFFSET,
+            transform: [{ translateY: aiSheetTranslateY }],
+          },
+        ]}
+      >
+        <View
+          {...aiSheetHandlePanResponder.panHandlers}
+          hitSlop={{ top: 10, bottom: 10, left: 40, right: 40 }}
+          style={styles.aiSheetHandleArea}
         >
-          {filters.map((item) => {
-            const selected = filter === item.id;
-            return (
-              <Pressable
-                key={item.id}
-                onPress={() => setFilter(item.id)}
-                style={[
-                  styles.aiFilterChip,
-                  selected && styles.aiFilterChipSelected,
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.aiFilterText,
-                    selected && styles.aiFilterTextSelected,
-                  ]}
-                >
-                  {item.label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
-
-        {loading ? (
-          <View style={styles.aiLoadingState}>
-            <View style={styles.aiLoadingPulse} />
-            <Text style={styles.aiLoadingTitle}>
-              내 주변 장소를 살펴보고 있어요
-            </Text>
-            <Text style={styles.aiLoadingText}>
-              이동 거리가 짧은 순으로 일정 후보를 정리하는 중입니다.
-            </Text>
+          <View style={styles.aiSheetHandle} />
+        </View>
+        <View
+          {...aiSheetContentPanResponder.panHandlers}
+          style={styles.aiSheetContentWrapper}
+        >
+          <View style={styles.aiSheetTitleRow}>
+            <View style={styles.aiSheetTitleArea}>
+              <Text style={styles.aiSheetTitle}>오늘의 추천 동선</Text>
+              <Text style={styles.aiSheetDescription}>
+                {currentLocation
+                  ? "이동 거리와 시간대에 맞춰 AI가 순서를 정했어요."
+                  : "위치 권한을 연결하면 실제 주변 장소로 자동 갱신돼요."}
+              </Text>
+            </View>
+            <View style={styles.aiRouteSummary}>
+              <Ionicons name="navigate" size={15} color="#6A4CF5" />
+              <Text style={styles.aiRouteSummaryText}>{places.length}곳</Text>
+            </View>
           </View>
-        ) : visiblePlaces.length > 0 ? (
-          <ScrollView
-            style={styles.aiPlaceList}
-            contentContainerStyle={styles.aiPlaceListContent}
-            showsVerticalScrollIndicator={false}
-          >
-            {visiblePlaces.map((place, index) => {
-              const kind = getAiPlaceKind(place);
-              const selected = selectedIds.includes(place.id);
-              const routeOrder =
-                places.findIndex((item) => item.id === place.id) + 1;
 
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.aiFilterRow}
+            style={styles.aiFilterScroll}
+          >
+            {filters.map((item) => {
+              const selected = filter === item.id;
               return (
                 <Pressable
-                  key={place.id}
-                  onPress={() => onTogglePlace(place.id)}
-                  style={({ pressed }) => [
-                    styles.aiPlaceCard,
-                    selected && styles.aiPlaceCardSelected,
-                    pressed && styles.aiPlaceCardPressed,
+                  key={item.id}
+                  onPress={() => setFilter(item.id)}
+                  style={[
+                    styles.aiFilterChip,
+                    selected && styles.aiFilterChipSelected,
                   ]}
                 >
-                  <View
+                  <Text
                     style={[
-                      styles.aiPlaceOrder,
-                      selected && styles.aiPlaceOrderSelected,
+                      styles.aiFilterText,
+                      selected && styles.aiFilterTextSelected,
                     ]}
                   >
-                    <Text
-                      style={[
-                        styles.aiPlaceOrderText,
-                        selected && styles.aiPlaceOrderTextSelected,
-                      ]}
-                    >
-                      {routeOrder}
-                    </Text>
-                  </View>
-
-                  <View
-                    style={[
-                      styles.aiPlaceTypeIcon,
-                      { backgroundColor: kind.softColor },
-                    ]}
-                  >
-                    <Ionicons name={kind.icon} size={22} color={kind.color} />
-                  </View>
-
-                  <View style={styles.aiPlaceTextArea}>
-                    <View style={styles.aiPlaceTitleRow}>
-                      <Text numberOfLines={1} style={styles.aiPlaceTitle}>
-                        {place.title}
-                      </Text>
-                      <View
-                        style={[
-                          styles.aiPlaceKindTag,
-                          { backgroundColor: kind.softColor },
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.aiPlaceKindText,
-                            { color: kind.color },
-                          ]}
-                        >
-                          {kind.label}
-                        </Text>
-                      </View>
-                    </View>
-                    <Text numberOfLines={1} style={styles.aiPlaceSubtitle}>
-                      {place.subtitle}
-                    </Text>
-                    <View style={styles.aiPlaceMetaRow}>
-                      <Ionicons
-                        name="walk-outline"
-                        size={14}
-                        color={COLORS.textSecondary}
-                      />
-                      <Text style={styles.aiPlaceMetaText}>
-                        현재 위치에서 {formatPlaceDistance(place.distance)}
-                      </Text>
-                    </View>
-                  </View>
-
-                  <View
-                    style={[
-                      styles.aiSelectButton,
-                      selected && styles.aiSelectButtonSelected,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.aiSelectButtonText,
-                        selected && styles.aiSelectButtonTextSelected,
-                      ]}
-                    >
-                      {selected ? "담김" : "선택"}
-                    </Text>
-                  </View>
+                    {item.label}
+                  </Text>
                 </Pressable>
               );
             })}
           </ScrollView>
-        ) : (
-          <View style={styles.aiEmptyState}>
-            <Ionicons
-              name="compass-outline"
-              size={35}
-              color={COLORS.textSecondary}
-            />
-            <Text style={styles.aiEmptyTitle}>추천할 장소가 없어요</Text>
-            <Text style={styles.aiEmptyText}>
-              다시 검색해 주변 장소를 불러와 주세요.
-            </Text>
-          </View>
-        )}
 
-        <View style={styles.aiPlannerFooter}>
-          <Text style={styles.aiSelectionCaption}>
-            {selectedIds.length > 0
-              ? `${selectedIds.length}곳을 일정에 담았어요`
-              : "원하는 장소를 선택해 코스를 만들어 보세요"}
-          </Text>
-          <Pressable
-            disabled={selectedIds.length === 0}
-            onPress={onApplyPlan}
-            style={({ pressed }) => [
-              styles.aiApplyButton,
-              selectedIds.length === 0 && styles.aiApplyButtonDisabled,
-              pressed && selectedIds.length > 0 && styles.aiApplyButtonPressed,
-            ]}
-          >
-            <Ionicons name="sparkles" size={18} color="#FFFFFF" />
-            <Text style={styles.aiApplyButtonText}>
-              선택한 장소로 코스 만들기
+          {loading ? (
+            <View style={styles.aiLoadingState}>
+              <View style={styles.aiLoadingPulse} />
+              <Text style={styles.aiLoadingTitle}>
+                내 주변 장소를 살펴보고 있어요
+              </Text>
+              <Text style={styles.aiLoadingText}>
+                이동 거리가 짧은 순으로 일정 후보를 정리하는 중입니다.
+              </Text>
+            </View>
+          ) : visiblePlaces.length > 0 ? (
+            <ScrollView
+              style={styles.aiPlaceList}
+              contentContainerStyle={styles.aiPlaceListContent}
+              showsVerticalScrollIndicator={false}
+              onScroll={(event) => {
+                aiSheetScrollOffsetRef.current =
+                  event.nativeEvent.contentOffset.y;
+              }}
+              scrollEventThrottle={16}
+            >
+              {visiblePlaces.map((place, index) => {
+                const kind = getAiPlaceKind(place);
+                const selected = selectedIds.includes(place.id);
+                const routeOrder =
+                  places.findIndex((item) => item.id === place.id) + 1;
+
+                return (
+                  <Pressable
+                    key={place.id}
+                    onPress={() => onTogglePlace(place.id)}
+                    style={({ pressed }) => [
+                      styles.aiPlaceCard,
+                      selected && styles.aiPlaceCardSelected,
+                      pressed && styles.aiPlaceCardPressed,
+                    ]}
+                  >
+                    <View
+                      style={[
+                        styles.aiPlaceOrder,
+                        selected && styles.aiPlaceOrderSelected,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.aiPlaceOrderText,
+                          selected && styles.aiPlaceOrderTextSelected,
+                        ]}
+                      >
+                        {routeOrder}
+                      </Text>
+                    </View>
+
+                    <View
+                      style={[
+                        styles.aiPlaceTypeIcon,
+                        { backgroundColor: kind.softColor },
+                      ]}
+                    >
+                      <Ionicons name={kind.icon} size={22} color={kind.color} />
+                    </View>
+
+                    <View style={styles.aiPlaceTextArea}>
+                      <View style={styles.aiPlaceTitleRow}>
+                        <Text numberOfLines={1} style={styles.aiPlaceTitle}>
+                          {place.title}
+                        </Text>
+                        <View
+                          style={[
+                            styles.aiPlaceKindTag,
+                            { backgroundColor: kind.softColor },
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.aiPlaceKindText,
+                              { color: kind.color },
+                            ]}
+                          >
+                            {kind.label}
+                          </Text>
+                        </View>
+                      </View>
+                      <Text numberOfLines={1} style={styles.aiPlaceSubtitle}>
+                        {place.subtitle}
+                      </Text>
+                      <View style={styles.aiPlaceMetaRow}>
+                        <Ionicons
+                          name="walk-outline"
+                          size={14}
+                          color={COLORS.textSecondary}
+                        />
+                        <Text style={styles.aiPlaceMetaText}>
+                          현재 위치에서 {formatPlaceDistance(place.distance)}
+                        </Text>
+                      </View>
+                    </View>
+
+                    <View
+                      style={[
+                        styles.aiSelectButton,
+                        selected && styles.aiSelectButtonSelected,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.aiSelectButtonText,
+                          selected && styles.aiSelectButtonTextSelected,
+                        ]}
+                      >
+                        {selected ? "담김" : "선택"}
+                      </Text>
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          ) : (
+            <View style={styles.aiEmptyState}>
+              <Ionicons
+                name="compass-outline"
+                size={35}
+                color={COLORS.textSecondary}
+              />
+              <Text style={styles.aiEmptyTitle}>추천할 장소가 없어요</Text>
+              <Text style={styles.aiEmptyText}>
+                다시 검색해 주변 장소를 불러와 주세요.
+              </Text>
+            </View>
+          )}
+
+          <View style={styles.aiPlannerFooter}>
+            <Text style={styles.aiSelectionCaption}>
+              {selectedIds.length > 0
+                ? `${selectedIds.length}곳을 일정에 담았어요`
+                : "원하는 장소를 선택해 코스를 만들어 보세요"}
             </Text>
-          </Pressable>
+            <Pressable
+              disabled={selectedIds.length === 0}
+              onPress={onApplyPlan}
+              style={({ pressed }) => [
+                styles.aiApplyButton,
+                selectedIds.length === 0 && styles.aiApplyButtonDisabled,
+                pressed &&
+                  selectedIds.length > 0 &&
+                  styles.aiApplyButtonPressed,
+              ]}
+            >
+              <Ionicons name="sparkles" size={18} color="#FFFFFF" />
+              <Text style={styles.aiApplyButtonText}>
+                선택한 장소로 코스 만들기
+              </Text>
+            </Pressable>
+          </View>
         </View>
-      </View>
+      </Animated.View>
     </View>
   );
 }
@@ -1879,7 +2035,7 @@ export default function TripHomeScreen() {
         currentLocation={currentLocation}
         places={aiPlanPlaces}
         selectedIds={aiPlanSelectedIds}
-        onClose={() => setAiPlannerVisible(false)}
+        onExitAnimationComplete={() => setAiPlannerVisible(false)}
         onRefresh={() => void handleAIRecommendation()}
         onTogglePlace={toggleAiPlanPlace}
         onApplyPlan={applyAiPlan}
@@ -2528,60 +2684,44 @@ const styles = StyleSheet.create({
     zIndex: 300,
   },
   aiMapArea: {
-    height: "49%",
+    ...StyleSheet.absoluteFillObject,
     overflow: "hidden",
     backgroundColor: "#EAF3F1",
   },
-  aiPlannerHeader: {
+  // 홈 화면과 동일한 표면·테두리 규칙을 쓰는 AI 추천 검색창입니다.
+  aiSearchBar: {
     alignItems: "center",
+    backgroundColor: "#FFFFFF",
+    borderColor: "#D8DCE3",
+    borderRadius: 22,
+    borderWidth: 1,
     flexDirection: "row",
-    left: 18,
+    height: 60,
+    left: 16,
+    paddingHorizontal: 12,
     position: "absolute",
-    right: 18,
+    right: 16,
     top: 54,
   },
-  aiBackButton: {
+  aiSearchBackButton: {
     alignItems: "center",
-    backgroundColor: "#FFFFFF",
-    borderColor: "#D8DCE3",
-    borderRadius: 22,
-    borderWidth: 1,
-    height: 44,
+    height: 40,
     justifyContent: "center",
-    width: 44,
+    width: 34,
   },
-  aiHeaderTitleArea: {
-    alignItems: "center",
-    backgroundColor: "#FFFFFF",
-    borderColor: "#D8DCE3",
-    borderRadius: 22,
-    borderWidth: 1,
-    flex: 1,
-    height: 56,
-    justifyContent: "center",
-    marginHorizontal: 10,
-  },
-  aiHeaderEyebrow: {
-    color: "#7B61FF",
-    fontSize: 9,
-    fontWeight: "800",
-    letterSpacing: 1,
-  },
-  aiHeaderTitle: {
+  aiSearchInput: {
     color: COLORS.textPrimary,
-    fontSize: 15,
-    fontWeight: "800",
-    marginTop: 2,
+    flex: 1,
+    fontSize: 16,
+    fontWeight: "600",
+    height: "100%",
+    marginLeft: 4,
   },
-  aiRefreshButton: {
+  aiSearchActionButton: {
     alignItems: "center",
-    backgroundColor: "#FFFFFF",
-    borderColor: "#D8DCE3",
-    borderRadius: 22,
-    borderWidth: 1,
-    height: 44,
+    height: 40,
     justifyContent: "center",
-    width: 44,
+    width: 36,
   },
   aiLocationPill: {
     alignItems: "center",
@@ -2612,19 +2752,22 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
     borderTopLeftRadius: 30,
     borderTopRightRadius: 30,
-    bottom: 0,
-    height: "56%",
     left: 0,
-    paddingTop: 10,
     position: "absolute",
     right: 0,
   },
+  aiSheetHandleArea: {
+    alignItems: "center",
+    paddingVertical: 12,
+  },
   aiSheetHandle: {
-    alignSelf: "center",
     backgroundColor: "#D9D9D9",
     borderRadius: 3,
     height: 5,
     width: 48,
+  },
+  aiSheetContentWrapper: {
+    flex: 1,
   },
   aiSheetTitleRow: {
     alignItems: "center",
