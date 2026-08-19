@@ -51,7 +51,10 @@ const MAP_HEIGHT = SCREEN_HEIGHT * 0.58;
 // 바텀시트가 다 접혔을 때(peek) 화면에 보이는 높이,
 // 다 펼쳤을 때(expanded) 화면 상단에서 남겨둘 여백.
 const SHEET_PEEK_HEIGHT = SCREEN_HEIGHT * 0.46;
-const SHEET_EXPANDED_TOP_OFFSET = 90;
+// 콘텐츠 확장 상태에서도 검색 영역 일부가 남아 과도하게 답답하지 않게 합니다.
+const SHEET_EXPANDED_TOP_OFFSET = 118;
+// 지도 우선 상태에서 시트를 완전히 숨기지 않고, 헤더와 손잡이가 보일 정도로 남깁니다.
+const SHEET_MAP_FOCUS_VISIBLE_HEIGHT = 245;
 
 /** 활성 여행의 클립 중 실제 GPS 좌표가 찍힌 것만 지도 핀으로 씁니다.
  * (좌표 미기록 클립은 location이 (0,0) 더미값이라 지도에 올리면 왜곡됩니다.) */
@@ -82,43 +85,6 @@ function formatClipDuration(durationMs?: number): string {
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
   return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
-}
-
-type TripProgressCardProps = {
-  tripTitle: string;
-  elapsedLabel: string;
-  onStop: () => void;
-};
-
-function TripProgressCard({
-  tripTitle,
-  elapsedLabel,
-  onStop,
-}: TripProgressCardProps) {
-  return (
-    <View style={styles.progressCard}>
-      <View style={styles.progressIconCircle}>
-        <Ionicons name="navigate" size={20} color={COLORS.accent} />
-      </View>
-
-      <View style={styles.progressTextBlock}>
-        <View style={styles.progressBadge}>
-          <Text style={styles.progressBadgeText}>진행중 여행</Text>
-        </View>
-        <Text style={styles.progressTitle} numberOfLines={1}>
-          {tripTitle}
-        </Text>
-        <View style={styles.recordRow}>
-          <View style={styles.recordDot} />
-          <Text style={styles.recordText}>Rec {elapsedLabel}</Text>
-        </View>
-      </View>
-
-      <TouchableOpacity style={styles.stopButton} onPress={onStop} hitSlop={10}>
-        <View style={styles.stopIcon} />
-      </TouchableOpacity>
-    </View>
-  );
 }
 
 interface ClipMoment {
@@ -541,9 +507,13 @@ function RecommendedPlaceCard({ place }: { place: RecommendedPlace }) {
  * 잡았을 때뿐 아니라, 콘텐츠 아무 곳이나 아래로 끌어도 시트를 내릴 수 있어요.
  */
 function PullUpSheet({ moments }: { moments: ClipMoment[] }) {
+  // 0: 오늘의 순간들 확장, DRAG_RANGE: 기본 보기, MAP_FOCUS_TRANSLATE: 지도 크게 보기
   const DRAG_RANGE = SHEET_PEEK_HEIGHT - SHEET_EXPANDED_TOP_OFFSET;
+  const MAP_FOCUS_TRANSLATE =
+    SCREEN_HEIGHT - SHEET_EXPANDED_TOP_OFFSET - SHEET_MAP_FOCUS_VISIBLE_HEIGHT;
+  const SNAP_POINTS = [0, DRAG_RANGE, MAP_FOCUS_TRANSLATE];
 
-  const translateY = useRef(new Animated.Value(DRAG_RANGE)).current; // 기본값: 접힌 상태
+  const translateY = useRef(new Animated.Value(DRAG_RANGE)).current; // 기본값: 균형 보기
   const currentValueRef = useRef(DRAG_RANGE);
   const dragStartRef = useRef(DRAG_RANGE);
   const scrollOffsetRef = useRef(0); // 내부 ScrollView가 지금 맨 위(0)인지 추적
@@ -560,20 +530,48 @@ function PullUpSheet({ moments }: { moments: ClipMoment[] }) {
   };
 
   const moveDrag = (dy: number) => {
-    const next = clamp(dragStartRef.current + dy, 0, DRAG_RANGE);
+    const next = clamp(dragStartRef.current + dy, 0, MAP_FOCUS_TRANSLATE);
     translateY.setValue(next);
   };
 
-  const endDrag = (dy: number, vy: number) => {
-    const released = clamp(dragStartRef.current + dy, 0, DRAG_RANGE);
-    // 빠르게 스와이프했으면 속도(vy)를 우선 보고,
-    // 애매하게 멈췄으면 절반을 넘겼는지로 판단합니다.
-    const shouldExpand = vy < -0.5 || released < DRAG_RANGE / 2;
+  const snapTo = (target: number) => {
     Animated.spring(translateY, {
-      toValue: shouldExpand ? 0 : DRAG_RANGE,
+      toValue: target,
       useNativeDriver: false,
       bounciness: 4,
     }).start();
+  };
+
+  const endDrag = (dy: number, vy: number) => {
+    const released = clamp(dragStartRef.current + dy, 0, MAP_FOCUS_TRANSLATE);
+    const currentSnapIndex = SNAP_POINTS.reduce(
+      (closestIndex, point, index) =>
+        Math.abs(point - dragStartRef.current) <
+        Math.abs(SNAP_POINTS[closestIndex] - dragStartRef.current)
+          ? index
+          : closestIndex,
+      0,
+    );
+
+    // 충분히 끌었거나 빠르게 스와이프한 경우에도 바로 끝 단계로 보내지 않고,
+    // 현재 위치에서 한 단계만 이동합니다. 기본 상태가 항상 중간 완충점이 됩니다.
+    if (dy > 105 || vy > 0.72) {
+      snapTo(
+        SNAP_POINTS[Math.min(currentSnapIndex + 1, SNAP_POINTS.length - 1)],
+      );
+      return;
+    }
+    if (dy < -105 || vy < -0.72) {
+      snapTo(SNAP_POINTS[Math.max(currentSnapIndex - 1, 0)]);
+      return;
+    }
+
+    const nearestPoint = SNAP_POINTS.reduce((closest, point) =>
+      Math.abs(point - released) < Math.abs(closest - released)
+        ? point
+        : closest,
+    );
+    snapTo(nearestPoint);
   };
 
   // 손잡이 전용 PanResponder: 위아래 어느 방향이든 손잡이를 잡으면 바로 반응합니다.
@@ -592,10 +590,13 @@ function PullUpSheet({ moments }: { moments: ClipMoment[] }) {
   // 시트를 접는 제스처로 넘겨받습니다(그 외에는 ScrollView가 우선합니다).
   const contentPanResponder = useRef(
     PanResponder.create({
-      onMoveShouldSetPanResponderCapture: (_, gesture) =>
-        scrollOffsetRef.current <= 0 &&
-        gesture.dy > 8 &&
-        Math.abs(gesture.dy) > Math.abs(gesture.dx),
+      onMoveShouldSetPanResponderCapture: (_, gesture) => {
+        const isVertical = Math.abs(gesture.dy) > Math.abs(gesture.dx);
+        // 목록을 읽는 동안의 스크롤은 유지하고, 목록 맨 위에서만 시트 드래그로 전환합니다.
+        const pullingSheetDown = scrollOffsetRef.current <= 0 && gesture.dy > 8;
+        const pushingSheetUp = currentValueRef.current > 0 && gesture.dy < -8;
+        return isVertical && (pullingSheetDown || pushingSheetUp);
+      },
       onPanResponderGrant: beginDrag,
       onPanResponderMove: (_, gesture) => moveDrag(gesture.dy),
       onPanResponderRelease: (_, gesture) => endDrag(gesture.dy, gesture.vy),
@@ -1214,7 +1215,6 @@ function AiRecommendationScreen({
 export default function TripHomeScreen() {
   const currentTrip = useTripStore((state) => state.currentTrip);
 
-  const [elapsedSeconds] = useState(204); // 00:03:24 예시 값. 실제로는 타이머 state로 관리.
   const [currentLocation, setCurrentLocation] =
     useState<KakaoMapCurrentLocation | null>(null);
   const [recordings, setRecordings] = useState<RecordingData[]>([]);
@@ -1732,16 +1732,6 @@ export default function TripHomeScreen() {
     };
   }, []);
 
-  const elapsedLabel = (() => {
-    const h = Math.floor(elapsedSeconds / 3600);
-    const m = Math.floor((elapsedSeconds % 3600) / 60);
-    const s = elapsedSeconds % 60;
-    return `${String(h).padStart(2, "0")}:${String(m).padStart(
-      2,
-      "0",
-    )}:${String(s).padStart(2, "0")}`;
-  })();
-
   return (
     <View style={styles.screen}>
       {/* 지도는 네모 박스 안에 갇히지 않고 화면 전체 폭을 그대로 채웁니다.
@@ -1750,7 +1740,7 @@ export default function TripHomeScreen() {
         <KakaoMapView
           pins={aiRoutePins.length > 0 ? aiRoutePins : routePins}
           currentLocation={currentLocation}
-          height={MAP_HEIGHT}
+          height={SCREEN_HEIGHT}
           pathColor={COLORS.accent}
         />
       </View>
@@ -1880,18 +1870,6 @@ export default function TripHomeScreen() {
           )}
         </View>
       ) : null}
-
-      <View style={styles.progressCardWrapper}>
-        {currentTrip ? (
-          <TripProgressCard
-            tripTitle={`${currentTrip.title}을(를) 여행 중`}
-            elapsedLabel={elapsedLabel}
-            onStop={() => {
-              // TODO: 여행 종료 확인 다이얼로그 + 실제 종료 처리 연결
-            }}
-          />
-        ) : null}
-      </View>
 
       <PullUpSheet moments={todayMoments} />
 
@@ -2264,89 +2242,10 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    height: MAP_HEIGHT,
+    // 시트가 아래로 내려가도 지도가 화면 전체를 계속 채웁니다.
+    height: SCREEN_HEIGHT,
     backgroundColor: COLORS.surface,
     overflow: "hidden",
-  },
-
-  // 여행 진행 카드
-  progressCardWrapper: {
-    position: "absolute",
-    left: 20,
-    right: 20,
-    top: MAP_HEIGHT - 40, // 지도/시트 경계에 걸쳐서 떠 있도록
-  },
-  progressCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: COLORS.white,
-    borderRadius: 20,
-    padding: 14,
-    gap: 12,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.1,
-    shadowRadius: 14,
-    elevation: 6,
-  },
-  progressIconCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: COLORS.accentTint,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  progressTextBlock: {
-    flex: 1,
-    gap: 4,
-  },
-  progressBadge: {
-    alignSelf: "flex-start",
-    backgroundColor: COLORS.accentTint,
-    borderRadius: 10,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-  },
-  progressBadgeText: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: COLORS.accent,
-  },
-  progressTitle: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: COLORS.textPrimary,
-  },
-  recordRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-  },
-  recordDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: COLORS.record,
-  },
-  recordText: {
-    fontSize: 11,
-    color: COLORS.textSecondary,
-    fontWeight: "600",
-  },
-  stopButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: COLORS.surface,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  stopIcon: {
-    width: 12,
-    height: 12,
-    borderRadius: 2,
-    backgroundColor: COLORS.record,
   },
 
   // 바텀시트
