@@ -204,6 +204,9 @@ type HomeTopBarProps = {
     results: SearchResultItem[];
     searchFocused: boolean;
     isSearching: boolean;
+
+    tripTitle: string;
+
     onChangeQuery: (text: string) => void;
     onFocusSearch: () => void;
     onBlurSearch: () => void;
@@ -219,6 +222,7 @@ function HomeTopBar({
     results,
     searchFocused,
     isSearching,
+    tripTitle,
     onChangeQuery,
     onFocusSearch,
     onBlurSearch,
@@ -356,7 +360,12 @@ function HomeTopBar({
                             size={23}
                             color={COLORS.textPrimary}
                         />
-                        <Text style={styles.myTripText}>나의 여행</Text>
+                        <Text
+                            style={styles.myTripText}
+                            numberOfLines={1}
+                        >
+                            {tripTitle}
+                        </Text>
                         <Ionicons
                             name="chevron-forward"
                             size={21}
@@ -1371,6 +1380,11 @@ export default function TripHomeScreen() {
                 results={searchResults}
                 searchFocused={searchFocused}
                 isSearching={isSearching}
+                    tripTitle={
+                        currentTrip
+                            ? getTripDisplayName(currentTrip)
+                            : '나의 여행'
+                    } 
                 onChangeQuery={(value) => {
                     setSearchQuery(value);
 
