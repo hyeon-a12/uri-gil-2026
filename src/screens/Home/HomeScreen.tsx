@@ -824,6 +824,393 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
 }
 
+type AiPlanFilter = "all" | "food" | "cafe" | "attraction";
+
+function formatPlaceDistance(distance?: number): string {
+  if (distance === undefined) return "예시 코스";
+  return distance < 1000
+    ? `${Math.round(distance)}m`
+    : `${(distance / 1000).toFixed(1)}km`;
+}
+
+// 위치 권한 또는 지도 연결 전에도 추천 화면의 흐름을 확인할 수 있는 예시 코스입니다.
+// 위치가 연결되면 이 데이터는 Kakao 장소 검색 결과로 자동 교체됩니다.
+function buildFallbackAiPlan(
+  location: KakaoMapCurrentLocation | null,
+): SearchResultItem[] {
+  const baseLat = location?.lat ?? 37.5665;
+  const baseLng = location?.lng ?? 126.978;
+
+  return [
+    {
+      id: "sample-walk",
+      title: "산책하기 좋은 주변 코스",
+      subtitle: "위치 연결 후 실제 주변 장소로 바뀝니다",
+      latitude: baseLat + 0.002,
+      longitude: baseLng + 0.001,
+      category: "관광",
+      distance: location ? 280 : undefined,
+    },
+    {
+      id: "sample-cafe",
+      title: "잠시 쉬어가기 좋은 카페",
+      subtitle: "위치 연결 후 실제 주변 장소로 바뀝니다",
+      latitude: baseLat + 0.0035,
+      longitude: baseLng - 0.0015,
+      category: "카페",
+      distance: location ? 520 : undefined,
+    },
+    {
+      id: "sample-food",
+      title: "식사 추천 장소",
+      subtitle: "위치 연결 후 실제 주변 장소로 바뀝니다",
+      latitude: baseLat + 0.005,
+      longitude: baseLng + 0.002,
+      category: "음식점",
+      distance: location ? 860 : undefined,
+    },
+  ];
+}
+
+function getAiPlaceKind(place: SearchResultItem): {
+  label: string;
+  icon: "restaurant-outline" | "cafe-outline" | "camera-outline";
+  color: string;
+  softColor: string;
+} {
+  const source = `${place.category} ${place.title}`.toLowerCase();
+
+  if (source.includes("카페")) {
+    return {
+      label: "카페",
+      icon: "cafe-outline",
+      color: "#7B61FF",
+      softColor: "#F0EDFF",
+    };
+  }
+
+  if (
+    source.includes("음식") ||
+    source.includes("식당") ||
+    source.includes("맛집")
+  ) {
+    return {
+      label: "맛집",
+      icon: "restaurant-outline",
+      color: "#F36E5B",
+      softColor: "#FFF0ED",
+    };
+  }
+
+  return {
+    label: "관광",
+    icon: "camera-outline",
+    color: "#2CA98D",
+    softColor: "#E8F8F2",
+  };
+}
+
+type AiRecommendationScreenProps = {
+  visible: boolean;
+  loading: boolean;
+  currentLocation: KakaoMapCurrentLocation | null;
+  places: SearchResultItem[];
+  selectedIds: string[];
+  onClose: () => void;
+  onRefresh: () => void;
+  onTogglePlace: (id: string) => void;
+  onApplyPlan: () => void;
+};
+
+function AiRecommendationScreen({
+  visible,
+  loading,
+  currentLocation,
+  places,
+  selectedIds,
+  onClose,
+  onRefresh,
+  onTogglePlace,
+  onApplyPlan,
+}: AiRecommendationScreenProps) {
+  const [filter, setFilter] = useState<AiPlanFilter>("all");
+
+  useEffect(() => {
+    if (visible) setFilter("all");
+  }, [visible]);
+
+  if (!visible) return null;
+
+  const visiblePlaces = places.filter((place) => {
+    if (filter === "all") return true;
+    const kind = getAiPlaceKind(place).label;
+    return (
+      (filter === "food" && kind === "맛집") ||
+      (filter === "cafe" && kind === "카페") ||
+      (filter === "attraction" && kind === "관광")
+    );
+  });
+
+  const mapPins: KakaoMapPin[] = places.map((place, index) => ({
+    id: `ai-${place.id}`,
+    label: String(index + 1),
+    lat: place.latitude,
+    lng: place.longitude,
+  }));
+
+  const filters: { id: AiPlanFilter; label: string }[] = [
+    { id: "all", label: "가까운 순" },
+    { id: "attraction", label: "관광" },
+    { id: "food", label: "맛집" },
+    { id: "cafe", label: "카페" },
+  ];
+
+  return (
+    <View style={styles.aiPlannerScreen}>
+      <View style={styles.aiMapArea}>
+        <KakaoMapView
+          pins={mapPins}
+          currentLocation={currentLocation}
+          height={MAP_HEIGHT}
+          pathColor="#7B61FF"
+        />
+
+        <View style={styles.aiPlannerHeader}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="AI 추천 화면 닫기"
+            onPress={onClose}
+            style={styles.aiBackButton}
+          >
+            <Ionicons
+              name="chevron-back"
+              size={25}
+              color={COLORS.textPrimary}
+            />
+          </Pressable>
+          <View style={styles.aiHeaderTitleArea}>
+            <Text style={styles.aiHeaderEyebrow}>AI SMART ROUTE</Text>
+            <Text style={styles.aiHeaderTitle}>내 주변 일정 추천</Text>
+          </View>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="AI 추천 새로고침"
+            onPress={onRefresh}
+            style={styles.aiRefreshButton}
+          >
+            <Ionicons name="refresh" size={20} color={COLORS.textPrimary} />
+          </Pressable>
+        </View>
+
+        <View style={styles.aiLocationPill}>
+          <View style={styles.aiLocationDot} />
+          <Text style={styles.aiLocationPillText}>
+            {currentLocation
+              ? "현재 위치 기준으로 가까운 순"
+              : "위치 연결 전 · 예시 코스"}
+          </Text>
+        </View>
+      </View>
+
+      <View style={styles.aiPlannerSheet}>
+        <View style={styles.aiSheetHandle} />
+        <View style={styles.aiSheetTitleRow}>
+          <View style={styles.aiSheetTitleArea}>
+            <Text style={styles.aiSheetTitle}>오늘의 추천 동선</Text>
+            <Text style={styles.aiSheetDescription}>
+              {currentLocation
+                ? "이동 거리와 시간대에 맞춰 AI가 순서를 정했어요."
+                : "위치 권한을 연결하면 실제 주변 장소로 자동 갱신돼요."}
+            </Text>
+          </View>
+          <View style={styles.aiRouteSummary}>
+            <Ionicons name="navigate" size={15} color="#6A4CF5" />
+            <Text style={styles.aiRouteSummaryText}>{places.length}곳</Text>
+          </View>
+        </View>
+
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.aiFilterRow}
+          style={styles.aiFilterScroll}
+        >
+          {filters.map((item) => {
+            const selected = filter === item.id;
+            return (
+              <Pressable
+                key={item.id}
+                onPress={() => setFilter(item.id)}
+                style={[
+                  styles.aiFilterChip,
+                  selected && styles.aiFilterChipSelected,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.aiFilterText,
+                    selected && styles.aiFilterTextSelected,
+                  ]}
+                >
+                  {item.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+
+        {loading ? (
+          <View style={styles.aiLoadingState}>
+            <View style={styles.aiLoadingPulse} />
+            <Text style={styles.aiLoadingTitle}>
+              내 주변 장소를 살펴보고 있어요
+            </Text>
+            <Text style={styles.aiLoadingText}>
+              이동 거리가 짧은 순으로 일정 후보를 정리하는 중입니다.
+            </Text>
+          </View>
+        ) : visiblePlaces.length > 0 ? (
+          <ScrollView
+            style={styles.aiPlaceList}
+            contentContainerStyle={styles.aiPlaceListContent}
+            showsVerticalScrollIndicator={false}
+          >
+            {visiblePlaces.map((place, index) => {
+              const kind = getAiPlaceKind(place);
+              const selected = selectedIds.includes(place.id);
+              const routeOrder =
+                places.findIndex((item) => item.id === place.id) + 1;
+
+              return (
+                <Pressable
+                  key={place.id}
+                  onPress={() => onTogglePlace(place.id)}
+                  style={({ pressed }) => [
+                    styles.aiPlaceCard,
+                    selected && styles.aiPlaceCardSelected,
+                    pressed && styles.aiPlaceCardPressed,
+                  ]}
+                >
+                  <View
+                    style={[
+                      styles.aiPlaceOrder,
+                      selected && styles.aiPlaceOrderSelected,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.aiPlaceOrderText,
+                        selected && styles.aiPlaceOrderTextSelected,
+                      ]}
+                    >
+                      {routeOrder}
+                    </Text>
+                  </View>
+
+                  <View
+                    style={[
+                      styles.aiPlaceTypeIcon,
+                      { backgroundColor: kind.softColor },
+                    ]}
+                  >
+                    <Ionicons name={kind.icon} size={22} color={kind.color} />
+                  </View>
+
+                  <View style={styles.aiPlaceTextArea}>
+                    <View style={styles.aiPlaceTitleRow}>
+                      <Text numberOfLines={1} style={styles.aiPlaceTitle}>
+                        {place.title}
+                      </Text>
+                      <View
+                        style={[
+                          styles.aiPlaceKindTag,
+                          { backgroundColor: kind.softColor },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.aiPlaceKindText,
+                            { color: kind.color },
+                          ]}
+                        >
+                          {kind.label}
+                        </Text>
+                      </View>
+                    </View>
+                    <Text numberOfLines={1} style={styles.aiPlaceSubtitle}>
+                      {place.subtitle}
+                    </Text>
+                    <View style={styles.aiPlaceMetaRow}>
+                      <Ionicons
+                        name="walk-outline"
+                        size={14}
+                        color={COLORS.textSecondary}
+                      />
+                      <Text style={styles.aiPlaceMetaText}>
+                        현재 위치에서 {formatPlaceDistance(place.distance)}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View
+                    style={[
+                      styles.aiSelectButton,
+                      selected && styles.aiSelectButtonSelected,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.aiSelectButtonText,
+                        selected && styles.aiSelectButtonTextSelected,
+                      ]}
+                    >
+                      {selected ? "담김" : "선택"}
+                    </Text>
+                  </View>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        ) : (
+          <View style={styles.aiEmptyState}>
+            <Ionicons
+              name="compass-outline"
+              size={35}
+              color={COLORS.textSecondary}
+            />
+            <Text style={styles.aiEmptyTitle}>추천할 장소가 없어요</Text>
+            <Text style={styles.aiEmptyText}>
+              다시 검색해 주변 장소를 불러와 주세요.
+            </Text>
+          </View>
+        )}
+
+        <View style={styles.aiPlannerFooter}>
+          <Text style={styles.aiSelectionCaption}>
+            {selectedIds.length > 0
+              ? `${selectedIds.length}곳을 일정에 담았어요`
+              : "원하는 장소를 선택해 코스를 만들어 보세요"}
+          </Text>
+          <Pressable
+            disabled={selectedIds.length === 0}
+            onPress={onApplyPlan}
+            style={({ pressed }) => [
+              styles.aiApplyButton,
+              selectedIds.length === 0 && styles.aiApplyButtonDisabled,
+              pressed && selectedIds.length > 0 && styles.aiApplyButtonPressed,
+            ]}
+          >
+            <Ionicons name="sparkles" size={18} color="#FFFFFF" />
+            <Text style={styles.aiApplyButtonText}>
+              선택한 장소로 코스 만들기
+            </Text>
+          </Pressable>
+        </View>
+      </View>
+    </View>
+  );
+}
+
 export default function TripHomeScreen() {
   const currentTrip = useTripStore((state) => state.currentTrip);
 
@@ -842,6 +1229,10 @@ export default function TripHomeScreen() {
     null,
   );
   const [isSearching, setIsSearching] = useState(false);
+  const [aiPlannerVisible, setAiPlannerVisible] = useState(false);
+  const [aiPlanPlaces, setAiPlanPlaces] = useState<SearchResultItem[]>([]);
+  const [aiPlanSelectedIds, setAiPlanSelectedIds] = useState<string[]>([]);
+  const [aiRoutePins, setAiRoutePins] = useState<KakaoMapPin[]>([]);
 
   const loadTrips = useCallback(async () => {
     try {
@@ -1115,20 +1506,26 @@ export default function TripHomeScreen() {
   };
 
   const handleAIRecommendation = async () => {
+    // 지도 또는 위치 연결과 무관하게 추천 화면은 즉시 열립니다.
+    setAiPlannerVisible(true);
+    setAiPlanPlaces([]);
+    setAiPlanSelectedIds([]);
+    setSelectedPlace(null);
+    setNearbyPlaces([]);
+    setSearchFocused(false);
+    setSearchQuery("");
+
+    // 위치를 아직 받지 못한 경우에도 빈 화면 대신 예시 일정으로 흐름을 보여줍니다.
     if (!currentLocation) {
-      Alert.alert(
-        "위치 확인 중",
-        "현재 위치를 가져온 뒤 AI 추천을 이용해주세요.",
-      );
+      const fallbackPlan = buildFallbackAiPlan(null);
+      setAiPlanPlaces(fallbackPlan);
+      setAiPlanSelectedIds(fallbackPlan.map((place) => place.id));
+      setIsSearching(false);
       return;
     }
 
     try {
       setIsSearching(true);
-      setSelectedPlace(null);
-      setNearbyPlaces([]);
-      setSearchFocused(true);
-      setSearchQuery("AI추천");
 
       const [food, cafe] = await Promise.all([
         searchCategoryAround("FD6", 10, 3000),
@@ -1199,18 +1596,67 @@ export default function TripHomeScreen() {
 
           return { place, score };
         })
-        .sort((a, b) => b.score - a.score)
-        .slice(0, 12)
+        // 추천 점수는 동률을 보정하는 용도이며, 기본 순서는 현재 위치와의 거리입니다.
+        .sort((a, b) => {
+          const distanceA = a.place.distance ?? Number.MAX_SAFE_INTEGER;
+          const distanceB = b.place.distance ?? Number.MAX_SAFE_INTEGER;
+          return distanceA - distanceB || b.score - a.score;
+        })
+        .slice(0, 8)
         .map(({ place }) => place);
 
-      setSearchResults(recommended);
+      const planPlaces =
+        recommended.length > 0
+          ? recommended
+          : buildFallbackAiPlan(currentLocation);
+
+      setAiPlanPlaces(planPlaces);
+      // 가까운 세 곳을 우선 선택해 첫 화면부터 하나의 일정처럼 제안합니다.
+      setAiPlanSelectedIds(planPlaces.slice(0, 3).map((place) => place.id));
+      setSearchResults(planPlaces);
     } catch (error) {
       console.error("[HomeScreen] AI 추천 실패:", error);
-      Alert.alert("AI 추천 실패", "추천 장소를 불러오지 못했습니다.");
+      // 네트워크·지도 연결 실패여도 화면을 닫지 않고 예시 코스로 대체합니다.
+      const fallbackPlan = buildFallbackAiPlan(currentLocation);
+      setAiPlanPlaces(fallbackPlan);
+      setAiPlanSelectedIds(fallbackPlan.map((place) => place.id));
     } finally {
       setIsSearching(false);
     }
   };
+
+  const toggleAiPlanPlace = useCallback((placeId: string) => {
+    setAiPlanSelectedIds((previous) =>
+      previous.includes(placeId)
+        ? previous.filter((id) => id !== placeId)
+        : [...previous, placeId],
+    );
+  }, []);
+
+  const applyAiPlan = useCallback(() => {
+    const selectedPlaces = aiPlanPlaces.filter((place) =>
+      aiPlanSelectedIds.includes(place.id),
+    );
+
+    if (selectedPlaces.length === 0) return;
+
+    setAiRoutePins(
+      selectedPlaces.map((place, index) => ({
+        id: `saved-ai-route-${place.id}`,
+        label: String(index + 1),
+        lat: place.latitude,
+        lng: place.longitude,
+      })),
+    );
+    setAiPlannerVisible(false);
+    setSearchResults([]);
+    setSearchFocused(false);
+
+    Alert.alert(
+      "추천 코스를 만들었어요",
+      `${selectedPlaces.length}곳을 현재 위치에서 가까운 순으로 지도에 표시했어요.`,
+    );
+  }, [aiPlanPlaces, aiPlanSelectedIds]);
 
   const handleSubmitSearch = async () => {
     const keyword = searchQuery.trim();
@@ -1302,7 +1748,7 @@ export default function TripHomeScreen() {
           검색바/진행 카드/시트는 전부 그 위에 떠 있는 오버레이예요. */}
       <View style={styles.map}>
         <KakaoMapView
-          pins={routePins}
+          pins={aiRoutePins.length > 0 ? aiRoutePins : routePins}
           currentLocation={currentLocation}
           height={MAP_HEIGHT}
           pathColor={COLORS.accent}
@@ -1448,6 +1894,18 @@ export default function TripHomeScreen() {
       </View>
 
       <PullUpSheet moments={todayMoments} />
+
+      <AiRecommendationScreen
+        visible={aiPlannerVisible}
+        loading={isSearching}
+        currentLocation={currentLocation}
+        places={aiPlanPlaces}
+        selectedIds={aiPlanSelectedIds}
+        onClose={() => setAiPlannerVisible(false)}
+        onRefresh={() => void handleAIRecommendation()}
+        onTogglePlace={toggleAiPlanPlace}
+        onApplyPlan={applyAiPlan}
+      />
 
       <TripSelectorModal
         visible={tripSelectorVisible}
@@ -2161,5 +2619,368 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "700",
     color: COLORS.textSecondary,
+  },
+
+  // AI 근접 일정 추천 화면
+  aiPlannerScreen: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: COLORS.white,
+    elevation: 300,
+    zIndex: 300,
+  },
+  aiMapArea: {
+    height: "49%",
+    overflow: "hidden",
+    backgroundColor: "#EAF3F1",
+  },
+  aiPlannerHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    left: 18,
+    position: "absolute",
+    right: 18,
+    top: 54,
+  },
+  aiBackButton: {
+    alignItems: "center",
+    backgroundColor: "#FFFFFF",
+    borderColor: "#D8DCE3",
+    borderRadius: 22,
+    borderWidth: 1,
+    height: 44,
+    justifyContent: "center",
+    width: 44,
+  },
+  aiHeaderTitleArea: {
+    alignItems: "center",
+    backgroundColor: "#FFFFFF",
+    borderColor: "#D8DCE3",
+    borderRadius: 22,
+    borderWidth: 1,
+    flex: 1,
+    height: 56,
+    justifyContent: "center",
+    marginHorizontal: 10,
+  },
+  aiHeaderEyebrow: {
+    color: "#7B61FF",
+    fontSize: 9,
+    fontWeight: "800",
+    letterSpacing: 1,
+  },
+  aiHeaderTitle: {
+    color: COLORS.textPrimary,
+    fontSize: 15,
+    fontWeight: "800",
+    marginTop: 2,
+  },
+  aiRefreshButton: {
+    alignItems: "center",
+    backgroundColor: "#FFFFFF",
+    borderColor: "#D8DCE3",
+    borderRadius: 22,
+    borderWidth: 1,
+    height: 44,
+    justifyContent: "center",
+    width: 44,
+  },
+  aiLocationPill: {
+    alignItems: "center",
+    alignSelf: "center",
+    backgroundColor: "rgba(34,34,34,0.88)",
+    borderRadius: 18,
+    bottom: 26,
+    flexDirection: "row",
+    paddingHorizontal: 13,
+    paddingVertical: 9,
+    position: "absolute",
+  },
+  aiLocationDot: {
+    backgroundColor: "#8D78FF",
+    borderColor: "#FFFFFF",
+    borderRadius: 5,
+    borderWidth: 2,
+    height: 10,
+    marginRight: 7,
+    width: 10,
+  },
+  aiLocationPillText: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  aiPlannerSheet: {
+    backgroundColor: "#FFFFFF",
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
+    bottom: 0,
+    height: "56%",
+    left: 0,
+    paddingTop: 10,
+    position: "absolute",
+    right: 0,
+  },
+  aiSheetHandle: {
+    alignSelf: "center",
+    backgroundColor: "#D9D9D9",
+    borderRadius: 3,
+    height: 5,
+    width: 48,
+  },
+  aiSheetTitleRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 15,
+    paddingHorizontal: 20,
+  },
+  aiSheetTitleArea: {
+    flex: 1,
+    paddingRight: 12,
+  },
+  aiSheetTitle: {
+    color: COLORS.textPrimary,
+    fontSize: 21,
+    fontWeight: "800",
+  },
+  aiSheetDescription: {
+    color: COLORS.textSecondary,
+    fontSize: 12,
+    marginTop: 5,
+  },
+  aiRouteSummary: {
+    alignItems: "center",
+    backgroundColor: "#F1EEFF",
+    borderRadius: 15,
+    flexDirection: "row",
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  aiRouteSummaryText: {
+    color: "#6047E6",
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  aiFilterScroll: {
+    flexGrow: 0,
+    marginTop: 16,
+  },
+  aiFilterRow: {
+    gap: 8,
+    paddingHorizontal: 20,
+    paddingRight: 30,
+  },
+  aiFilterChip: {
+    backgroundColor: "#FFFFFF",
+    borderColor: "#E3E5E8",
+    borderRadius: 18,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+  },
+  aiFilterChipSelected: {
+    backgroundColor: "#F1EEFF",
+    borderColor: "#8D78FF",
+  },
+  aiFilterText: {
+    color: COLORS.textSecondary,
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  aiFilterTextSelected: {
+    color: "#6047E6",
+  },
+  aiPlaceList: {
+    flex: 1,
+    marginTop: 14,
+  },
+  aiPlaceListContent: {
+    gap: 10,
+    paddingBottom: 12,
+    paddingHorizontal: 20,
+  },
+  aiPlaceCard: {
+    alignItems: "center",
+    backgroundColor: "#FFFFFF",
+    borderColor: "#E9EAED",
+    borderRadius: 18,
+    borderWidth: 1,
+    flexDirection: "row",
+    minHeight: 91,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+  },
+  aiPlaceCardSelected: {
+    backgroundColor: "#FBFAFF",
+    borderColor: "#9B88FF",
+  },
+  aiPlaceCardPressed: {
+    opacity: 0.74,
+  },
+  aiPlaceOrder: {
+    alignItems: "center",
+    backgroundColor: "#F1F2F4",
+    borderRadius: 12,
+    height: 24,
+    justifyContent: "center",
+    marginRight: 9,
+    width: 24,
+  },
+  aiPlaceOrderSelected: {
+    backgroundColor: "#7B61FF",
+  },
+  aiPlaceOrderText: {
+    color: "#737780",
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  aiPlaceOrderTextSelected: {
+    color: "#FFFFFF",
+  },
+  aiPlaceTypeIcon: {
+    alignItems: "center",
+    borderRadius: 16,
+    height: 48,
+    justifyContent: "center",
+    marginRight: 11,
+    width: 48,
+  },
+  aiPlaceTextArea: {
+    flex: 1,
+    minWidth: 0,
+  },
+  aiPlaceTitleRow: {
+    alignItems: "center",
+    flexDirection: "row",
+  },
+  aiPlaceTitle: {
+    color: COLORS.textPrimary,
+    flexShrink: 1,
+    fontSize: 15,
+    fontWeight: "800",
+  },
+  aiPlaceKindTag: {
+    borderRadius: 9,
+    marginLeft: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+  },
+  aiPlaceKindText: {
+    fontSize: 9,
+    fontWeight: "800",
+  },
+  aiPlaceSubtitle: {
+    color: COLORS.textSecondary,
+    fontSize: 11,
+    marginTop: 4,
+  },
+  aiPlaceMetaRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    marginTop: 6,
+  },
+  aiPlaceMetaText: {
+    color: "#747881",
+    fontSize: 11,
+    marginLeft: 4,
+  },
+  aiSelectButton: {
+    alignItems: "center",
+    backgroundColor: "#F4F4F5",
+    borderRadius: 15,
+    justifyContent: "center",
+    marginLeft: 8,
+    minWidth: 48,
+    paddingHorizontal: 9,
+    paddingVertical: 8,
+  },
+  aiSelectButtonSelected: {
+    backgroundColor: "#7B61FF",
+  },
+  aiSelectButtonText: {
+    color: "#676B73",
+    fontSize: 11,
+    fontWeight: "800",
+  },
+  aiSelectButtonTextSelected: {
+    color: "#FFFFFF",
+  },
+  aiLoadingState: {
+    alignItems: "center",
+    flex: 1,
+    justifyContent: "center",
+    paddingHorizontal: 32,
+  },
+  aiLoadingPulse: {
+    backgroundColor: "#EDE9FF",
+    borderColor: "#9B88FF",
+    borderRadius: 24,
+    borderWidth: 7,
+    height: 48,
+    marginBottom: 15,
+    width: 48,
+  },
+  aiLoadingTitle: {
+    color: COLORS.textPrimary,
+    fontSize: 16,
+    fontWeight: "800",
+  },
+  aiLoadingText: {
+    color: COLORS.textSecondary,
+    fontSize: 12,
+    lineHeight: 19,
+    marginTop: 7,
+    textAlign: "center",
+  },
+  aiEmptyState: {
+    alignItems: "center",
+    flex: 1,
+    justifyContent: "center",
+    paddingHorizontal: 32,
+  },
+  aiEmptyTitle: {
+    color: COLORS.textPrimary,
+    fontSize: 16,
+    fontWeight: "800",
+    marginTop: 10,
+  },
+  aiEmptyText: {
+    color: COLORS.textSecondary,
+    fontSize: 12,
+    marginTop: 6,
+  },
+  aiPlannerFooter: {
+    borderTopColor: "#EEF0F2",
+    borderTopWidth: 1,
+    paddingBottom: 18,
+    paddingHorizontal: 20,
+    paddingTop: 12,
+  },
+  aiSelectionCaption: {
+    color: COLORS.textSecondary,
+    fontSize: 11,
+    marginBottom: 9,
+    textAlign: "center",
+  },
+  aiApplyButton: {
+    alignItems: "center",
+    backgroundColor: "#7B61FF",
+    borderRadius: 15,
+    flexDirection: "row",
+    gap: 7,
+    height: 50,
+    justifyContent: "center",
+  },
+  aiApplyButtonDisabled: {
+    backgroundColor: "#C8C3E6",
+  },
+  aiApplyButtonPressed: {
+    opacity: 0.76,
+  },
+  aiApplyButtonText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "800",
   },
 });
