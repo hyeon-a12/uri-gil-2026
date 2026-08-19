@@ -29,6 +29,7 @@ import {
 } from "@/services/folderService";
 import { selectCurrentTrip, useTripStore } from "@/store/useTripStore";
 import { getRecordingsByFolder } from "@/services/recordingService";
+import { appendTripScheduleStops } from "@/services/trip-schedule-service";
 import type { RecordingData } from "@/types/recording";
 
 const COLORS = {
@@ -1342,10 +1343,12 @@ function AiRecommendationScreen({
           <View style={styles.aiPlannerFooter}>
             <Text style={styles.aiSelectionCaption}>
               {selectedIds.length > 0
-                ? `${selectedIds.length}곳을 일정에 담았어요`
-                : "원하는 장소를 선택해 코스를 만들어 보세요"}
+                ? `선택한 ${selectedIds.length}곳을 내 일정에 저장할 수 있어요`
+                : "장소를 선택하면 내 일정에 추가할 수 있어요"}
             </Text>
             <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="선택한 장소를 내 일정에 추가하기"
               disabled={selectedIds.length === 0}
               onPress={onApplyPlan}
               style={({ pressed }) => [
@@ -1356,15 +1359,110 @@ function AiRecommendationScreen({
                   styles.aiApplyButtonPressed,
               ]}
             >
-              <Ionicons name="sparkles" size={18} color="#FFFFFF" />
+              <Ionicons name="calendar-outline" size={19} color="#FFFFFF" />
               <Text style={styles.aiApplyButtonText}>
-                선택한 장소로 코스 만들기
+                {selectedIds.length > 0
+                  ? `선택한 ${selectedIds.length}곳 일정에 추가`
+                  : "일정에 추가"}
               </Text>
             </Pressable>
           </View>
         </View>
       </Animated.View>
     </View>
+  );
+}
+
+type AiPlanConfirmModalProps = {
+  visible: boolean;
+  tripName: string;
+  places: SearchResultItem[];
+  saving: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+};
+
+function AiPlanConfirmModal({
+  visible,
+  tripName,
+  places,
+  saving,
+  onClose,
+  onConfirm,
+}: AiPlanConfirmModalProps) {
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={saving ? undefined : onClose}
+    >
+      <Pressable
+        style={styles.aiConfirmBackdrop}
+        onPress={saving ? undefined : onClose}
+      >
+        <Pressable style={styles.aiConfirmSheet} onPress={() => undefined}>
+          <View style={styles.aiConfirmHandle} />
+          <View style={styles.aiConfirmIcon}>
+            <Ionicons name="calendar-outline" size={25} color="#6A4CF5" />
+          </View>
+          <Text style={styles.aiConfirmTitle}>내 일정에 추가할까요?</Text>
+          <Text style={styles.aiConfirmDescription}>
+            {tripName} 여행의 일정에 선택한 장소를 순서대로 저장합니다.
+          </Text>
+
+          <View style={styles.aiConfirmList}>
+            {places.map((place, index) => (
+              <View key={place.id} style={styles.aiConfirmPlaceRow}>
+                <View style={styles.aiConfirmOrder}>
+                  <Text style={styles.aiConfirmOrderText}>{index + 1}</Text>
+                </View>
+                <View style={styles.aiConfirmPlaceTextArea}>
+                  <Text numberOfLines={1} style={styles.aiConfirmPlaceTitle}>
+                    {place.title}
+                  </Text>
+                  <Text numberOfLines={1} style={styles.aiConfirmPlaceSubtitle}>
+                    {place.category} · {formatPlaceDistance(place.distance)}
+                  </Text>
+                </View>
+                <Ionicons name="checkmark-circle" size={20} color="#7B61FF" />
+              </View>
+            ))}
+          </View>
+
+          <View style={styles.aiConfirmActionRow}>
+            <Pressable
+              disabled={saving}
+              onPress={onClose}
+              style={({ pressed }) => [
+                styles.aiConfirmCancelButton,
+                pressed && !saving && styles.aiConfirmButtonPressed,
+              ]}
+            >
+              <Text style={styles.aiConfirmCancelText}>더 고르기</Text>
+            </Pressable>
+            <Pressable
+              disabled={saving}
+              onPress={onConfirm}
+              style={({ pressed }) => [
+                styles.aiConfirmSaveButton,
+                saving && styles.aiConfirmSaveButtonDisabled,
+                pressed && !saving && styles.aiConfirmButtonPressed,
+              ]}
+            >
+              {saving ? (
+                <Text style={styles.aiConfirmSaveText}>저장 중...</Text>
+              ) : (
+                <>
+                  <Ionicons name="checkmark" size={19} color="#FFFFFF" />
+                  <Text style={styles.aiConfirmSaveText}>일정에 담기</Text>
+                </>
+              )}
+            </Pressable>
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
   );
 }
 
@@ -1389,6 +1487,8 @@ export default function TripHomeScreen() {
   const [aiPlanPlaces, setAiPlanPlaces] = useState<SearchResultItem[]>([]);
   const [aiPlanSelectedIds, setAiPlanSelectedIds] = useState<string[]>([]);
   const [aiRoutePins, setAiRoutePins] = useState<KakaoMapPin[]>([]);
+  const [aiPlanConfirmVisible, setAiPlanConfirmVisible] = useState(false);
+  const [isAiPlanSaving, setIsAiPlanSaving] = useState(false);
 
   const loadTrips = useCallback(async () => {
     try {
@@ -1790,29 +1890,73 @@ export default function TripHomeScreen() {
   }, []);
 
   const applyAiPlan = useCallback(() => {
+    if (!currentTrip) {
+      Alert.alert(
+        "여행을 먼저 선택해주세요",
+        "상단의 나의 여행 버튼에서 일정을 담을 여행을 선택할 수 있어요.",
+      );
+      return;
+    }
+
     const selectedPlaces = aiPlanPlaces.filter((place) =>
       aiPlanSelectedIds.includes(place.id),
     );
 
     if (selectedPlaces.length === 0) return;
+    setAiPlanConfirmVisible(true);
+  }, [aiPlanPlaces, aiPlanSelectedIds, currentTrip]);
 
-    setAiRoutePins(
-      selectedPlaces.map((place, index) => ({
-        id: `saved-ai-route-${place.id}`,
-        label: String(index + 1),
-        lat: place.latitude,
-        lng: place.longitude,
-      })),
-    );
-    setAiPlannerVisible(false);
-    setSearchResults([]);
-    setSearchFocused(false);
+  const confirmAiPlan = useCallback(async () => {
+    if (!currentTrip || isAiPlanSaving) return;
 
-    Alert.alert(
-      "추천 코스를 만들었어요",
-      `${selectedPlaces.length}곳을 현재 위치에서 가까운 순으로 지도에 표시했어요.`,
+    const selectedPlaces = aiPlanPlaces.filter((place) =>
+      aiPlanSelectedIds.includes(place.id),
     );
-  }, [aiPlanPlaces, aiPlanSelectedIds]);
+    if (selectedPlaces.length === 0) return;
+
+    try {
+      setIsAiPlanSaving(true);
+      await appendTripScheduleStops(
+        currentTrip.id,
+        selectedPlaces.map((place) => ({
+          source: "ai-recommendation" as const,
+          placeId: place.id,
+          title: place.title,
+          address: place.subtitle,
+          category: place.category,
+          latitude: place.latitude,
+          longitude: place.longitude,
+          distanceFromPreviousMeters: place.distance,
+        })),
+      );
+
+      setAiRoutePins(
+        selectedPlaces.map((place, index) => ({
+          id: `saved-ai-route-${place.id}`,
+          label: String(index + 1),
+          lat: place.latitude,
+          lng: place.longitude,
+        })),
+      );
+      setAiPlanConfirmVisible(false);
+      setAiPlannerVisible(false);
+      setSearchResults([]);
+      setSearchFocused(false);
+
+      Alert.alert(
+        "내 일정에 담았어요",
+        `${selectedPlaces.length}곳이 ${getTripDisplayName(currentTrip)} 여행 일정에 저장됐습니다.`,
+      );
+    } catch (error) {
+      console.error("[HomeScreen] AI 추천 일정 저장 실패:", error);
+      Alert.alert(
+        "일정 저장 실패",
+        "일정을 저장하지 못했습니다. 다시 시도해주세요.",
+      );
+    } finally {
+      setIsAiPlanSaving(false);
+    }
+  }, [aiPlanPlaces, aiPlanSelectedIds, currentTrip, isAiPlanSaving]);
 
   const handleSubmitSearch = async () => {
     const keyword = searchQuery.trim();
@@ -2039,6 +2183,17 @@ export default function TripHomeScreen() {
         onRefresh={() => void handleAIRecommendation()}
         onTogglePlace={toggleAiPlanPlace}
         onApplyPlan={applyAiPlan}
+      />
+
+      <AiPlanConfirmModal
+        visible={aiPlanConfirmVisible}
+        tripName={getTripDisplayName(currentTrip)}
+        places={aiPlanPlaces.filter((place) =>
+          aiPlanSelectedIds.includes(place.id),
+        )}
+        saving={isAiPlanSaving}
+        onClose={() => setAiPlanConfirmVisible(false)}
+        onConfirm={() => void confirmAiPlan()}
       />
 
       <TripSelectorModal
@@ -2834,8 +2989,11 @@ const styles = StyleSheet.create({
     color: "#6047E6",
   },
   aiPlaceList: {
-    flex: 1,
+    // 기본 시트 위치에서도 확정 버튼이 화면 안에 바로 보이도록 목록 높이를 제한합니다.
+    flexGrow: 0,
+    flexShrink: 1,
     marginTop: 14,
+    maxHeight: 330,
   },
   aiPlaceListContent: {
     gap: 10,
@@ -2993,8 +3151,10 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
   aiPlannerFooter: {
+    backgroundColor: "#FFFFFF",
     borderTopColor: "#EEF0F2",
     borderTopWidth: 1,
+    flexShrink: 0,
     paddingBottom: 18,
     paddingHorizontal: 20,
     paddingTop: 12,
@@ -3024,5 +3184,134 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontSize: 14,
     fontWeight: "800",
+  },
+
+  // AI 추천 장소 확정 및 내 일정 저장 모달
+  aiConfirmBackdrop: {
+    alignItems: "center",
+    backgroundColor: "rgba(20, 20, 24, 0.36)",
+    flex: 1,
+    justifyContent: "flex-end",
+    padding: 16,
+  },
+  aiConfirmSheet: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 28,
+    maxWidth: 520,
+    paddingBottom: 20,
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    width: "100%",
+  },
+  aiConfirmHandle: {
+    alignSelf: "center",
+    backgroundColor: "#D9D9D9",
+    borderRadius: 3,
+    height: 5,
+    width: 46,
+  },
+  aiConfirmIcon: {
+    alignItems: "center",
+    backgroundColor: "#F1EEFF",
+    borderRadius: 22,
+    height: 44,
+    justifyContent: "center",
+    marginTop: 16,
+    width: 44,
+  },
+  aiConfirmTitle: {
+    color: COLORS.textPrimary,
+    fontSize: 22,
+    fontWeight: "800",
+    marginTop: 12,
+  },
+  aiConfirmDescription: {
+    color: COLORS.textSecondary,
+    fontSize: 13,
+    lineHeight: 20,
+    marginTop: 6,
+  },
+  aiConfirmList: {
+    backgroundColor: "#FAFAFC",
+    borderColor: "#ECECF1",
+    borderRadius: 16,
+    borderWidth: 1,
+    marginTop: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+  },
+  aiConfirmPlaceRow: {
+    alignItems: "center",
+    borderBottomColor: "#ECECF1",
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    flexDirection: "row",
+    minHeight: 58,
+  },
+  aiConfirmOrder: {
+    alignItems: "center",
+    backgroundColor: "#7B61FF",
+    borderRadius: 11,
+    height: 22,
+    justifyContent: "center",
+    marginRight: 10,
+    width: 22,
+  },
+  aiConfirmOrderText: {
+    color: "#FFFFFF",
+    fontSize: 11,
+    fontWeight: "800",
+  },
+  aiConfirmPlaceTextArea: {
+    flex: 1,
+    minWidth: 0,
+  },
+  aiConfirmPlaceTitle: {
+    color: COLORS.textPrimary,
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  aiConfirmPlaceSubtitle: {
+    color: COLORS.textSecondary,
+    fontSize: 11,
+    marginTop: 3,
+  },
+  aiConfirmActionRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 18,
+  },
+  aiConfirmCancelButton: {
+    alignItems: "center",
+    backgroundColor: "#F3F3F5",
+    borderRadius: 14,
+    flex: 1,
+    height: 50,
+    justifyContent: "center",
+  },
+  aiConfirmCancelText: {
+    color: "#626671",
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  aiConfirmSaveButton: {
+    alignItems: "center",
+    backgroundColor: "#7B61FF",
+    borderRadius: 14,
+    flex: 1.35,
+    flexDirection: "row",
+    gap: 7,
+    height: 50,
+    justifyContent: "center",
+  },
+  aiConfirmSaveButtonDisabled: {
+    backgroundColor: "#C9C3EA",
+  },
+  aiConfirmSaveText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  aiConfirmButtonPressed: {
+    opacity: 0.74,
   },
 });

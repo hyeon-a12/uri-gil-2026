@@ -2,6 +2,10 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useFocusEffect } from "expo-router";
 import { parseDateRange, type FolderItem } from "@/services/folderService";
 import { getRecordingsByFolder } from "@/services/recordingService";
+import {
+  getTripScheduleStops,
+  type TripScheduleStop,
+} from "@/services/trip-schedule-service";
 import type { RecordingData } from "@/types/recording";
 import { useTripStore } from "@/store/useTripStore";
 import {
@@ -201,6 +205,7 @@ interface PlanStop {
   name: string;
   day: number;
   time: string;
+  source?: "ai-recommendation" | "recording";
   clips: {
     id: string;
     thumbnail: string;
@@ -257,6 +262,7 @@ function dayIndexOf(recordedAt: string, tripStart: Date | null): number {
 function buildPlanData(
   recordings: RecordingData[],
   trip: FolderItem | null,
+  savedScheduleStops: TripScheduleStop[],
 ): { stops: PlanStop[]; travelLogs: PlanTravelLog[]; dayNumbers: number[] } {
   const tripStart = trip
     ? (parseDateRange(trip.dateRange)?.start ?? null)
@@ -308,7 +314,22 @@ function buildPlanData(
     });
   }
 
-  const stops = stopOrder.map((key) => stopGroups.get(key)!);
+  const recordedStops = stopOrder.map((key) => stopGroups.get(key)!);
+  const aiStops: PlanStop[] = savedScheduleStops.map((stop, index) => ({
+    id: stop.id,
+    order: index + 1,
+    name: stop.title,
+    day: 1,
+    time: "AI 추천",
+    source: "ai-recommendation",
+    clips: [],
+  }));
+
+  // 확정한 AI 추천은 일정의 앞부분에 순서대로, 실제 촬영 기록은 그 뒤에 이어집니다.
+  const stops = [...aiStops, ...recordedStops].map((stop, index) => ({
+    ...stop,
+    order: index + 1,
+  }));
   const dayNumbers = Array.from(
     new Set([...stops.map((s) => s.day), ...travelLogs.map((l) => l.day)]),
   ).sort((a, b) => a - b);
@@ -942,7 +963,9 @@ function RoutePlanView({
                         allowFontScaling={false}
                         style={styles.planStopMeta}
                       >
-                        {stop.time} · 클립 {stop.clips.length}개
+                        {stop.source === "ai-recommendation"
+                          ? "AI 추천으로 추가됨"
+                          : `${stop.time} · 클립 ${stop.clips.length}개`}
                       </Text>
                     </View>
 
@@ -1395,6 +1418,9 @@ export default function MyRouteScreen() {
   const currentTrip = useTripStore((state) => state.currentTrip);
 
   const [recordings, setRecordings] = useState<RecordingData[]>([]);
+  const [savedScheduleStops, setSavedScheduleStops] = useState<
+    TripScheduleStop[]
+  >([]);
 
   useFocusEffect(
     useCallback(() => {
@@ -1402,16 +1428,31 @@ export default function MyRouteScreen() {
 
       (async () => {
         if (!currentTrip) {
-          if (isActive) setRecordings([]);
+          if (isActive) {
+            setRecordings([]);
+            setSavedScheduleStops([]);
+          }
           return;
         }
 
         try {
-          const records = await getRecordingsByFolder(currentTrip.id);
-          if (isActive) setRecordings(records);
+          const [records, scheduleStops] = await Promise.all([
+            getRecordingsByFolder(currentTrip.id),
+            getTripScheduleStops(currentTrip.id),
+          ]);
+          if (isActive) {
+            setRecordings(records);
+            setSavedScheduleStops(scheduleStops);
+          }
         } catch (error) {
-          console.error("[MyRouteScreen] 클립을 불러오지 못했습니다.", error);
-          if (isActive) setRecordings([]);
+          console.error(
+            "[MyRouteScreen] 여행 데이터를 불러오지 못했습니다.",
+            error,
+          );
+          if (isActive) {
+            setRecordings([]);
+            setSavedScheduleStops([]);
+          }
         }
       })();
 
@@ -1422,8 +1463,8 @@ export default function MyRouteScreen() {
   );
 
   const planData = useMemo(
-    () => buildPlanData(recordings, currentTrip),
-    [recordings, currentTrip],
+    () => buildPlanData(recordings, currentTrip, savedScheduleStops),
+    [recordings, currentTrip, savedScheduleStops],
   );
 
   const nights = useMemo(() => {
