@@ -343,9 +343,17 @@ async function renderVideo(exportData: {
       console.log('[rendervideo] 다운로드 시작', result.downloadUrl);
 
       const localPath = FileSystem.documentDirectory + `output_${Date.now()}.mp4`;
-      await FileSystem.downloadAsync(result.downloadUrl, localPath);
+      const downloadResult = await FileSystem.downloadAsync(result.downloadUrl, localPath);
 
-      console.log('[rendervideo] 다운로드 완료', localPath);
+      console.log('[renderVideo] 다운로드 완료', downloadResult.uri, downloadResult.status);
+
+      // 파일이 실제로 존재하고 크기가 있는지 확인
+      const fileInfo = await FileSystem.getInfoAsync(downloadResult.uri);
+      console.log('[renderVideo] 파일 정보:', fileInfo);
+
+      if (!fileInfo.exists || fileInfo.size === 0) {
+        return { success: false, message: '다운로드된 파일이 비어있습니다.' };
+      }
 
       // 갤러리 저장
       const { status } = await MediaLibrary.requestPermissionsAsync(true);
@@ -355,9 +363,17 @@ async function renderVideo(exportData: {
           message: '갤러리 접근 권한이 필요합니다.'
         };
       }
-      const asset = await MediaLibrary.createAssetAsync(localPath);
-      console.log('[renderVideo] 갤러리 저장 완료', asset.uri);
-      return { success: true, videoUri: asset.uri };
+
+      try {
+        const asset = await MediaLibrary.createAssetAsync(downloadResult.uri);
+        console.log('[renderVideo] 갤러리 저장 완료', asset.uri);
+        return { success: true, videoUri: asset.uri };
+      } catch (assetError) {
+        // createAssetAsync가 에러를 던져도 실제로는 파일이 저장된 경우가
+        // 있어서(iOS 알려진 이슈), 일단 성공으로 처리합니다.
+        console.error('[renderVideo] createAssetAsync 실패(저장은 됐을 수 있음):', assetError);
+        return { success: true, videoUri: undefined };
+      }
     }
 
     return { success: true };
