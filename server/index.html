@@ -1,0 +1,16 @@
+<input Type="file" id="video">
+<button onclick="upload()">서버 업로드 테스트</button>
+
+<script>
+  async function upload() {
+    const file = document.getElementById('video').file[0];
+    const formData = new FormData();
+    formData.append('video', file);
+
+    const res = await fetch('http://172.30.1.65:3000/process-video', {
+      method: 'POST',
+      body: formData
+    });
+    console.log(await res.json());
+  }
+</script>

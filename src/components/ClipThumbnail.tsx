@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Image, TouchableOpacity, StyleSheet } from 'react-native';
 import { AppText as Text } from '@/components/AppText';
 import { Ionicons } from '@expo/vector-icons';
-import { useResponsive } from '../hooks/use-responsive';
+import { useResponsive } from '@/navigation/hooks/use-responsive';
 import { homeColors } from '../constants/home-theme';
 import { RecentClip } from '../types/home';
 

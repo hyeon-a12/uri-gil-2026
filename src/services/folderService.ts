@@ -4,7 +4,7 @@ const FOLDERS_KEY = '@folders/all';
 
 // NewTripModal의 촬영 스타일 선택지와 그대로 맞춰둔 타입 (원래 NewTripModal.tsx 안에서만
 // 쓰던 로컬 타입이었는데, 저장 스키마(FolderItem)에도 필요해져서 여기로 옮겼습니다).
-export type ShootingStyleId = 'basic' | 'grid' | 'doll' | 'withPerson';
+export type ShootingStyleId = 'basic' | 'grid' | 'doll' | 'mirror';
 export type GridTemplateId = 'rows3' | 'rows2' | 'cols2' | 'grid4';
 
 // NewTripModal의 GRID_TEMPLATES 선택지와 슬롯 개수를 맞춰둔 값입니다. FolderItem엔

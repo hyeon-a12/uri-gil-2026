@@ -1,8 +1,10 @@
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { router, Tabs } from 'expo-router';
 import { Image } from 'expo-image';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, View } from 'react-native';
 import { AppText as Text } from '@/components/AppText';
+import { useTripStore } from '@/store/useTripStore';
+import { COLORS as SHARED_COLORS } from '@/constants/color';
 
 
   import HomeIcon from "@/assets/images/tabIcons/home.svg";
@@ -12,12 +14,12 @@ import { AppText as Text } from '@/components/AppText';
   import ClipIcon from "@/assets/images/tabIcons/clip.svg";
 
 
-const ACTIVE = '#FF7F5C';
+const ACTIVE = SHARED_COLORS.accent;
 // 탭을 선택했을 때(눌렀을 때) 아이콘·글자 색이 메인 컬러(ACTIVE)로 표시됩니다.
 // (가운데 카메라 버튼의 배경색도 항상 같은 ACTIVE 오렌지를 씁니다.)
 const SELECTED = ACTIVE;
-const INACTIVE = '#8A8A8A';
-const BAR_BG = '#FFFFFF';
+const INACTIVE = SHARED_COLORS.textSecondary;
+const BAR_BG = SHARED_COLORS.background;
 
 const icons = {
   home: HomeIcon,
@@ -60,8 +62,29 @@ function TabItem({
 }
 
 function CameraTabButton() {
+  const handlePress = () => {
+    const currentTrip = useTripStore.getState().currentTrip;
+
+    if (!currentTrip) {
+      Alert.alert(
+        '진행 중인 여행이 없습니다',
+        '촬영한 클립을 저장할 여행을 먼저 선택하거나 만들어주세요.',
+        [
+          { text: '취소', style: 'cancel' },
+          {
+            text: '여행 만들러 가기',
+            onPress: () => router.push('/(tabs)/home'),
+          },
+        ],
+      );
+      return;
+    }
+
+    router.push('/camera');
+  };
+
   return (
-    <Pressable onPress={() => router.push('/camera')} style={styles.cameraButtonWrap}>
+    <Pressable onPress={handlePress} style={styles.cameraButtonWrap}>
       <View style={styles.cameraButton}>
         <CameraIcon
           width={27}

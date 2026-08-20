@@ -13,8 +13,8 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import Svg, { Rect, Line, Circle, Path } from 'react-native-svg';
 import type { ShootingStyleId, GridTemplateId } from '@/services/folderService';
+import { COLORS as SHARED_COLORS } from '@/constants/color';
 
 /**
  * ─────────────────────────────────────────────────────────────
@@ -23,19 +23,20 @@ import type { ShootingStyleId, GridTemplateId } from '@/services/folderService';
  * 단색 #FF7F5C 버튼으로 통일하고 싶으시면
  * GRADIENT 배열을 안 쓰고 backgroundColor: COLORS.accent 하나로 바꾸시면 됩니다
  * (아래 PrimaryButton 컴포넌트 안에 분기 처리해뒀어요).
+ * 팔레트 v1에서 이 그라데이션은 공식적으로 사용 허용됐습니다.
  */
 const COLORS = {
-  accent: '#FF7F5C',
-  accentDark: '#E8663F',
+  accent: SHARED_COLORS.accent,
+  accentDark: SHARED_COLORS.accentPressed,
   dark: '#1E2128',
-  black: '#222222',
-  gray500: '#8A8A8A',
-  gray400: '#8A8A8A',
-  gray200: '#DDDDDD',
-  gray100: '#F5F5F5',
-  white: '#FFFFFF',
+  black: SHARED_COLORS.textPrimary,
+  gray500: SHARED_COLORS.textSecondary,
+  gray400: SHARED_COLORS.textSecondary,
+  gray200: SHARED_COLORS.border,
+  gray100: SHARED_COLORS.surface,
+  white: SHARED_COLORS.background,
 };
-const GRADIENT: [string, string] = ['#FFC364', '#FF7F5C'];
+const GRADIENT: [string, string] = [SHARED_COLORS.gradientStart, SHARED_COLORS.accent];
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -73,20 +74,11 @@ const THEMES = [
 type Step = 1 | 2 | 3 | 'success';
 
 // ShootingStyleId/GridTemplateId는 저장 스키마(FolderItem)에도 쓰여서 folderService.ts로
-// 옮겼습니다. 'thirds'(구도 가이드선)였던 걸 'grid'로 바꾼 이유는 실제로 하려던 게
-// 라이브 촬영 가이드가 아니라 "클립 여러 개를 한 화면에 분할해서 합치는 편집 포맷"
-// 선택이었기 때문이에요(3분할 영상 같은 거).
-
-const GRID_TEMPLATES: {
-  id: GridTemplateId;
-  label: string;
-  slotCount: number;
-}[] = [
-  { id: 'rows3', label: '3분할 (가로 3단)', slotCount: 3 },
-  { id: 'rows2', label: '2분할 (가로 2단)', slotCount: 2 },
-  { id: 'cols2', label: '2분할 (세로 2단)', slotCount: 2 },
-  { id: 'grid4', label: '4분할 (2×2)', slotCount: 4 },
-];
+// 옮겼습니다. 촬영 스타일/그리드 템플릿을 실제로 고르는 과정은 여행 생성 모달이 아니라
+// 카메라 화면(CameraScreen)으로 옮겨졌어요 — 촬영 버튼을 누른 그 화면에서 정할 수 있게요.
+// 여기 TripForm에는 여전히 필드가 남아있는데, FolderItem 저장 스키마와 다른 화면들
+// (clip-manage, MyRoutesScreen 등)이 이 필드들을 그대로 읽어가기 때문에 기본값만 채워서
+// 넘겨줍니다.
 
 type TripForm = {
   name: string;
@@ -109,7 +101,9 @@ const INITIAL_FORM: TripForm = {
   endDate: null,
   partySize: 1,
   themes: [],
-  clipLengthSeconds: 10,
+  // 카메라 촬영 시간은 3초로 고정 — 더는 여행 만들기 단계에서 초수를 묻지 않아요.
+  clipLengthSeconds: 3,
+  // 촬영 스타일은 카메라 화면에서 정하니, 여기서는 저장 스키마용 기본값만 둡니다.
   shootingStyle: 'basic',
   gridTemplateId: null,
 };
@@ -120,31 +114,6 @@ type Props = {
   /** 여행 생성이 최종 확정된 순간 부모(Home/내 루트)에 데이터를 넘겨줍니다. */
   onCreated: (trip: TripForm & { startDate: Date; endDate: Date }) => void;
 };
-
-// ── 촬영 스타일 데이터 ───────────────────────────────────────
-// 각 스타일은 미니 프리뷰(StylePreview)로 시각적으로 보여줍니다.
-// "인형 두고 찍는 스타일"처럼 텍스트만으론 뭘 하라는 건지 알기 어려운
-// 항목일수록, 그림 하나가 설명 두 줄보다 낫습니다.
-const CLIP_LENGTH_OPTIONS = [5, 10, 15]; // 초 단위
-
-const SHOOTING_STYLES: {
-  id: ShootingStyleId;
-  label: string;
-  description: string;
-}[] = [
-  { id: 'basic', label: '기본 스타일', description: '가이드 없이 자유롭게' },
-  { id: 'grid', label: '그리드 선택', description: '클립을 분할 화면으로' },
-  {
-    id: 'doll',
-    label: '인형과 함께',
-    description: '소품 놓을 위치 표시',
-  },
-  {
-    id: 'withPerson',
-    label: '사람과 함께',
-    description: '인물 서는 위치 표시',
-  },
-];
 
 // ── 날짜 유틸 ────────────────────────────────────────────────
 function isSameDate(a: Date | null, b: Date | null): boolean {
@@ -372,139 +341,6 @@ function SelectableChip({
   );
 }
 
-/**
- * 촬영 스타일 카드 안에 들어가는 세로 프레임 미니 프리뷰.
- * "3분할"이나 "인형 위치" 같은 건 말로 설명하는 것보다 이 작은 그림
- * 하나가 훨씬 빠르게 이해돼요. 릴스 비율(세로 9:16)에 맞춰 프레임
- * 자체를 세로로 그렸습니다.
- */
-function StylePreview({ styleId }: { styleId: ShootingStyleId }) {
-  const w = 44;
-  const h = 78;
-
-  return (
-    <Svg width={w} height={h}>
-      {/* 공통: 세로 프레임 테두리 */}
-      <Rect
-        x={1}
-        y={1}
-        width={w - 2}
-        height={h - 2}
-        rx={6}
-        stroke={COLORS.gray400}
-        strokeWidth={1.5}
-        fill="none"
-      />
-
-      {styleId === 'grid' && (
-        // 대표 아이콘으로 3분할(가로 3단) 모양을 보여줍니다.
-        // 실제로 어떤 템플릿을 쓸지는 카드 선택 후 아래 템플릿
-        // 목록에서 다시 고릅니다(GridTemplatePreview 참고).
-        <>
-          <Line
-            x1={2}
-            y1={h / 3}
-            x2={w - 2}
-            y2={h / 3}
-            stroke={COLORS.accent}
-            strokeWidth={1.5}
-          />
-          <Line
-            x1={2}
-            y1={(h / 3) * 2}
-            x2={w - 2}
-            y2={(h / 3) * 2}
-            stroke={COLORS.accent}
-            strokeWidth={1.5}
-          />
-        </>
-      )}
-
-      {styleId === 'doll' && (
-        // 프레임 하단 중앙에 "소품을 여기 두세요" 지점을 점선 원으로 표시
-        <Circle
-          cx={w / 2}
-          cy={h - 16}
-          r={7}
-          stroke={COLORS.accent}
-          strokeWidth={1.5}
-          strokeDasharray="2,2"
-          fill="none"
-        />
-      )}
-
-      {styleId === 'withPerson' && (
-        // 사람이 설 위치를 아주 단순한 실루엣(머리+몸)으로 표시
-        <>
-          <Circle cx={w / 2} cy={h - 26} r={5} fill={COLORS.accent} />
-          <Path
-            d={`M ${w / 2 - 8} ${h - 6} Q ${w / 2} ${h - 24} ${w / 2 + 8} ${h - 6}`}
-            stroke={COLORS.accent}
-            strokeWidth={1.5}
-            fill="none"
-          />
-        </>
-      )}
-    </Svg>
-  );
-}
-
-/**
- * 그리드 템플릿 하나를 아주 작게 미리 보여주는 아이콘.
- * StylePreview보다 더 작고(썸네일용), 순수하게 "몇 칸으로 나뉘는지"만
- * 보여주면 되니까 프레임/장식 없이 분할선만 그립니다.
- */
-function GridTemplatePreview({ templateId }: { templateId: GridTemplateId }) {
-  const w = 32;
-  const h = 44;
-  const line = (
-    x1: number,
-    y1: number,
-    x2: number,
-    y2: number,
-    key: string,
-  ) => (
-    <Line
-      key={key}
-      x1={x1}
-      y1={y1}
-      x2={x2}
-      y2={y2}
-      stroke={COLORS.accent}
-      strokeWidth={1.5}
-    />
-  );
-
-  return (
-    <Svg width={w} height={h}>
-      <Rect
-        x={1}
-        y={1}
-        width={w - 2}
-        height={h - 2}
-        rx={4}
-        stroke={COLORS.gray400}
-        strokeWidth={1.2}
-        fill="none"
-      />
-      {templateId === 'rows3' && (
-        <>
-          {line(2, h / 3, w - 2, h / 3, 'a')}
-          {line(2, (h / 3) * 2, w - 2, (h / 3) * 2, 'b')}
-        </>
-      )}
-      {templateId === 'rows2' && line(2, h / 2, w - 2, h / 2, 'a')}
-      {templateId === 'cols2' && line(w / 2, 2, w / 2, h - 2, 'a')}
-      {templateId === 'grid4' && (
-        <>
-          {line(w / 2, 2, w / 2, h - 2, 'a')}
-          {line(2, h / 2, w - 2, h / 2, 'b')}
-        </>
-      )}
-    </Svg>
-  );
-}
-
 // ── 메인 컴포넌트 ────────────────────────────────────────────
 export default function NewTripModal({ visible, onClose, onCreated }: Props) {
   const [step, setStep] = useState<Step>(1);
@@ -572,10 +408,6 @@ export default function NewTripModal({ visible, onClose, onCreated }: Props) {
 
   const isStep1Valid = form.name.trim().length > 0 && !!form.region;
   const isStep2Valid = !!form.startDate && !!form.endDate;
-  // '그리드 선택'을 골랐으면 구체적인 템플릿까지 정해야 진행 가능.
-  // 다른 스타일은 기본값이 이미 있어서 별도 검증이 필요 없어요.
-  const isStep3Valid =
-    form.shootingStyle !== 'grid' || !!form.gridTemplateId;
 
   return (
     <Modal
@@ -599,7 +431,7 @@ export default function NewTripModal({ visible, onClose, onCreated }: Props) {
 
           {step === 1 && <StepIndicator currentStep={1} label="기본 정보" />}
           {step === 2 && <StepIndicator currentStep={2} label="일정" />}
-          {step === 3 && <StepIndicator currentStep={3} label="촬영 스타일" />}
+          {step === 3 && <StepIndicator currentStep={3} label="테마" />}
 
           {/* ── STEP 1: 기본 정보 ─────────────────────────── */}
           {step === 1 && (
@@ -646,23 +478,6 @@ export default function NewTripModal({ visible, onClose, onCreated }: Props) {
                   setForm((prev) => ({ ...prev, memo: text }))
                 }
               />
-
-              <Text style={styles.fieldLabel}>
-                여행 테마 <Text style={styles.fieldLabelMuted}>(중복 선택 가능)</Text>
-              </Text>
-              <Text style={styles.fieldHint}>
-                선택한 테마를 바탕으로 루트 추천을 받을 수 있어요
-              </Text>
-              <View style={styles.chipWrap}>
-                {THEMES.map((theme) => (
-                  <SelectableChip
-                    key={theme}
-                    label={theme}
-                    selected={form.themes.includes(theme)}
-                    onPress={() => toggleTheme(theme)}
-                  />
-                ))}
-              </View>
 
               <View style={{ height: 24 }} />
               <PrimaryButton
@@ -880,104 +695,25 @@ export default function NewTripModal({ visible, onClose, onCreated }: Props) {
             </ScrollView>
           )}
 
-          {/* ── STEP 3: 촬영 스타일 + 요약 ─────────────────── */}
+          {/* ── STEP 3: 테마 + 요약 ───────────────────────── */}
           {step === 3 && (
             <ScrollView style={styles.body} showsVerticalScrollIndicator={false}>
-              <Text style={styles.fieldLabel}>클립 길이</Text>
+              <Text style={styles.fieldLabel}>
+                여행 테마 <Text style={styles.fieldLabelMuted}>(중복 선택 가능)</Text>
+              </Text>
               <Text style={styles.fieldHint}>
-                한 장소에서 찍는 클립 하나의 길이예요. 하루에 찍는 개수는
-                제한이 없어요.
+                선택한 테마를 바탕으로 루트 추천을 받을 수 있어요
               </Text>
               <View style={styles.chipWrap}>
-                {CLIP_LENGTH_OPTIONS.map((seconds) => (
+                {THEMES.map((theme) => (
                   <SelectableChip
-                    key={seconds}
-                    label={`${seconds}초`}
-                    selected={form.clipLengthSeconds === seconds}
-                    onPress={() =>
-                      setForm((prev) => ({ ...prev, clipLengthSeconds: seconds }))
-                    }
+                    key={theme}
+                    label={theme}
+                    selected={form.themes.includes(theme)}
+                    onPress={() => toggleTheme(theme)}
                   />
                 ))}
               </View>
-
-              <Text style={[styles.fieldLabel, { marginTop: 8 }]}>촬영 스타일</Text>
-              <Text style={styles.fieldHint}>
-                촬영할 때 화면에 보여드릴 가이드예요
-              </Text>
-              <View style={styles.styleGrid}>
-                {SHOOTING_STYLES.map((option) => {
-                  const selected = form.shootingStyle === option.id;
-                  return (
-                    <TouchableOpacity
-                      key={option.id}
-                      style={[styles.styleCard, selected && styles.styleCardSelected]}
-                      activeOpacity={0.85}
-                      onPress={() =>
-                        setForm((prev) => ({
-                          ...prev,
-                          shootingStyle: option.id,
-                          // 그리드가 아닌 다른 스타일로 바꾸면 이전에 골라둔
-                          // 템플릿은 의미가 없어지니까 같이 초기화합니다.
-                          gridTemplateId:
-                            option.id === 'grid' ? prev.gridTemplateId : null,
-                        }))
-                      }
-                    >
-                      {selected && (
-                        <View style={styles.styleCardCheck}>
-                          <Ionicons name="checkmark" size={11} color={COLORS.white} />
-                        </View>
-                      )}
-                      <StylePreview styleId={option.id} />
-                      <Text style={styles.styleCardLabel}>{option.label}</Text>
-                      <Text style={styles.styleCardDescription}>
-                        {option.description}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-
-              {/* '그리드 선택'을 골랐을 때만, 구체적으로 어떤 분할
-                  템플릿을 쓸지 한 번 더 고르게 합니다. */}
-              {form.shootingStyle === 'grid' && (
-                <View style={styles.gridTemplateSection}>
-                  <Text style={styles.gridTemplateHint}>
-                    어떤 모양으로 나눌까요?
-                  </Text>
-                  <View style={styles.gridTemplateRow}>
-                    {GRID_TEMPLATES.map((template) => {
-                      const selected = form.gridTemplateId === template.id;
-                      return (
-                        <TouchableOpacity
-                          key={template.id}
-                          style={[
-                            styles.gridTemplateChip,
-                            selected && styles.gridTemplateChipSelected,
-                          ]}
-                          onPress={() =>
-                            setForm((prev) => ({
-                              ...prev,
-                              gridTemplateId: template.id,
-                            }))
-                          }
-                        >
-                          <GridTemplatePreview templateId={template.id} />
-                          <Text
-                            style={[
-                              styles.gridTemplateChipLabel,
-                              selected && styles.gridTemplateChipLabelSelected,
-                            ]}
-                          >
-                            {template.label}
-                          </Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-                </View>
-              )}
 
               <Text style={[styles.fieldLabel, { marginTop: 8 }]}>여행 요약</Text>
               <View style={styles.summaryCard}>
@@ -1000,17 +736,6 @@ export default function NewTripModal({ visible, onClose, onCreated }: Props) {
                   label="테마"
                   value={form.themes.length > 0 ? form.themes.join(', ') : '미선택'}
                 />
-                <SummaryRow
-                  icon="videocam-outline"
-                  label="촬영"
-                  value={`${form.clipLengthSeconds}초 · ${
-                    SHOOTING_STYLES.find((s) => s.id === form.shootingStyle)?.label ?? '-'
-                  }${
-                    form.shootingStyle === 'grid' && form.gridTemplateId
-                      ? ` (${GRID_TEMPLATES.find((t) => t.id === form.gridTemplateId)?.label})`
-                      : ''
-                  }`}
-                />
               </View>
 
               <View style={{ height: 24 }} />
@@ -1022,7 +747,6 @@ export default function NewTripModal({ visible, onClose, onCreated }: Props) {
                   <PrimaryButton
                     label="여행 만들기!"
                     icon="airplane-outline"
-                    disabled={!isStep3Valid}
                     onPress={handleCreate}
                   />
                 </View>
@@ -1374,88 +1098,6 @@ const styles = StyleSheet.create({
     color: COLORS.black,
     minWidth: 16,
     textAlign: 'center',
-  },
-
-  // 촬영 스타일 카드
-  styleGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-  },
-  styleCard: {
-    width: '47%',
-    borderWidth: 1.5,
-    borderColor: COLORS.gray200,
-    borderRadius: 16,
-    paddingVertical: 14,
-    alignItems: 'center',
-    gap: 6,
-  },
-  styleCardSelected: {
-    borderColor: COLORS.accent,
-    backgroundColor: '#FFF6F0',
-  },
-  styleCardCheck: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: COLORS.accent,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  styleCardLabel: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: COLORS.black,
-    marginTop: 4,
-  },
-  styleCardDescription: {
-    fontSize: 11,
-    color: COLORS.gray400,
-    textAlign: 'center',
-  },
-
-  // 그리드 템플릿 서브 피커
-  gridTemplateSection: {
-    marginTop: 12,
-    backgroundColor: COLORS.gray100,
-    borderRadius: 16,
-    padding: 12,
-  },
-  gridTemplateHint: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: COLORS.black,
-    marginBottom: 10,
-  },
-  gridTemplateRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  gridTemplateChip: {
-    width: '47%',
-    backgroundColor: COLORS.white,
-    borderWidth: 1.5,
-    borderColor: COLORS.gray200,
-    borderRadius: 12,
-    paddingVertical: 10,
-    alignItems: 'center',
-    gap: 4,
-  },
-  gridTemplateChipSelected: {
-    borderColor: COLORS.accent,
-  },
-  gridTemplateChipLabel: {
-    fontSize: 11,
-    color: COLORS.gray500,
-  },
-  gridTemplateChipLabelSelected: {
-    color: COLORS.accent,
-    fontWeight: '700',
   },
 
   summaryCard: {

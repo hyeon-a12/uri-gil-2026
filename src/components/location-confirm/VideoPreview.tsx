@@ -111,7 +111,7 @@ const styles = StyleSheet.create({
     borderLeftWidth: 16,
     borderTopColor: 'transparent',
     borderBottomColor: 'transparent',
-    borderLeftColor: COLORS.text,
+    borderLeftColor: COLORS.textPrimary,
   },
   progressTrack: {
     position: 'absolute',
@@ -125,7 +125,7 @@ const styles = StyleSheet.create({
   progressFill: {
     height: '100%',
     borderRadius: 2,
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.background,
   },
   placeholder: {
     flex: 1,
@@ -136,7 +136,7 @@ const styles = StyleSheet.create({
     padding: 24,
   },
   placeholderText: {
-    color: COLORS.textTertiary,
+    color: COLORS.textSecondary,
     fontSize: 14,
     textAlign: 'center',
   },

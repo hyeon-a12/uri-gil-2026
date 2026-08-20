@@ -48,3 +48,8 @@ example
 
 # Secret files
 .env
+
+# 영상 렌더링 서버 임시/산출물 파일
+server/uploads/
+server/output/
+

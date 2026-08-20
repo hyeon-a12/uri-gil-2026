@@ -3,7 +3,7 @@ import { View, Image, ScrollView, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { AppText as Text } from '@/components/AppText';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useResponsive } from '../../hooks/use-responsive';
+import { useResponsive } from '@/navigation/hooks/use-responsive';
 import { homeColors } from '../../constants/home-theme';
 import TripMapCard from '../../components/TripMapCard';
 import ClipThumbnail from '../../components/ClipThumbnail';
