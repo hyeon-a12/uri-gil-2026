@@ -254,7 +254,7 @@ async function renderVideo(exportData: {
     placeStyle: TextElementStyle;
   };
 }): Promise<{ success: boolean; message?: string }> {
-  const SERVER_URL = 'http://172.30.1.65:3000/process-video';
+  const SERVER_URL = 'https://lively-cooperation-production-c1b6.up.railway.app/process-video';
   
   try {
     console.log('multipart 요청 시작');
