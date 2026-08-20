@@ -30,8 +30,6 @@ class RouteCreate(BaseModel):
     start_date: Optional[date] = None
     end_date: Optional[date] = None
     member_count: Optional[int] = 1
-    clip_duration: Optional[int] = 10
-    shooting_style: Optional[str] = "기본 스타일"
 
 class RouteResponse(BaseModel):
     id: int
@@ -43,8 +41,6 @@ class RouteResponse(BaseModel):
     start_date: Optional[date]
     end_date: Optional[date]
     member_count: Optional[int]
-    clip_duration: Optional[int]
-    shooting_style: Optional[str]
     created_at: datetime
 
 

@@ -26,8 +26,6 @@ def create_route(
         start_date=route.start_date,
         end_date=route.end_date,
         member_count=route.member_count,
-        clip_duration=route.clip_duration,
-        shooting_style=route.shooting_style,
     )
     db.add(new_route)
     db.commit()

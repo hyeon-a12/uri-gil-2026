@@ -135,8 +135,6 @@ const handleCreatedTrip: React.ComponentProps<typeof NewTripModal>['onCreated'] 
             start_date: toIsoDate(trip.startDate),
             end_date: toIsoDate(trip.endDate),
             member_count: trip.partySize,
-            clip_duration: trip.clipLengthSeconds,
-            shooting_style: trip.shootingStyle,
           }),
         });
 

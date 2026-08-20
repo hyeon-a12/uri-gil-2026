@@ -25,8 +25,6 @@ class Route(Base):
     start_date = Column(Date)
     end_date = Column(Date)
     member_count = Column(Integer, default=1)
-    clip_duration = Column(Integer, default=10)
-    shooting_style = Column(String, default="기본 스타일")
 
 class RouteSpot(Base):
     __tablename__ = "route_spots"
