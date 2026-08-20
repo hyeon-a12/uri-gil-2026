@@ -21,6 +21,8 @@ import { useVideoPlayer, VideoView } from 'expo-video';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS as SHARED_COLORS } from '@/constants/color';
 import { getRecordingsByFolder } from '@/services/recordingService';
+import { getAllFolders } from '@/services/folderService';
+import { apiFetch } from '@/services/api';
 
 const COLORS = {
   background: SHARED_COLORS.background,
@@ -278,7 +280,8 @@ async function renderVideo(exportData: {
     timeStyle: TextElementStyle;
     placeStyle: TextElementStyle;
   };
-}): Promise<{ success: boolean; message?: string }> {
+  
+}): Promise<{ success: boolean; message?: string; videoUri?: string }> {
   if (!process.env.EXPO_PUBLIC_SERVER_URL) {
     return { success: false, message: '.env에 EXPO_PUBLIC_SERVER_URL이 설정되어 있지 않습니다. .env.example을 참고해 자신의 PC IP로 채워주세요.' };
   }
@@ -352,8 +355,9 @@ async function renderVideo(exportData: {
           message: '갤러리 접근 권한이 필요합니다.'
         };
       }
-      await MediaLibrary.saveToLibraryAsync(localPath);
-      console.log('[renderVideo] 갤러리 저장 완료');
+      const asset = await MediaLibrary.createAssetAsync(localPath);
+      console.log('[renderVideo] 갤러리 저장 완료', asset.uri);
+      return { success: true, videoUri: asset.uri };
     }
 
     return { success: true };
@@ -989,6 +993,31 @@ export default function VideoEditScreen() {
             setIsExporting(false);
 
             if (result.success) {
+              // 서버에도 영상 메타데이터 기록 시도 (실패해도 갤러리 저장은 이미 끝났으니 무시)
+              try {
+                const folders = await getAllFolders();
+                const folder = folders.find((f) => f.id === folderId);
+
+                if (folder?.routeId) {
+                  await apiFetch('/videos/', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                      route_id: folder.routeId,
+                      video_url: result.videoUri ?? '',
+                      thumbnail_url: clips[0]?.thumbnailUri ?? null,
+                      is_public: false,
+                    }),
+                  });
+                } else {
+                  console.warn('[handleExport] routeId가 없어 서버에 영상 기록을 건너뜁니다.');
+                }
+              } catch (dbError) {
+                console.error('[handleExport] 영상 DB 저장 실패:', dbError);
+              }
+            }
+
+
+            if (result.success) {
               Alert.alert(
                 '완료',
                 '영상이 갤러리에 저장되었어요.',
@@ -996,7 +1025,7 @@ export default function VideoEditScreen() {
                   {
                     text: '확인',
                     onPress: () => {
-                      router.replace('/');
+                      router.replace('/(tabs)/home');
                     },
                   },
                 ],
