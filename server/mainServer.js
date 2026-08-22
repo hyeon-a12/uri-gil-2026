@@ -4,7 +4,6 @@ const ffmpeg = require('fluent-ffmpeg');
 const ffmpegInstaller = require('@ffmpeg-installer/ffmpeg');
 const path = require('path');
 const fs = require('fs');
-const { info } = require('console');
 
 ffmpeg.setFfmpegPath(ffmpegInstaller.path);
 
@@ -17,10 +16,46 @@ const UPLOAD_DIR = path.join(__dirname, 'uploads');
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 });
 
-// 폰트 경로
-const FONT_PATH = path.join(__dirname, 'fonts', 'Pretendard-Bold.ttf')
-  .replace(/\\/g, '/')
-  .replace(/:/g, '\\:');
+const FONT_DIR = path.join(__dirname, '..', 'assets', 'fonts');
+const FONT_MAP = {
+  pretendard: {
+    regular: 'Pretendard-Regular.ttf',
+    bold: 'Pretendard-Bold.ttf',
+  },
+  maruburi: {
+    regular: 'MaruBuri-Regular.ttf',
+    bold: 'MaruBuri-Bold.ttf',
+  },
+  keriskedu: {
+    regular: 'KERISKEDU_B.ttf',
+    bold: 'KERISKEDU_B-Bold.ttf',
+  },
+  hakgyoansimnadeuri: {
+    regular: 'HakgyoansimNadeuri-Light.ttf',
+    bold: 'HakgyoansimNadeuri-Bold.ttf',
+  },
+  hakgyoansimbyeolbichhaneul: {
+    regular: 'HakgyoansimByeolbichhaneul-Light.ttf',
+    bold: 'HakgyoansimByeolbichhaneul-Bold.ttf',
+  },
+};
+
+function getFontPath(fontId, bold) {
+  const font = FONT_MAP[fontId] ?? FONT_MAP.pretendard;
+  const fileName = bold ? font.bold : font.regular;
+  const fullPath = path.join(FONT_DIR, fileName);
+
+  if (!fs.existsSync(fullPath)) {
+    console.warn('폰트 파일 없음');
+    return path.join(FONT_DIR, 'Pretendard-Bold.ttf')
+    .replace(/\\/g, '/')
+    .replace(/:/g, '\\:')
+  }
+
+  return fullPath
+    .replace(/\\/g, '/')
+    .replace(/:/g, '\\:')
+}
 
 function formatTime(recordedAt) {
   const date = new Date(recordedAt);
@@ -29,14 +64,15 @@ function formatTime(recordedAt) {
   return `${hours}\uff1a${minutes}`;
 }
 
-function makeDrawtext(text, yPosition) {
+function makeDrawtext(text, yPosition, color, bold, fontId) {
+  const fontPath = getFontPath(fontId, bold);  
   return {
     filter: 'drawtext',
     options: {
       text: text,
-      fontfile: FONT_PATH,
+      fontfile: fontPath,
       fontsize: 30,
-      fontcolor: 'white',
+      fontcolor: color || 'white',
       x: '(w-text_w)/2',
       y: yPosition,
     },
@@ -87,24 +123,59 @@ app.post('/process-video', upload.array('videos', 20), async(req, res) => {
       const infoType = settings.infoContentType;
       console.log('클립 처리 시작');
 
+      const timeStyle = settings.timeStyle ?? {};
+      const placeStyle = settings.placeStyle ?? {};
+
+      console.log(`클립 ${i} 처리 시작`, {
+        placeName: meta.placeName,
+        recordedAt: meta.recordedAt,
+        infoType,
+        timeStyle,
+        placeStyle,
+      });
+
       const filters = [];
       if (!infoType) {}
       else if (infoType === 'time') {
         if (meta.recordedAt) {
           const timeStr = formatTime(meta.recordedAt);
-          filters.push(makeDrawtext(timeStr, '(h-text_h)/2'));
+          filters.push(makeDrawtext(
+            timeStr,
+            '(h-text_h)/2',
+            timeStyle.color,
+            timeStyle.bold,
+            timeStyle.fontId,
+          ));
         }
       } else if (infoType === 'location') {
         if (meta.placeName) {
-          filters.push(makeDrawtext(meta.placeName, '(h-text_h)/2'));
+          filters.push(makeDrawtext(
+            meta.placeName,
+            '(h-text_h)/2',
+            placeStyle.color,
+            placeStyle.bold,
+            timeStyle.fontId,
+          ));
         }
       } else if (infoType === 'both') {
         if (meta.recordedAt) {
           const timeStr = formatTime(meta.recordedAt);
-          filters.push(makeDrawtext(timeStr, '(h-text_h)/2-25'));
+          filters.push(makeDrawtext(
+            timeStr,
+            '(h-text_h)/2-25',
+            timeStyle.color,
+            timeStyle.bold,
+            timeStyle.fontId,
+          ));
         }
         if (meta.placeName) {
-          filters.push(makeDrawtext(meta.placeName, '(h-text_h)/2+25'));
+          filters.push(makeDrawtext(
+            meta.placeName,
+            '(h-text_h)/2+25',
+            placeStyle.color,
+            placeStyle.bold,
+            timeStyle.fontId,
+          ));
         }
       }
 
