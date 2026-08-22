@@ -57,6 +57,41 @@ function getFontPath(fontId, bold) {
     .replace(/:/g, '\\:')
 }
 
+function getXY(position) {
+  const margin = 50;
+
+  const map = {
+    // 상단
+    topLeft: { x: margin, y: margin },
+    topCenter: { x: '(w-text_w)/2', y: margin },
+    topRight: { x: `w-text_w-${margin}`, y: margin },
+
+    // 중간
+    middleLeft: { x: margin, y: '(h-text_h)/2' },
+    center: { x: '(w-text_w)/2', y: '(h-text_h)/2' },
+    middleRight: { x: `w-text_w-${margin}`, y: '(h-text_h)/2' },
+
+    // 하단
+    bottomLeft: { x: margin, y: `h-text_h-${margin}` },
+    bottomCenter: { x: '(w-text_w)/2', y: `h-text_h-${margin}` },
+    bottomRight: { x: `w-text_w-${margin}`, y: `h-text_h-${margin}` },
+  };
+
+  return map[position] ?? map.center;
+}
+
+function adjustY(yStr, offset) {
+  if (!isNaN(Number(yStr))) {
+    return String(Number(yStr) + offset);
+  }
+
+  if (offset >= 0) {
+    return `${yStr}+${offset}`;
+  } else {
+    return `${yStr}${offset}`;
+  }
+}
+
 function formatTime(recordedAt) {
   const date = new Date(recordedAt);
   const hours = String(date.getHours()).padStart(2, '0');
@@ -64,7 +99,7 @@ function formatTime(recordedAt) {
   return `${hours}\uff1a${minutes}`;
 }
 
-function makeDrawtext(text, yPosition, color, bold, fontId) {
+function makeDrawtext(text, xPosition, yPosition, color, bold, fontId) {
   const fontPath = getFontPath(fontId, bold);  
   return {
     filter: 'drawtext',
@@ -73,7 +108,7 @@ function makeDrawtext(text, yPosition, color, bold, fontId) {
       fontfile: fontPath,
       fontsize: 30,
       fontcolor: color || 'white',
-      x: '(w-text_w)/2',
+      x: xPosition,
       y: yPosition,
     },
   };
@@ -121,7 +156,8 @@ app.post('/process-video', upload.array('videos', 20), async(req, res) => {
       tempFiles.push(processedPath);
 
       const infoType = settings.infoContentType;
-      console.log('클립 처리 시작');
+      const position = settings.textPosition ?? 'center';
+      const { x, y } = getXY(position);
 
       const timeStyle = settings.timeStyle ?? {};
       const placeStyle = settings.placeStyle ?? {};
@@ -141,7 +177,8 @@ app.post('/process-video', upload.array('videos', 20), async(req, res) => {
           const timeStr = formatTime(meta.recordedAt);
           filters.push(makeDrawtext(
             timeStr,
-            '(h-text_h)/2',
+            x,
+            y,
             timeStyle.color,
             timeStyle.bold,
             timeStyle.fontId,
@@ -151,7 +188,8 @@ app.post('/process-video', upload.array('videos', 20), async(req, res) => {
         if (meta.placeName) {
           filters.push(makeDrawtext(
             meta.placeName,
-            '(h-text_h)/2',
+            x,
+            y,
             placeStyle.color,
             placeStyle.bold,
             timeStyle.fontId,
@@ -162,7 +200,8 @@ app.post('/process-video', upload.array('videos', 20), async(req, res) => {
           const timeStr = formatTime(meta.recordedAt);
           filters.push(makeDrawtext(
             timeStr,
-            '(h-text_h)/2-25',
+            x,
+            adjustY(y, -25),
             timeStyle.color,
             timeStyle.bold,
             timeStyle.fontId,
@@ -171,7 +210,8 @@ app.post('/process-video', upload.array('videos', 20), async(req, res) => {
         if (meta.placeName) {
           filters.push(makeDrawtext(
             meta.placeName,
-            '(h-text_h)/2+25',
+            x,
+            adjustY(y, 25),
             placeStyle.color,
             placeStyle.bold,
             timeStyle.fontId,
