@@ -165,6 +165,7 @@ app.post('/process-video', upload.array('videos', 20), async(req, res) => {
       console.log(`클립 ${i} 처리 시작`, {
         placeName: meta.placeName,
         recordedAt: meta.recordedAt,
+        isMuted: meta.recordedAt,
         infoType,
         timeStyle,
         placeStyle,
@@ -222,8 +223,14 @@ app.post('/process-video', upload.array('videos', 20), async(req, res) => {
       await new Promise((resolve, reject) => {
         const cmd = ffmpeg(file.path);
 
+        // 텍스트 필터
         if (filters.length > 0) {
           cmd.videoFilters(filters);
+        }
+
+        // 음소거 처리
+        if (meta.isMuted) {
+          cmd.audioFilters('volume=0');
         }
 
         cmd
