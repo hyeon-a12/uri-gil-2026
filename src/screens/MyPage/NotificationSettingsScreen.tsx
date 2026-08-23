@@ -1,17 +1,14 @@
 import React, { useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { colors } from '@/constants/menu-theme';
-import { Card, ListRow, SectionLabel, Toggle, ScreenHeader } from '@/components/common';
+import { Card, ListRow, Toggle, ScreenHeader } from '@/components/common';
 
 // 알림 종류마다 key를 정해두고 하나의 state 객체로 관리
-type NotiKey = 'all' | 'tripStatus' | 'dispersalTip' | 'socialActivity' | 'marketing';
+type NotiKey = 'moveClipReminder' | 'dispersalTip';
 
 const initialState: Record<NotiKey, boolean> = {
-  all: true,
-  tripStatus: true,
+  moveClipReminder: true,
   dispersalTip: true,
-  socialActivity: false,
-  marketing: false,
 };
 
 export default function NotificationSettingsScreen() {
@@ -30,37 +27,15 @@ export default function NotificationSettingsScreen() {
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
-        {/* 1. 전체 알림 섹션 */}
         <View style={styles.sectionContainer}>
           <Card style={styles.card}>
             <View style={styles.rowWrapper}>
               <ListRow
-                isLast
-                title="전체 알림"
-                subtitle="모든 알림을 한번에 켜고 끌 수 있어요"
+                title="장소 이동 시 촬영 알림"
+                subtitle="새 장소로 이동하면 클립 촬영을 알려드려요"
                 right={
                   <View style={styles.toggleContainer}>
-                    <Toggle value={values.all} onValueChange={setKey('all')} />
-                  </View>
-                }
-              />
-            </View>
-          </Card>
-        </View>
-
-        {/* 2. 여행 섹션 */}
-        <View style={styles.sectionContainer}>
-          <View style={styles.labelWrapper}>
-            <SectionLabel text="여행" />
-          </View>
-          <Card style={styles.card}>
-            <View style={styles.rowWrapper}>
-              <ListRow
-                title="여행 시작/종료 알림"
-                subtitle="루트 상태가 바뀌면 알려드려요"
-                right={
-                  <View style={styles.toggleContainer}>
-                    <Toggle value={values.tripStatus} onValueChange={setKey('tripStatus')} />
+                    <Toggle value={values.moveClipReminder} onValueChange={setKey('moveClipReminder')} />
                   </View>
                 }
               />
@@ -77,41 +52,6 @@ export default function NotificationSettingsScreen() {
                 right={
                   <View style={styles.toggleContainer}>
                     <Toggle value={values.dispersalTip} onValueChange={setKey('dispersalTip')} />
-                  </View>
-                }
-              />
-            </View>
-          </Card>
-        </View>
-
-        {/* 3. 기타 섹션 */}
-        <View style={styles.sectionContainer}>
-          <View style={styles.labelWrapper}>
-            <SectionLabel text="기타" />
-          </View>
-          <Card style={styles.card}>
-            <View style={styles.rowWrapper}>
-              <ListRow
-                title="공유 활동 알림"
-                subtitle="내 루트에 댓글·공감이 달리면 알려드려요"
-                right={
-                  <View style={styles.toggleContainer}>
-                    <Toggle value={values.socialActivity} onValueChange={setKey('socialActivity')} />
-                  </View>
-                }
-              />
-            </View>
-            
-            <View style={styles.divider} />
-            
-            <View style={styles.rowWrapper}>
-              <ListRow
-                isLast
-                title="마케팅 정보 수신"
-                subtitle="이벤트 및 혜택 소식을 보내드려요"
-                right={
-                  <View style={styles.toggleContainer}>
-                    <Toggle value={values.marketing} onValueChange={setKey('marketing')} />
                   </View>
                 }
               />
@@ -138,10 +78,6 @@ const styles = StyleSheet.create({
   },
   sectionContainer: {
     marginBottom: 24, // 섹션 간 간격 최적화
-  },
-  labelWrapper: {
-    marginBottom: 8,
-    marginLeft: 4,
   },
   card: {
     borderRadius: 16,

@@ -3,6 +3,7 @@ import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import { hydrateCurrentTrip } from '@/store/useTripStore';
+import { hydrateProfile } from '@/store/useProfileStore';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -35,6 +36,7 @@ export default function RootLayout() {
   // AsyncStorage에 저장돼 있던 활성 폴더로 한 번 채워둡니다.
   useEffect(() => {
     void hydrateCurrentTrip();
+    void hydrateProfile();
   }, []);
 
   if (!fontsLoaded) {
