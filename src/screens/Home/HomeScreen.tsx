@@ -22,6 +22,7 @@ import KakaoMapView, {
   KakaoMapCurrentLocation,
 } from '@/components/KakaoMapView';
 import { ClipPreviewModal } from '@/app/clip-preview'
+import MyLocationIcon from '@/assets/images/my-location.svg';
 import { AppText as Text } from '@/components/AppText';
 import { HapticPressable, TripSelector } from '@/components/common';
 import { useTripStore } from '@/store/useTripStore';
@@ -536,6 +537,7 @@ type PullUpSheetProps = {
   categoryResults: SearchResultItem[];
   isSearchingCategory: boolean;
   onPressCategory: (category: Exclude<SearchCategory, "AI">) => void;
+  onPressCompass: () => void;
 };
 
 const CATEGORY_TAGS: {
@@ -555,6 +557,7 @@ function PullUpSheet({
   categoryResults,
   isSearchingCategory,
   onPressCategory,
+  onPressCompass,
 }: PullUpSheetProps) {
   // 0: 오늘의 순간들 확장, DRAG_RANGE: 기본 보기, MAP_FOCUS_TRANSLATE: 지도 크게 보기
   const DRAG_RANGE = SHEET_PEEK_HEIGHT - SHEET_EXPANDED_TOP_OFFSET;
@@ -656,16 +659,30 @@ function PullUpSheet({
   ).current;
 
   return (
-    <Animated.View
-      style={[
-        styles.sheet,
-        {
-          top: SHEET_EXPANDED_TOP_OFFSET,
-          height: SCREEN_HEIGHT - SHEET_EXPANDED_TOP_OFFSET,
-          transform: [{ translateY }],
-        },
-      ]}
-    >
+    <>
+      {/* 시트와 같은 translateY를 공유해서, 시트를 어디까지 끌어올리든
+          항상 시트 맨 위 가장자리보다 한 뼘 위에 떠 있게 합니다. */}
+      <Animated.View
+        style={[
+          styles.compassButtonWrapper,
+          { transform: [{ translateY }] },
+        ]}
+      >
+        <HapticPressable style={styles.compassButton} onPress={onPressCompass}>
+          <MyLocationIcon width={22} height={22} fill="#000000" />
+        </HapticPressable>
+      </Animated.View>
+
+      <Animated.View
+        style={[
+          styles.sheet,
+          {
+            top: SHEET_EXPANDED_TOP_OFFSET,
+            height: SCREEN_HEIGHT - SHEET_EXPANDED_TOP_OFFSET,
+            transform: [{ translateY }],
+          },
+        ]}
+      >
       <View
         {...handlePanResponder.panHandlers}
         hitSlop={{ top: 10, bottom: 10, left: 40, right: 40 }}
@@ -811,7 +828,8 @@ function PullUpSheet({
         clips={previewClips}
         onClose={() => setPreviewClips(null)}
       />
-    </Animated.View>
+      </Animated.View>
+    </>
   );
 }
 
@@ -1834,13 +1852,6 @@ export default function TripHomeScreen() {
           height={SCREEN_HEIGHT}
           pathColor={COLORS.accent}
         />
-
-        <HapticPressable
-          style={styles.compassButton}
-          onPress={() => void fetchCurrentLocation()}
-        >
-          <Ionicons name="compass-outline" size={24} color={COLORS.textPrimary} />
-        </HapticPressable>
       </View>
 
       <TripSelector />
@@ -1851,6 +1862,7 @@ export default function TripHomeScreen() {
         categoryResults={categoryResults}
         isSearchingCategory={isSearching}
         onPressCategory={(category) => void handleCategorySearch(category)}
+        onPressCompass={() => void fetchCurrentLocation()}
       />
 
       <AiRecommendationScreen
@@ -2181,12 +2193,17 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.surface,
     overflow: "hidden",
   },
-  // 현재 위치로 지도를 되돌리는 나침반 버튼. 시트가 최대로 접혔을 때도
-  // 가려지지 않도록 시트 peek 높이보다 위에 둡니다.
-  compassButton: {
+  // 현재 위치로 지도를 되돌리는 나침반 버튼. PullUpSheet의 translateY를
+  // 그대로 공유해서(같은 Animated.Value), 시트를 어디까지 끌어올리든
+  // 항상 시트 맨 위 가장자리보다 위에 떠 있습니다. top 값은 시트가 완전히
+  // 펼쳐졌을 때(translateY=0) 기준 위치입니다.
+  compassButtonWrapper: {
     position: "absolute",
     right: 16,
-    bottom: SHEET_PEEK_HEIGHT + 20,
+    top: SHEET_EXPANDED_TOP_OFFSET - 44 - 16,
+    zIndex: 5,
+  },
+  compassButton: {
     width: 44,
     height: 44,
     borderRadius: 22,
