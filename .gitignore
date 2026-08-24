@@ -53,3 +53,5 @@ example
 server/uploads/
 server/output/
 
+# server
+*.mp4
