@@ -23,11 +23,10 @@ import KakaoMapView, {
 } from '@/components/KakaoMapView';
 import { ClipPreviewModal } from '@/app/clip-preview'
 import { AppText as Text } from '@/components/AppText';
-import { HapticPressable } from '@/components/common';
-import NewTripModal from '@/components/NewTripModal';
-import { useTripStore, selectCurrentTrip } from '@/store/useTripStore';
+import { HapticPressable, TripSelector } from '@/components/common';
+import { useTripStore } from '@/store/useTripStore';
 import { getRecordingsByFolder } from '@/services/recordingService';
-import { getAllFolders, saveFolder, type FolderItem } from '@/services/folderService';
+import type { FolderItem } from '@/services/folderService';
 import { appendTripScheduleStops } from '@/services/trip-schedule-service';
 import type { RecordingData } from '@/types/recording';
 import { ClipItem } from '@/types/home';
@@ -196,6 +195,9 @@ type HomeTopBarProps = {
   onPressCategory: (category: SearchCategory) => void;
 };
 
+// AI 추천 화면(AiRecommendationScreen) 안에서만 쓰는 검색바입니다. 홈 화면
+// 기본 화면에서는 더 이상 안 쓰지만(여행 선택 UI로 교체됨), AI 추천 진입점을
+// 나중에 다시 배치할 때 그대로 재사용할 수 있게 컴포넌트 자체는 남겨둡니다.
 function HomeTopBar({
   query,
   results,
@@ -528,8 +530,32 @@ function RecommendedPlaceCard({ place }: { place: RecommendedPlace }) {
  * ScrollView가 스크롤을 그대로 처리합니다. 이렇게 해야 핸들의 좁은 영역만
  * 잡았을 때뿐 아니라, 콘텐츠 아무 곳이나 아래로 끌어도 시트를 내릴 수 있어요.
  */
-function PullUpSheet({ moments }: { moments: ClipItem[] }) {
-  const router = useRouter();
+type PullUpSheetProps = {
+  moments: ClipItem[];
+  selectedCategory: Exclude<SearchCategory, "AI"> | null;
+  categoryResults: SearchResultItem[];
+  isSearchingCategory: boolean;
+  onPressCategory: (category: Exclude<SearchCategory, "AI">) => void;
+};
+
+const CATEGORY_TAGS: {
+  id: Exclude<SearchCategory, "AI">;
+  label: string;
+  icon: React.ComponentProps<typeof Ionicons>['name'];
+}[] = [
+  { id: "OL7", label: "주유소", icon: "car-sport" },
+  { id: "FD6", label: "음식점", icon: "restaurant" },
+  { id: "CE7", label: "카페", icon: "cafe" },
+  { id: "CS2", label: "편의점", icon: "storefront" },
+];
+
+function PullUpSheet({
+  moments,
+  selectedCategory,
+  categoryResults,
+  isSearchingCategory,
+  onPressCategory,
+}: PullUpSheetProps) {
   // 0: 오늘의 순간들 확장, DRAG_RANGE: 기본 보기, MAP_FOCUS_TRANSLATE: 지도 크게 보기
   const DRAG_RANGE = SHEET_PEEK_HEIGHT - SHEET_EXPANDED_TOP_OFFSET;
   const MAP_FOCUS_TRANSLATE =
@@ -663,9 +689,6 @@ function PullUpSheet({ moments }: { moments: ClipItem[] }) {
         >
           <View style={styles.sectionHeaderRow}>
             <Text style={styles.sectionTitle}>오늘의 순간들</Text>
-            <HapticPressable onPress={() => router.push('/clip-select')}>
-              <Text style={styles.sectionLink}>전체 보기</Text>
-            </HapticPressable>
           </View>
 
           <ScrollView
@@ -690,10 +713,90 @@ function PullUpSheet({ moments }: { moments: ClipItem[] }) {
 
           <View style={[styles.sectionHeaderRow, { marginTop: 24 }]}>
             <Text style={styles.sectionTitle}>추천 장소</Text>
-            <HapticPressable>
-              <Text style={styles.sectionLink}>전체 보기</Text>
-            </HapticPressable>
           </View>
+
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.categoryTagRow}
+          >
+            {CATEGORY_TAGS.map((tag) => {
+              const selected = selectedCategory === tag.id;
+              return (
+                <HapticPressable
+                  key={tag.id}
+                  onPress={() => onPressCategory(tag.id)}
+                  style={[
+                    styles.categoryTagButton,
+                    selected && styles.categoryTagButtonSelected,
+                  ]}
+                >
+                  <Ionicons
+                    name={tag.icon}
+                    size={16}
+                    color={selected ? COLORS.white : COLORS.textPrimary}
+                  />
+                  <Text
+                    style={[
+                      styles.categoryTagText,
+                      selected && styles.categoryTagTextSelected,
+                    ]}
+                  >
+                    {tag.label}
+                  </Text>
+                </HapticPressable>
+              );
+            })}
+          </ScrollView>
+
+          {selectedCategory ? (
+            <View style={styles.categoryResultList}>
+              {isSearchingCategory ? (
+                <Text style={styles.emptyMomentsText}>
+                  주변 장소를 불러오는 중이에요...
+                </Text>
+              ) : categoryResults.length > 0 ? (
+                categoryResults.map((place, index) => (
+                  <View
+                    key={place.id}
+                    style={[
+                      styles.categoryResultItem,
+                      index !== categoryResults.length - 1 &&
+                        styles.categoryResultItemBorder,
+                    ]}
+                  >
+                    <View style={styles.categoryResultIcon}>
+                      <Ionicons
+                        name="location-outline"
+                        size={18}
+                        color={COLORS.accent}
+                      />
+                    </View>
+                    <View style={styles.categoryResultTextArea}>
+                      <Text style={styles.categoryResultTitle} numberOfLines={1}>
+                        {place.title}
+                      </Text>
+                      <Text style={styles.categoryResultSubtitle} numberOfLines={1}>
+                        {place.subtitle}
+                        {place.distance !== undefined
+                          ? ` · ${
+                              place.distance < 1000
+                                ? `${Math.round(place.distance)}m`
+                                : `${(place.distance / 1000).toFixed(1)}km`
+                            }`
+                          : ""}
+                      </Text>
+                    </View>
+                  </View>
+                ))
+              ) : (
+                <Text style={styles.emptyMomentsText}>
+                  주변에 추천할 장소가 없어요
+                </Text>
+              )}
+            </View>
+          ) : null}
+
           <View style={styles.placeRow}>
             {RECOMMENDED_PLACES.map((place) => (
               <RecommendedPlaceCard key={place.id} place={place} />
@@ -725,135 +828,6 @@ function getTripDisplayName(trip: FolderItem | null): string {
   return typeof displayName === "string" && displayName.trim().length > 0
     ? displayName
     : `여행 ${trip.id}`;
-}
-
-type TripSelectorModalProps = {
-  visible: boolean;
-  trips: FolderItem[];
-  currentTrip: FolderItem | null;
-  onSelect: (trip: FolderItem) => void | Promise<void>;
-  onClose: () => void;
-  onCreateTrip: () => void;
-};
-
-function TripSelectorModal({
-  visible,
-  trips,
-  currentTrip,
-  onSelect,
-  onClose,
-  onCreateTrip,
-}: TripSelectorModalProps) {
-  return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="fade"
-      onRequestClose={onClose}
-    >
-      <Pressable style={styles.tripModalBackdrop} onPress={onClose}>
-        <Pressable
-          style={styles.tripModalCard}
-          onPress={(event) => event.stopPropagation()}
-        >
-          <View style={styles.tripModalHandle} />
-
-          <View style={styles.tripModalHeader}>
-            <View>
-              <Text style={styles.tripModalTitle}>여행 선택</Text>
-              <Text style={styles.tripModalSubtitle}>
-                확인하거나 기록할 여행을 선택해주세요.
-              </Text>
-            </View>
-
-            <Pressable
-              hitSlop={10}
-              onPress={onClose}
-              style={styles.tripModalClose}
-            >
-              <Ionicons name="close" size={21} color={COLORS.textSecondary} />
-            </Pressable>
-          </View>
-
-          <ScrollView
-            showsVerticalScrollIndicator={false}
-            style={styles.tripModalList}
-          >
-            {trips.map((trip) => {
-              const selected = currentTrip?.id === trip.id;
-
-              return (
-                <Pressable
-                  key={trip.id}
-                  onPress={() => void onSelect(trip)}
-                  style={({ pressed }) => [
-                    styles.tripOption,
-                    selected && styles.tripOptionSelected,
-                    pressed && styles.tripOptionPressed,
-                  ]}
-                >
-                  <View
-                    style={[
-                      styles.tripOptionIcon,
-                      selected && styles.tripOptionIconSelected,
-                    ]}
-                  >
-                    <Ionicons
-                      name="airplane"
-                      size={20}
-                      color={selected ? COLORS.accent : COLORS.textSecondary}
-                    />
-                  </View>
-
-                  <View style={styles.tripOptionTextArea}>
-                    <Text
-                      numberOfLines={1}
-                      style={[
-                        styles.tripOptionTitle,
-                        selected && styles.tripOptionTitleSelected,
-                      ]}
-                    >
-                      {getTripDisplayName(trip)}
-                    </Text>
-                    <Text style={styles.tripOptionSubtitle}>
-                      여행 기록 보기
-                    </Text>
-                  </View>
-
-                  {selected ? (
-                    <Ionicons
-                      name="checkmark-circle"
-                      size={23}
-                      color={COLORS.accent}
-                    />
-                  ) : (
-                    <Ionicons
-                      name="chevron-forward"
-                      size={19}
-                      color={COLORS.textSecondary}
-                    />
-                  )}
-                </Pressable>
-              );
-            })}
-          </ScrollView>
-
-          <Pressable
-            style={({ pressed }) => [
-              styles.newTripButton,
-              pressed && styles.tripOptionPressed,
-            ]}
-            onPress={onCreateTrip}
-          >
-            <View style={styles.newTripIcon}>
-              <Ionicons name="add" size={22} color={COLORS.textSecondary} />
-            </View>
-            <Text style={styles.newTripText}>새 여행</Text>
-          </Pressable>
-        </Pressable>
-      </Pressable>
-    </Modal>
-  );
 }
 
 function clamp(value: number, min: number, max: number) {
@@ -1507,38 +1481,18 @@ export default function TripHomeScreen() {
   const [currentLocation, setCurrentLocation] =
     useState<KakaoMapCurrentLocation | null>(null);
   const [recordings, setRecordings] = useState<RecordingData[]>([]);
-  const [trips, setTrips] = useState<FolderItem[]>([]);
-  const [tripSelectorVisible, setTripSelectorVisible] = useState(false);
-  const [newTripModalVisible, setNewTripModalVisible] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [searchFocused, setSearchFocused] = useState(false);
-  const [searchResults, setSearchResults] = useState<SearchResultItem[]>([]);
-  const [nearbyPlaces, setNearbyPlaces] = useState<SearchResultItem[]>([]);
-  const [selectedPlace, setSelectedPlace] = useState<SearchResultItem | null>(
-    null,
-  );
   const [isSearching, setIsSearching] = useState(false);
+  const [selectedCategory, setSelectedCategory] =
+    useState<Exclude<SearchCategory, "AI"> | null>(null);
+  const [categoryResults, setCategoryResults] = useState<SearchResultItem[]>(
+    [],
+  );
   const [aiPlannerVisible, setAiPlannerVisible] = useState(false);
   const [aiPlanPlaces, setAiPlanPlaces] = useState<SearchResultItem[]>([]);
   const [aiPlanSelectedIds, setAiPlanSelectedIds] = useState<string[]>([]);
   const [aiRoutePins, setAiRoutePins] = useState<KakaoMapPin[]>([]);
   const [aiPlanConfirmVisible, setAiPlanConfirmVisible] = useState(false);
   const [isAiPlanSaving, setIsAiPlanSaving] = useState(false);
-
-  const loadTrips = useCallback(async () => {
-    try {
-      const folders = await getAllFolders();
-      setTrips(folders);
-    } catch (error) {
-      console.error("[HomeScreen] 여행 목록을 불러오지 못했습니다.", error);
-    }
-  }, []);
-
-  useFocusEffect(
-    useCallback(() => {
-      void loadTrips();
-    }, [loadTrips]),
-  );
 
   // 활성 여행이 바뀔 때마다(전환/새 여행 생성 포함) 지도 핀·오늘의 순간들을
   // 그 여행의 실제 클립 데이터로 다시 채웁니다.
@@ -1569,143 +1523,6 @@ export default function TripHomeScreen() {
 
   const routePins = buildRoutePins(recordings);
   const todayMoments = buildTodayMoments(recordings);
-
-  const searchKakaoPlaces = async (
-    keyword: string,
-  ): Promise<SearchResultItem[]> => {
-    const apiKey = process.env.EXPO_PUBLIC_KAKAO_REST_API_KEY;
-
-    if (!apiKey) {
-      console.error(
-        "[HomeScreen] EXPO_PUBLIC_KAKAO_REST_API_KEY가 설정되지 않았습니다.",
-      );
-      return [];
-    }
-
-    const trimmedKeyword = keyword.trim();
-
-    if (!trimmedKeyword) {
-      return [];
-    }
-
-    const params = new URLSearchParams({
-      query: trimmedKeyword,
-      size: "10",
-    });
-
-    if (currentLocation) {
-      params.append("x", String(currentLocation.lng));
-      params.append("y", String(currentLocation.lat));
-      params.append("sort", "distance");
-    }
-
-    const response = await fetch(
-      `https://dapi.kakao.com/v2/local/search/keyword.json?${params.toString()}`,
-      {
-        headers: {
-          Authorization: `KakaoAK ${apiKey}`,
-        },
-      },
-    );
-
-    if (!response.ok) {
-      const errorText = await response.text();
-
-      console.error(
-        "[HomeScreen] 카카오 장소 검색 실패:",
-        response.status,
-        errorText,
-      );
-
-      throw new Error(`카카오 장소 검색 실패: ${response.status}`);
-    }
-
-    const data = await response.json();
-
-    return (data.documents ?? []).map((place: any) => ({
-      id: String(place.id),
-      title: place.place_name ?? "이름 없는 장소",
-      subtitle:
-        place.road_address_name ||
-        place.address_name ||
-        place.category_name ||
-        "주소 정보 없음",
-      latitude: Number(place.y),
-      longitude: Number(place.x),
-      category: place.category_group_name || place.category_name || "장소",
-      distance: place.distance ? Number(place.distance) : undefined,
-    }));
-  };
-
-  const searchNearbyPlaces = async (
-    place: SearchResultItem,
-  ): Promise<SearchResultItem[]> => {
-    const apiKey = process.env.EXPO_PUBLIC_KAKAO_REST_API_KEY;
-
-    if (!apiKey) {
-      return [];
-    }
-
-    const categoryCodes = ["FD6", "CE7", "AT4"];
-
-    const responses = await Promise.all(
-      categoryCodes.map(async (categoryCode) => {
-        const params = new URLSearchParams({
-          category_group_code: categoryCode,
-          x: String(place.longitude),
-          y: String(place.latitude),
-          radius: "1500",
-          sort: "distance",
-          size: "5",
-        });
-
-        const response = await fetch(
-          `https://dapi.kakao.com/v2/local/search/category.json?${params.toString()}`,
-          {
-            headers: {
-              Authorization: `KakaoAK ${apiKey}`,
-            },
-          },
-        );
-
-        if (!response.ok) {
-          return [];
-        }
-
-        const data = await response.json();
-        return data.documents ?? [];
-      }),
-    );
-
-    const flattened = responses.flat();
-
-    const unique = flattened.filter(
-      (item: any, index: number, array: any[]) =>
-        array.findIndex((other) => other.id === item.id) === index,
-    );
-
-    return unique
-      .map((item: any) => ({
-        id: String(item.id),
-        title: item.place_name ?? "이름 없는 장소",
-        subtitle:
-          item.road_address_name ||
-          item.address_name ||
-          item.category_name ||
-          "주소 정보 없음",
-        latitude: Number(item.y),
-        longitude: Number(item.x),
-        category: item.category_group_name || item.category_name || "장소",
-        distance: item.distance ? Number(item.distance) : undefined,
-      }))
-      .sort(
-        (a: SearchResultItem, b: SearchResultItem) =>
-          (a.distance ?? Number.POSITIVE_INFINITY) -
-          (b.distance ?? Number.POSITIVE_INFINITY),
-      )
-      .filter((item: SearchResultItem) => item.id !== place.id)
-      .slice(0, 10);
-  };
 
   const mapKakaoPlace = (place: any): SearchResultItem => ({
     id: String(place.id),
@@ -1772,22 +1589,19 @@ export default function TripHomeScreen() {
       return;
     }
 
-    const categoryLabel: Record<Exclude<SearchCategory, "AI">, string> = {
-      OL7: "주유소",
-      FD6: "음식점",
-      CE7: "카페",
-      CS2: "편의점",
-    };
+    // 같은 태그를 다시 누르면 선택을 해제하고 목록을 비웁니다(토글).
+    if (selectedCategory === category) {
+      setSelectedCategory(null);
+      setCategoryResults([]);
+      return;
+    }
 
     try {
       setIsSearching(true);
-      setSelectedPlace(null);
-      setNearbyPlaces([]);
-      setSearchFocused(true);
-      setSearchQuery(categoryLabel[category]);
+      setSelectedCategory(category);
 
       const places = await searchCategoryAround(category);
-      setSearchResults(places);
+      setCategoryResults(places);
     } catch (error) {
       console.error("[HomeScreen] 카테고리 검색 실패:", error);
       Alert.alert("검색 실패", "주변 장소를 불러오지 못했습니다.");
@@ -1801,10 +1615,6 @@ export default function TripHomeScreen() {
     setAiPlannerVisible(true);
     setAiPlanPlaces([]);
     setAiPlanSelectedIds([]);
-    setSelectedPlace(null);
-    setNearbyPlaces([]);
-    setSearchFocused(false);
-    setSearchQuery("");
 
     // 위치를 아직 받지 못한 경우에도 빈 화면 대신 예시 일정으로 흐름을 보여줍니다.
     if (!currentLocation) {
@@ -1904,7 +1714,6 @@ export default function TripHomeScreen() {
       setAiPlanPlaces(planPlaces);
       // 가까운 세 곳을 우선 선택해 첫 화면부터 하나의 일정처럼 제안합니다.
       setAiPlanSelectedIds(planPlaces.slice(0, 3).map((place) => place.id));
-      setSearchResults(planPlaces);
     } catch (error) {
       console.error("[HomeScreen] AI 추천 실패:", error);
       // 네트워크·지도 연결 실패여도 화면을 닫지 않고 예시 코스로 대체합니다.
@@ -1975,8 +1784,6 @@ export default function TripHomeScreen() {
       );
       setAiPlanConfirmVisible(false);
       setAiPlannerVisible(false);
-      setSearchResults([]);
-      setSearchFocused(false);
 
       // MyRoute가 이미 열려 있어도 일정 탭을 강제합니다.
       router.navigate({
@@ -1994,84 +1801,32 @@ export default function TripHomeScreen() {
     }
   }, [aiPlanPlaces, aiPlanSelectedIds, currentTrip, isAiPlanSaving, router]);
 
-  const handleSubmitSearch = async () => {
-    const keyword = searchQuery.trim();
 
-    if (!keyword) return;
-
+  const fetchCurrentLocation = useCallback(async () => {
     try {
-      setIsSearching(true);
-      setSelectedPlace(null);
-      setNearbyPlaces([]);
-
-      const results = await searchKakaoPlaces(keyword);
-      setSearchResults(results);
-      setSearchFocused(true);
-
-      if (results.length === 0) {
-        Alert.alert(
-          "검색 결과 없음",
-          `"${keyword}"에 대한 장소를 찾지 못했습니다.`,
-        );
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert("위치 권한 필요", "설정에서 위치 접근을 허용해주세요.");
+        return;
       }
-    } catch (error) {
-      console.error("[HomeScreen] 검색 실패:", error);
-      Alert.alert("검색 실패", "카카오 장소 검색 중 오류가 발생했습니다.");
-    } finally {
-      setIsSearching(false);
-    }
-  };
 
-  const handleSelectSearchResult = async (item: SearchResultItem) => {
-    try {
-      setSearchQuery(item.title);
-      setSelectedPlace(item);
-      setSearchResults([]);
-      setSearchFocused(false);
-      Keyboard.dismiss();
-      setIsSearching(true);
-
-      const nearby = await searchNearbyPlaces(item);
-      setNearbyPlaces(nearby);
+      const { coords } = await Location.getCurrentPositionAsync({});
+      setCurrentLocation({ lat: coords.latitude, lng: coords.longitude });
     } catch (error) {
-      console.error("[HomeScreen] 주변 장소 검색 실패:", error);
-      Alert.alert(
-        "주변 장소 검색 실패",
-        "선택한 장소 주변 정보를 불러오지 못했습니다.",
-      );
-    } finally {
-      setIsSearching(false);
+      // 위치는 지도를 보정하는 용도라, 실패해도 화면 자체는 그대로 동작해야 해서
+      // 조용히 무시합니다(경로 핀 기준으로 지도가 뜹니다).
+      console.warn("현재 위치를 가져오지 못했습니다:", error);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    let isMounted = true;
-
-    (async () => {
-      try {
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status !== "granted") return;
-
-        const { coords } = await Location.getCurrentPositionAsync({});
-        if (isMounted) {
-          setCurrentLocation({ lat: coords.latitude, lng: coords.longitude });
-        }
-      } catch (error) {
-        // 위치는 지도를 보정하는 용도라, 실패해도 화면 자체는 그대로 동작해야 해서
-        // 조용히 무시합니다(경로 핀 기준으로 지도가 뜹니다).
-        console.warn("현재 위치를 가져오지 못했습니다:", error);
-      }
-    })();
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
+    void fetchCurrentLocation();
+  }, [fetchCurrentLocation]);
 
   return (
     <View style={styles.screen}>
       {/* 지도는 네모 박스 안에 갇히지 않고 화면 전체 폭을 그대로 채웁니다.
-          검색바/진행 카드/시트는 전부 그 위에 떠 있는 오버레이예요. */}
+          여행 선택 바/시트는 전부 그 위에 떠 있는 오버레이예요. */}
       <View style={styles.map}>
         <KakaoMapView
           pins={aiRoutePins.length > 0 ? aiRoutePins : routePins}
@@ -2079,135 +1834,24 @@ export default function TripHomeScreen() {
           height={SCREEN_HEIGHT}
           pathColor={COLORS.accent}
         />
+
+        <HapticPressable
+          style={styles.compassButton}
+          onPress={() => void fetchCurrentLocation()}
+        >
+          <Ionicons name="compass-outline" size={24} color={COLORS.textPrimary} />
+        </HapticPressable>
       </View>
 
-      <HomeTopBar
-        query={searchQuery}
-        results={searchResults}
-        searchFocused={searchFocused}
-        isSearching={isSearching}
-        tripTitle={currentTrip ? getTripDisplayName(currentTrip) : "나의 여행"}
-        onChangeQuery={(value) => {
-          setSearchQuery(value);
+      <TripSelector />
 
-          if (!value.trim()) {
-            setSearchResults([]);
-            setNearbyPlaces([]);
-            setSelectedPlace(null);
-          }
-        }}
-        onFocusSearch={() => setSearchFocused(true)}
-        onBlurSearch={() => {
-          // 결과 항목을 누르는 터치 이벤트가 먼저 처리될 수 있도록 약간 늦게 닫습니다.
-          setTimeout(() => setSearchFocused(false), 150);
-        }}
-        onSubmitSearch={handleSubmitSearch}
-        onSelectResult={handleSelectSearchResult}
-        onClearSearch={() => {
-          setSearchQuery("");
-          setSearchResults([]);
-          setNearbyPlaces([]);
-          setSelectedPlace(null);
-          setSearchFocused(true);
-        }}
-        onPressCategory={(category) => {
-          Keyboard.dismiss();
-
-          if (category === "AI") {
-            void handleAIRecommendation();
-            return;
-          }
-
-          void handleCategorySearch(category);
-        }}
-        onPressMyTrip={() => {
-          Keyboard.dismiss();
-          setSearchFocused(false);
-          void loadTrips();
-          setTripSelectorVisible(true);
-        }}
+      <PullUpSheet
+        moments={todayMoments}
+        selectedCategory={selectedCategory}
+        categoryResults={categoryResults}
+        isSearchingCategory={isSearching}
+        onPressCategory={(category) => void handleCategorySearch(category)}
       />
-
-      {selectedPlace ? (
-        <View style={styles.nearbyPanel}>
-          <View style={styles.nearbyHeader}>
-            <View style={styles.nearbyHeaderTextArea}>
-              <Text style={styles.nearbyTitle} numberOfLines={1}>
-                {selectedPlace.title}
-              </Text>
-              <Text style={styles.nearbySubtitle} numberOfLines={1}>
-                {selectedPlace.subtitle}
-              </Text>
-            </View>
-            <Pressable
-              hitSlop={8}
-              onPress={() => {
-                setSelectedPlace(null);
-                setNearbyPlaces([]);
-              }}
-            >
-              <Ionicons name="close" size={20} color={COLORS.textSecondary} />
-            </Pressable>
-          </View>
-
-          <Text style={styles.nearbySectionLabel}>주변 추천</Text>
-
-          {isSearching ? (
-            <Text style={styles.nearbyEmptyText}>
-              주변 장소를 불러오는 중이에요...
-            </Text>
-          ) : nearbyPlaces.length > 0 ? (
-            <ScrollView
-              style={styles.nearbyList}
-              showsVerticalScrollIndicator={false}
-            >
-              {nearbyPlaces.map((place, index) => (
-                <Pressable
-                  key={place.id}
-                  onPress={() => {
-                    setSearchQuery(place.title);
-                    setSelectedPlace(place);
-                  }}
-                  style={({ pressed }) => [
-                    styles.nearbyItem,
-                    index !== nearbyPlaces.length - 1 &&
-                      styles.nearbyItemBorder,
-                    pressed && styles.searchResultItemPressed,
-                  ]}
-                >
-                  <View style={styles.nearbyIcon}>
-                    <Ionicons
-                      name="location-outline"
-                      size={18}
-                      color={COLORS.accent}
-                    />
-                  </View>
-
-                  <View style={styles.nearbyTextArea}>
-                    <Text style={styles.nearbyItemTitle} numberOfLines={1}>
-                      {place.title}
-                    </Text>
-                    <Text style={styles.nearbyItemSubtitle} numberOfLines={1}>
-                      {place.category}
-                      {place.distance !== undefined
-                        ? ` · ${
-                            place.distance < 1000
-                              ? `${Math.round(place.distance)}m`
-                              : `${(place.distance / 1000).toFixed(1)}km`
-                          }`
-                        : ""}
-                    </Text>
-                  </View>
-                </Pressable>
-              ))}
-            </ScrollView>
-          ) : (
-            <Text style={styles.nearbyEmptyText}>주변 추천 장소가 없어요.</Text>
-          )}
-        </View>
-      ) : null}
-
-      <PullUpSheet moments={todayMoments} />
 
       <AiRecommendationScreen
         visible={aiPlannerVisible}
@@ -2232,63 +1876,6 @@ export default function TripHomeScreen() {
         onConfirm={() => void confirmAiPlan()}
       />
 
-      <TripSelectorModal
-        visible={tripSelectorVisible}
-        trips={trips}
-        currentTrip={currentTrip}
-        onClose={() => setTripSelectorVisible(false)}
-        onSelect={async (trip) => {
-          try {
-            await selectCurrentTrip(trip);
-            setTripSelectorVisible(false);
-          } catch (error) {
-            console.error("[HomeScreen] 여행 변경에 실패했습니다.", error);
-            Alert.alert("여행 변경 실패", "여행을 변경하지 못했습니다.");
-          }
-        }}
-        onCreateTrip={() => {
-          setTripSelectorVisible(false);
-          setTimeout(() => setNewTripModalVisible(true), 250);
-        }}
-      />
-
-      <NewTripModal
-        visible={newTripModalVisible}
-        onClose={() => setNewTripModalVisible(false)}
-        onCreated={async (trip) => {
-          const formatDate = (date: Date) => {
-            const year = date.getFullYear();
-            const month = String(date.getMonth() + 1).padStart(2, "0");
-            const day = String(date.getDate()).padStart(2, "0");
-            return `${year}.${month}.${day}.`;
-          };
-
-          const folder: FolderItem = {
-            id: `folder-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-            title: trip.name.trim(),
-            dateRange: `${formatDate(trip.startDate)} ~ ${formatDate(trip.endDate)}`,
-            // clipCount: 0,
-            thumbnail: "",
-            region: trip.region,
-            memo: trip.memo,
-            partySize: trip.partySize,
-            themes: trip.themes,
-            clipLengthSeconds: trip.clipLengthSeconds,
-            shootingStyle: trip.shootingStyle,
-            gridTemplateId: trip.gridTemplateId,
-          };
-
-          try {
-            await saveFolder(folder);
-            await selectCurrentTrip(folder);
-            await loadTrips();
-            setNewTripModalVisible(false);
-          } catch (error) {
-            console.error("[HomeScreen] 새 여행 저장에 실패했습니다.", error);
-            Alert.alert("여행 생성 실패", "새 여행을 저장하지 못했습니다.");
-          }
-        }}
-      />
     </View>
   );
 }
@@ -2594,6 +2181,24 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.surface,
     overflow: "hidden",
   },
+  // 현재 위치로 지도를 되돌리는 나침반 버튼. 시트가 최대로 접혔을 때도
+  // 가려지지 않도록 시트 peek 높이보다 위에 둡니다.
+  compassButton: {
+    position: "absolute",
+    right: 16,
+    bottom: SHEET_PEEK_HEIGHT + 20,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: COLORS.white,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    elevation: 4,
+  },
 
   // 바텀시트
   sheet: {
@@ -2635,7 +2240,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   sectionTitle: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: "800",
     color: COLORS.textPrimary,
   },
@@ -2734,6 +2339,7 @@ const styles = StyleSheet.create({
 
   // 추천 장소
   placeRow: {
+    marginTop: 16,
     flexDirection: "row",
     gap: 12,
   },
@@ -2763,6 +2369,68 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "700",
     color: COLORS.textPrimary,
+  },
+
+  // 추천 장소 아래 카테고리 태그(주유소/음식점/카페/편의점) — 원래 검색창
+  // 포커스 시에만 보이던 태그들을 바텀시트 쪽으로 옮겨왔습니다.
+  categoryTagRow: {
+    marginTop: 5,
+    flexDirection: "row",
+    gap: 8,
+  },
+  categoryTagButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 18,
+    backgroundColor: COLORS.surface,
+  },
+  categoryTagButtonSelected: {
+    backgroundColor: COLORS.accent,
+  },
+  categoryTagText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: COLORS.textPrimary,
+  },
+  categoryTagTextSelected: {
+    color: COLORS.white,
+  },
+  categoryResultList: {
+    marginTop: 12,
+  },
+  categoryResultItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 12,
+  },
+  categoryResultItemBorder: {
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  categoryResultIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: COLORS.accentTint,
+  },
+  categoryResultTextArea: {
+    flex: 1,
+  },
+  categoryResultTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: COLORS.textPrimary,
+  },
+  categoryResultSubtitle: {
+    marginTop: 2,
+    fontSize: 12,
+    color: COLORS.textSecondary,
   },
 
   // 여행 선택 모달
