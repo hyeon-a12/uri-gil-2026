@@ -8,6 +8,7 @@ import { ScreenHeader } from '@/components/common';
 import { RouteMapPreview } from '@/components/RouteMapPreview';
 import { getAllFolders, type FolderItem } from '@/services/folderService';
 import { getRecordingsByFolder } from '@/services/recordingService';
+import { getTripScheduleStops } from '@/services/trip-schedule-service';
 import { buildPlanData, type PlanStop, type PlanTravelLog } from '@/services/tripPlanService';
 
 export default function TripDetailScreen() {
@@ -30,8 +31,11 @@ export default function TripDetailScreen() {
           return;
         }
 
-        const recordings = await getRecordingsByFolder(tripId);
-        const plan = buildPlanData(recordings, folder);
+        const [recordings, scheduleStops] = await Promise.all([
+          getRecordingsByFolder(tripId),
+          getTripScheduleStops(tripId),
+        ]);
+        const plan = buildPlanData(recordings, folder, scheduleStops);
 
         setTrip(folder);
         setStops(plan.stops);
@@ -161,7 +165,9 @@ function TripPlanView({ trip, stops, travelLogs, dayNumbers }: TripPlanViewProps
                       {stop.name}
                     </Text>
                     <Text style={styles.planStopMeta}>
-                      {stop.time} · 클립 {stop.clips.length}개
+                      {stop.source === 'ai-recommendation'
+                        ? 'AI 추천으로 추가됨'
+                        : `${stop.time} · 클립 ${stop.clips.length}개`}
                     </Text>
                   </View>
 

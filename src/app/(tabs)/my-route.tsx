@@ -13,7 +13,7 @@ import {
   type NewTransitLog,
   type TransitLog,
 } from "@/services/transit-log-service";
-import { buildPlanData, type PlanStop } from "@/services/tripPlanService";
+import { buildPlanData, formatClipTime, type PlanStop } from "@/services/tripPlanService";
 import type { RecordingData } from "@/types/recording";
 import { useTripStore } from "@/store/useTripStore";
 import {
@@ -64,6 +64,9 @@ const COLORS = {
   mapCream: MAP_COLORS.mapCream,
 
   shadow: SHARED_COLORS.shadow,
+
+  record: SHARED_COLORS.danger,
+  white: SHARED_COLORS.background,
 };
 
 // 사용자 흐름을 단순화해 '일정'과 '지도' 두 가지 보기만 제공합니다.
@@ -709,7 +712,7 @@ function QuickTransitLogModal({
         try {
           const mediaPermission = await MediaLibrary.requestPermissionsAsync();
           if (mediaPermission.granted) {
-            const mediaAsset = await MediaLibrary.Asset.create(asset.uri);
+            const mediaAsset = await MediaLibrary.createAssetAsync(asset.uri);
             setMediaLibraryAssetId(mediaAsset.id);
           }
         } catch (error) {
@@ -1872,8 +1875,7 @@ export default function MyRouteScreen() {
         }
 
         // 저장 시 보관한 asset ID로 기기 사진첩의 같은 원본 자산을 삭제합니다.
-        const mediaAsset = new MediaLibrary.Asset(log.mediaLibraryAssetId);
-        await mediaAsset.delete();
+        await MediaLibrary.deleteAssetsAsync(log.mediaLibraryAssetId);
       }
 
       const remaining = await removeTransitLog(currentTrip.id, log.id);

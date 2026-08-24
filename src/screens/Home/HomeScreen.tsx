@@ -6,10 +6,15 @@ import {
   Animated,
   PanResponder,
   Dimensions,
+  Pressable,
+  Modal,
+  Alert,
+  Keyboard,
+  TextInput,
+  TouchableOpacity,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
-import * as Haptics from 'expo-haptics';
 import * as Location from 'expo-location';
 import { useRouter, useFocusEffect } from 'expo-router';
 import KakaoMapView, {
@@ -18,9 +23,12 @@ import KakaoMapView, {
 } from '@/components/KakaoMapView';
 import { ClipPreviewModal } from '@/app/clip-preview'
 import { AppText as Text } from '@/components/AppText';
-import { TripSelector, HapticPressable } from '@/components/common';
-import { useTripStore } from '@/store/useTripStore';
+import { HapticPressable } from '@/components/common';
+import NewTripModal from '@/components/NewTripModal';
+import { useTripStore, selectCurrentTrip } from '@/store/useTripStore';
 import { getRecordingsByFolder } from '@/services/recordingService';
+import { getAllFolders, saveFolder, type FolderItem } from '@/services/folderService';
+import { appendTripScheduleStops } from '@/services/trip-schedule-service';
 import type { RecordingData } from '@/types/recording';
 import { ClipItem } from '@/types/home';
 import { COLORS as SHARED_COLORS } from '@/constants/color';
@@ -37,10 +45,6 @@ const COLORS = {
 };
 
 const { height: SCREEN_HEIGHT } = Dimensions.get("window");
-
-// 지도 영역이 화면에서 차지하는 높이. 검색바는 이 위에 떠 있고,
-// 진행 카드는 이 경계에 걸쳐서 떠 있습니다.
-const MAP_HEIGHT = SCREEN_HEIGHT * 0.58;
 
 // 바텀시트가 다 접혔을 때(peek) 화면에 보이는 높이,
 // 다 펼쳤을 때(expanded) 화면 상단에서 남겨둘 여백.
@@ -524,7 +528,8 @@ function RecommendedPlaceCard({ place }: { place: RecommendedPlace }) {
  * ScrollView가 스크롤을 그대로 처리합니다. 이렇게 해야 핸들의 좁은 영역만
  * 잡았을 때뿐 아니라, 콘텐츠 아무 곳이나 아래로 끌어도 시트를 내릴 수 있어요.
  */
-function PullUpSheet({ moments }: { moments: ClipMoment[] }) {
+function PullUpSheet({ moments }: { moments: ClipItem[] }) {
+  const router = useRouter();
   // 0: 오늘의 순간들 확장, DRAG_RANGE: 기본 보기, MAP_FOCUS_TRANSLATE: 지도 크게 보기
   const DRAG_RANGE = SHEET_PEEK_HEIGHT - SHEET_EXPANDED_TOP_OFFSET;
   const MAP_FOCUS_TRANSLATE =
@@ -2661,6 +2666,17 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  thumbnailImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 32.4,
+  },
+  placeholderThumb: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#E0E0E0',
+    borderRadius: 32.4,
   },
   playButtonOverlay: {
     position: "absolute",

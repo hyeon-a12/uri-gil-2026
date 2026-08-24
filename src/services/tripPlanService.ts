@@ -1,11 +1,12 @@
 // 클립을 "일자 + 장소"로 묶어서 여행 일정 타임라인을 만드는 로직.
 //
-// 앱에 아직 "핑/경로 계획" 저장 모델이 없어서, 실제로 트립별로 저장돼 있는 건
-// recordingService의 클립뿐입니다. 그래서 일정은 클립을 장소명 기준으로 묶어서
-// 만듭니다. my-route.tsx(활성 여행)와 trip-detail(임의의 여행 상세)이 이 로직을
-// 공유합니다.
+// 여기에 더해, AI 추천 검색에서 확정해 저장해둔 장소(trip-schedule-service)가
+// 있으면 그 장소들도 일정 맨 앞에 스톱으로 끼워 넣습니다 — 실제 촬영은 아직
+// 안 했지만 "가기로 확정한 곳"이라는 뜻입니다. my-route.tsx(활성 여행)와
+// trip-detail(임의의 여행 상세)이 이 로직을 공유합니다.
 
 import { parseDateRange, type FolderItem } from '@/services/folderService';
+import type { TripScheduleStop } from '@/services/trip-schedule-service';
 import type { RecordingData } from '@/types/recording';
 
 export interface PlanStop {
@@ -14,6 +15,8 @@ export interface PlanStop {
   name: string;
   day: number;
   time: string;
+  /** AI 추천을 확정해서 추가된 스톱인지, 실제 촬영 기록에서 만들어진 스톱인지 구분합니다. */
+  source?: 'ai-recommendation' | 'recording';
   clips: {
     id: string;
     thumbnail: string;
@@ -35,7 +38,7 @@ function formatClipDuration(durationMs?: number): string {
   return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 }
 
-function formatClipTime(recordedAt: string): string {
+export function formatClipTime(recordedAt: string): string {
   const date = new Date(recordedAt);
   return `${String(date.getHours()).padStart(2, '0')}:${String(
     date.getMinutes(),
@@ -70,6 +73,7 @@ function dayIndexOf(recordedAt: string, tripStart: Date | null): number {
 export function buildPlanData(
   recordings: RecordingData[],
   trip: FolderItem | null,
+  savedScheduleStops: TripScheduleStop[] = [],
 ): { stops: PlanStop[]; travelLogs: PlanTravelLog[]; dayNumbers: number[] } {
   const tripStart = trip ? parseDateRange(trip.dateRange)?.start ?? null : null;
 
@@ -119,7 +123,22 @@ export function buildPlanData(
     });
   }
 
-  const stops = stopOrder.map((key) => stopGroups.get(key)!);
+  const recordedStops = stopOrder.map((key) => stopGroups.get(key)!);
+  const aiStops: PlanStop[] = savedScheduleStops.map((stop) => ({
+    id: stop.id,
+    order: 0, // 아래에서 전체 순서를 다시 매길 때 덮어씌워집니다.
+    name: stop.title,
+    day: 1,
+    time: 'AI 추천',
+    source: 'ai-recommendation',
+    clips: [],
+  }));
+
+  // 확정한 AI 추천은 일정의 앞부분에 순서대로, 실제 촬영 기록은 그 뒤에 이어집니다.
+  const stops = [...aiStops, ...recordedStops].map((stop, index) => ({
+    ...stop,
+    order: index + 1,
+  }));
   const dayNumbers = Array.from(
     new Set([...stops.map((s) => s.day), ...travelLogs.map((l) => l.day)]),
   ).sort((a, b) => a - b);
