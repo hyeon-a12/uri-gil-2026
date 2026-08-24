@@ -180,7 +180,7 @@ export default function MyRoutesScreen() {
 
   return (
     <View style={styles.screen}>
-      <ScreenHeader title="내 루트" />
+      <ScreenHeader title="내 여행" />
 
       <View style={styles.body}>
         <View style={styles.tabs}>

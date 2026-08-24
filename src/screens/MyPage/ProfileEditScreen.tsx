@@ -1,15 +1,50 @@
 import React, { useState } from 'react';
 import { View, TextInput, Pressable, StyleSheet, Alert } from 'react-native';
+import { Image } from 'expo-image';
+import * as ImagePicker from 'expo-image-picker';
 import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { AppText as Text } from '@/components/AppText';
 import { colors } from '@/constants/menu-theme';
-import { cardShadow, ScreenHeader } from '@/components/common';
+import { cardShadow, ScreenHeader, PrimaryButton } from '@/components/common';
+import { useProfileStore, updateProfile } from '@/store/useProfileStore';
 
 export default function ProfileEditScreen() {
-  // TODO: 실제로는 서버 값으로 초기화하고, 저장 시 API 호출
-  const [nickname, setNickname] = useState('텅굴이');
-  const [bio, setBio] = useState('여행은 계획보다 발견');
+  const profile = useProfileStore((state) => state.profile);
+
+  const [nickname, setNickname] = useState(profile.nickname);
+  const [bio, setBio] = useState(profile.bio);
+  const [avatarUri, setAvatarUri] = useState(profile.avatarUri);
+
+  const pickAvatar = async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert('권한 필요', '프로필 사진을 바꾸려면 사진 접근 권한이 필요해요.');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+
+    if (!result.canceled && result.assets[0]) {
+      setAvatarUri(result.assets[0].uri);
+    }
+  };
+
+  const handleSave = async () => {
+    const trimmedNickname = nickname.trim();
+    if (!trimmedNickname) {
+      Alert.alert('닉네임을 입력해주세요');
+      return;
+    }
+
+    await updateProfile({ nickname: trimmedNickname, bio: bio.trim(), avatarUri });
+    router.back();
+  };
 
   // TODO: 실제 로그아웃 처리(토큰 삭제, 로그인 화면 이동 등)는 인증 플로우가 생기면 연결합니다.
   const handleLogout = () => {
@@ -33,12 +68,16 @@ export default function ProfileEditScreen() {
 
       <View style={styles.body}>
         <View style={styles.profileCard}>
-          <View style={styles.avatar}>
-            <Feather name="user" size={28} color={colors.accent} />
+          <Pressable style={styles.avatar} onPress={pickAvatar}>
+            {avatarUri ? (
+              <Image source={{ uri: avatarUri }} style={styles.avatarImage} />
+            ) : (
+              <Feather name="user" size={28} color={colors.accent} />
+            )}
             <View style={styles.editDot}>
               <Feather name="edit-2" size={12} color="#fff" />
             </View>
-          </View>
+          </Pressable>
           <Text style={styles.name}>{nickname}</Text>
           <Text style={styles.joinDate}>가입일 2026.03.02</Text>
         </View>
@@ -53,6 +92,8 @@ export default function ProfileEditScreen() {
             <Text style={styles.readonlyText}>카카오 계정 연동됨</Text>
           </View>
         </View>
+
+        <PrimaryButton label="저장" onPress={handleSave} style={styles.saveButton} />
 
         <Pressable style={styles.outlineBtn} onPress={handleLogout}>
           <Text style={styles.outlineBtnText}>로그아웃</Text>
@@ -105,6 +146,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 12,
+    overflow: 'hidden',
+  },
+  avatarImage: {
+    width: '100%',
+    height: '100%',
   },
   editDot: {
     position: 'absolute',
@@ -135,8 +181,8 @@ const styles = StyleSheet.create({
   fieldInput: { flex: 1, fontSize: 14, color: colors.text, paddingVertical: 10 },
   readonlyBox: { backgroundColor: colors.card, borderRadius: 12, padding: 13 },
   readonlyText: { fontSize: 14, color: colors.textSub },
+  saveButton: { marginTop: 6, marginBottom: 12 },
   outlineBtn: {
-    marginTop: 6,
     padding: 13,
     borderRadius: 12,
     borderWidth: 1,

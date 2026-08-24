@@ -1,17 +1,15 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   View,
-  Text,
-  TouchableOpacity,
   ScrollView,
   StyleSheet,
   Animated,
   PanResponder,
   Dimensions,
-  Pressable,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import * as Location from 'expo-location';
 import { useRouter, useFocusEffect } from 'expo-router';
 import KakaoMapView, {
@@ -19,7 +17,8 @@ import KakaoMapView, {
   KakaoMapCurrentLocation,
 } from '@/components/KakaoMapView';
 import { ClipPreviewModal } from '@/app/clip-preview'
-import { TripSelector } from '@/components/common';
+import { AppText as Text } from '@/components/AppText';
+import { TripSelector, HapticPressable } from '@/components/common';
 import { useTripStore } from '@/store/useTripStore';
 import { getRecordingsByFolder } from '@/services/recordingService';
 import type { RecordingData } from '@/types/recording';
@@ -133,9 +132,8 @@ function MomentThumbnail({
   moment: ClipItem;
   onSelect: (moment: ClipItem) => void; }) {
   return (
-    <TouchableOpacity
+    <HapticPressable
       style={styles.cardContainer}
-      activeOpacity={0.7}
       onPress={() => onSelect(moment)}
     >
       <View style={styles.momentThumb}>
@@ -160,7 +158,7 @@ function MomentThumbnail({
       <Text style={styles.momentCaption} numberOfLines={1}>
         {moment.caption}
       </Text>
-    </TouchableOpacity>
+    </HapticPressable>
   );
 }
 
@@ -500,7 +498,7 @@ function HomeTopBar({
 
 function RecommendedPlaceCard({ place }: { place: RecommendedPlace }) {
   return (
-    <TouchableOpacity style={styles.placeCard} activeOpacity={0.85}>
+    <HapticPressable style={styles.placeCard}>
       <View style={styles.placeImagePlaceholder}>
         <Ionicons name="image-outline" size={24} color={COLORS.textSecondary} />
         <View style={styles.placePinBadge}>
@@ -508,7 +506,7 @@ function RecommendedPlaceCard({ place }: { place: RecommendedPlace }) {
         </View>
       </View>
       <Text style={styles.placeName}>{place.name}</Text>
-    </TouchableOpacity>
+    </HapticPressable>
   );
 }
 
@@ -660,9 +658,9 @@ function PullUpSheet({ moments }: { moments: ClipMoment[] }) {
         >
           <View style={styles.sectionHeaderRow}>
             <Text style={styles.sectionTitle}>오늘의 순간들</Text>
-            <TouchableOpacity onPress={() => router.push('/clip-select')}>
+            <HapticPressable onPress={() => router.push('/clip-select')}>
               <Text style={styles.sectionLink}>전체 보기</Text>
-            </TouchableOpacity>
+            </HapticPressable>
           </View>
 
           <ScrollView
@@ -687,9 +685,9 @@ function PullUpSheet({ moments }: { moments: ClipMoment[] }) {
 
           <View style={[styles.sectionHeaderRow, { marginTop: 24 }]}>
             <Text style={styles.sectionTitle}>추천 장소</Text>
-            <TouchableOpacity>
+            <HapticPressable>
               <Text style={styles.sectionLink}>전체 보기</Text>
-            </TouchableOpacity>
+            </HapticPressable>
           </View>
           <View style={styles.placeRow}>
             {RECOMMENDED_PLACES.map((place) => (

@@ -56,7 +56,7 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   body: { flex: 1, paddingHorizontal: 16 },
   content: { paddingBottom: 40 },
-  card: { marginBottom: 4 },
+  card: { marginBottom: 28 },
   cardLarge: { marginBottom: 16 },
   footNote: { fontSize: 11, color: colors.textTertiary, textAlign: 'center', marginTop: 4, lineHeight: 18 },
 });

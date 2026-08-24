@@ -13,6 +13,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { PrimaryButton } from '@/components/common';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
@@ -128,13 +129,11 @@ export default function LoginScreen() {
               </Text>
             </TouchableOpacity>
 
-            <TouchableOpacity
-              style={styles.loginButton}
-              activeOpacity={0.85}
+            <PrimaryButton
+              label="로그인"
               onPress={handleLogin}
-            >
-              <Text style={styles.loginButtonText}>로그인</Text>
-            </TouchableOpacity>
+              style={styles.loginButton}
+            />
           </View>
 
           <View style={styles.joinRow}>
@@ -261,18 +260,7 @@ const styles = StyleSheet.create({
   },
 
   loginButton: {
-    height: 56,
-    borderRadius: 16,
-    backgroundColor: '#FF7F5C',
-    alignItems: 'center',
-    justifyContent: 'center',
     marginTop: 14,
-  },
-
-  loginButtonText: {
-    fontFamily: 'SpoqaHanSansNeo-Bold',
-    color: '#FFFFFF',
-    fontSize: 16,
   },
 
   joinRow: {

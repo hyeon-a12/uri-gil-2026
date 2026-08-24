@@ -11,13 +11,7 @@ interface Notice {
 }
 
 // TODO: 실제로는 API에서 받아옴
-const NOTICES: Notice[] = [
-  { id: '1', title: '전주 한옥마을 혼잡도 실시간 안내 업데이트', date: '2026-08-01' },
-  { id: '2', title: '여행 종료 시 자동 여정 리포트 생성 기능 안내', date: '2026-07-29' },
-  { id: '3', title: '서비스 점검 안내 (7/25 새벽 2시~4시)', date: '2026-07-24' },
-  { id: '4', title: '개인정보 처리방침 개정 안내', date: '2026-07-10' },
-  { id: '5', title: '우리길 출시를 축하합니다', date: '2026-06-20' },
-];
+const NOTICES: Notice[] = [];
 
 const NEW_BADGE_DAYS = 7;
 
@@ -49,6 +43,11 @@ export default function NoticeScreen() {
             data={NOTICES}
             keyExtractor={(item) => item.id}
             scrollEnabled={false}
+            ListEmptyComponent={
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyText}>아직 공지사항이 없어요</Text>
+              </View>
+            }
             renderItem={({ item, index }) => (
               <Pressable
                 style={[styles.row, index === NOTICES.length - 1 && styles.rowLast]}
@@ -85,6 +84,8 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
   },
   rowLast: { borderBottomWidth: 0 },
+  emptyState: { paddingVertical: 40, alignItems: 'center' },
+  emptyText: { fontSize: 13, color: colors.textTertiary },
   rowTop: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   newBadge: { backgroundColor: colors.accent, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 },
   newBadgeText: { fontSize: 9, fontWeight: '800', color: '#fff' },
