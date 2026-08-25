@@ -3036,7 +3036,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     flex: 1.35,
     flexDirection: "row",
-    gap: 7,
+    gap: 7, 
     height: 50,
     justifyContent: "center",
   },

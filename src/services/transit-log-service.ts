@@ -66,7 +66,7 @@ export async function removeTransitLog(
   tripId: string,
   logId: string,
 ): Promise<TransitLog[]> {
-  const existing = await getTransitLogs(tripId);
+  const existing = await getTransitLogs(tripId); 
   const remaining = existing.filter((log) => log.id !== logId);
   await AsyncStorage.setItem(storageKey(tripId), JSON.stringify(remaining));
   return remaining;
