@@ -196,36 +196,21 @@ function buildMapPins(
  */
 export default function LocationConfirmScreen() {
   const {
-    videoUris: videoUrisParam,
-    durationsMs: durationsMsParam,
-    gridGroupId,
+    videoUri,
+    durationMs: durationMsParam,
     latitude: latitudeParam,
     longitude: longitudeParam,
   } = useLocalSearchParams<{
-    videoUris?: string;
-    durationsMs?: string;
-    gridGroupId?: string;
+    videoUri?: string;
+    durationMs?: string;
     latitude?: string;
     longitude?: string;
   }>();
 
-  const videoUris = useMemo<string[]>(() => {
-    if (!videoUrisParam) return [];
-    try {
-      return JSON.parse(videoUrisParam) as string[];
-    } catch {
-      return [];
-    }
-  }, [videoUrisParam]);
-
-  const durationsMs = useMemo<number[]>(() => {
-    if (!durationsMsParam) return [];
-    try {
-      return JSON.parse(durationsMsParam) as number[];
-    } catch {
-      return [];
-    }
-  }, [durationsMsParam]);
+  const durationMs = useMemo(() => {
+    const parsed = Number(durationMsParam);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }, [durationMsParam]);
 
   const routeCoordinates = useMemo<CapturedCoordinates | null>(() => {
     const latitude = parseCoordinate(latitudeParam);
@@ -253,8 +238,6 @@ export default function LocationConfirmScreen() {
   const [manualPlaceName, setManualPlaceName] = useState("");
   const [manualAddress, setManualAddress] = useState("");
 
-  const videoUri = videoUris[0];
-  const isGridSet = videoUris.length > 1;
   const searchRequestIdRef = useRef(0);
   const insets = useSafeAreaInsets();
 
@@ -465,27 +448,23 @@ export default function LocationConfirmScreen() {
     }
 
     try {
-      for (let i = 0; i < videoUris.length; i += 1) {
-        const uri = videoUris[i];
-        await saveRecording({
-          recordedAt: new Date().toISOString(),
-          videoUri: uri,
-          thumbnail: uri,
-          durationMs: durationsMs[i] ?? 0,
-          folderId: currentTrip.id,
-          userId: "guest",
-          location: {
-            // 검색 결과의 Kakao 좌표 또는 직접 입력 장소의 촬영 좌표를 저장합니다.
-            latitude: placeToSave.latitude,
-            longitude: placeToSave.longitude,
-            placeName:
-              placeToSave.id === "manual-place" && manualAddress.trim()
-                ? `${placeToSave.name} · ${placeToSave.address}`
-                : placeToSave.name,
-          },
-          ...(isGridSet ? { gridGroupId, gridSlotIndex: i } : {}),
-        });
-      }
+      await saveRecording({
+        recordedAt: new Date().toISOString(),
+        videoUri,
+        thumbnail: videoUri,
+        durationMs,
+        folderId: currentTrip.id,
+        userId: "guest",
+        location: {
+          // 검색 결과의 Kakao 좌표 또는 직접 입력 장소의 촬영 좌표를 저장합니다.
+          latitude: placeToSave.latitude,
+          longitude: placeToSave.longitude,
+          placeName:
+            placeToSave.id === "manual-place" && manualAddress.trim()
+              ? `${placeToSave.name} · ${placeToSave.address}`
+              : placeToSave.name,
+        },
+      });
 
       Alert.alert(
         "클립이 저장되었습니다",
@@ -545,18 +524,6 @@ export default function LocationConfirmScreen() {
                 다시 촬영하기
               </Text>
             </Pressable>
-
-            {isGridSet && (
-              <View
-                style={[styles.gridBadge, { top: insets.top + 10 }]}
-                pointerEvents="none"
-              >
-                <Ionicons name="apps-outline" size={13} color="#FFFFFF" />
-                <Text allowFontScaling={false} style={styles.gridBadgeText}>
-                  그리드 {videoUris.length}칸 동시 촬영
-                </Text>
-              </View>
-            )}
           </View>
 
           <Animated.View style={[styles.sheet, { height: sheetHeight }]}>
@@ -871,18 +838,6 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     fontWeight: "700",
   },
-  gridBadge: {
-    position: "absolute",
-    right: 16,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: 14,
-    backgroundColor: "rgba(0,0,0,0.55)",
-  },
-  gridBadgeText: { color: "#FFFFFF", fontSize: 11, fontWeight: "700" },
   sheet: {
     paddingHorizontal: 20,
     paddingBottom: 18,

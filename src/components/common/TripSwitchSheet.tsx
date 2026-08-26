@@ -105,7 +105,6 @@ export function TripSwitchSheet({ visible, onClose }: Props) {
       themes: trip.themes,
       clipLengthSeconds: trip.clipLengthSeconds,
       shootingStyle: trip.shootingStyle,
-      gridTemplateId: trip.gridTemplateId,
     };
 
     try {

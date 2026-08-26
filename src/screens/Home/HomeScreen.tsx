@@ -101,19 +101,7 @@ function buildTodayMoments(recordings: RecordingData[]): ClipItem[] {
     durationLabel: formatClipDuration(r.durationMs),
     caption: r.location.placeName ?? "장소 미지정",
     isNew: index === 0,
-    gridGroupId: r.gridGroupId,
-    gridSlotIndex: r.gridSlotIndex,
   }));
-}
-
-/** 탭한 클립이 그리드 세트의 일부면 같은 세트의 다른 칸들도 같이 찾아서, 미리보기를
- * 그리드로 합쳐서 열 수 있게 합니다(2명 이상일 때만 그리드로 취급). */
-function getPreviewGroup(moment: ClipItem, moments: ClipItem[]): ClipItem[] {
-  if (!moment.gridGroupId) return [moment];
-  const members = moments
-    .filter((m) => m.gridGroupId === moment.gridGroupId)
-    .sort((a, b) => (a.gridSlotIndex ?? 0) - (b.gridSlotIndex ?? 0));
-  return members.length > 1 ? members : [moment];
 }
 
 interface RecommendedPlace {
@@ -570,7 +558,7 @@ function PullUpSheet({
   const dragStartRef = useRef(DRAG_RANGE);
   const scrollOffsetRef = useRef(0); // 내부 ScrollView가 지금 맨 위(0)인지 추적
 
-  const [previewClips, setPreviewClips] = useState<ClipItem[] | null>(null);
+  const [previewClip, setPreviewClip] = useState<ClipItem | null>(null);
 
   useEffect(() => {
     const id = translateY.addListener(({ value }) => {
@@ -718,7 +706,7 @@ function PullUpSheet({
                 <MomentThumbnail
                   key={moment.id}
                   moment={moment}
-                  onSelect={() => setPreviewClips(getPreviewGroup(moment, moments))}
+                  onSelect={() => setPreviewClip(moment)}
                 />
               ))
             ) : (
@@ -825,8 +813,8 @@ function PullUpSheet({
       </View>
 
       <ClipPreviewModal
-        clips={previewClips}
-        onClose={() => setPreviewClips(null)}
+        clip={previewClip}
+        onClose={() => setPreviewClip(null)}
       />
       </Animated.View>
     </>

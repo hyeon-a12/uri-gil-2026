@@ -13,9 +13,9 @@ import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { setActiveFolder, clearActiveFolder, getActiveFolder } from '@/services/activeFolderService';
+import { clearActiveFolder, getActiveFolder } from '@/services/activeFolderService';
 import { getAllFolders, saveFolder, deleteFolder as deleteFolderFromStorage, FolderItem } from '@/services/folderService';
-import { countDisplayItems, getRecordingsByFolder } from '@/services/recordingService';
+import { getRecordingsByFolder } from '@/services/recordingService';
 import { useTripStore } from '@/store/useTripStore';
 import NewTripModal from '@/components/NewTripModal';
 import { COLORS as SHARED_COLORS } from '@/constants/color';
@@ -69,7 +69,7 @@ export default function ClipManageScreen() {
           const records = await getRecordingsByFolder(f.id);
           return {
             ...f,
-            clipCount: countDisplayItems(records),
+            clipCount: records.length,
             isCurrentActive: f.id === activeId,
           };
         }),
@@ -133,7 +133,6 @@ export default function ClipManageScreen() {
       themes: trip.themes,
       clipLengthSeconds: trip.clipLengthSeconds,
       shootingStyle: trip.shootingStyle,
-      gridTemplateId: trip.gridTemplateId,
     };
 
     try {
@@ -145,15 +144,6 @@ export default function ClipManageScreen() {
     } catch (error) {
       console.error('[handleTripCreated] 저장 실패:', error);
       Alert.alert('저장 실패', '폴더를 만드는 중 문제가 발생했습니다.');
-    }
-  };
-
-  const handleConnectCamera = async () => {
-    if (selectedFolderForMenu) {
-      await setActiveFolder(selectedFolderForMenu.id);
-      useTripStore.getState().setCurrentTrip(selectedFolderForMenu);
-      setActiveFolderId(selectedFolderForMenu.id);
-      setSelectedFolderForMenu(null);
     }
   };
 
@@ -277,21 +267,6 @@ export default function ClipManageScreen() {
           <View style={styles.modalOverlay}>
             <TouchableWithoutFeedback>
               <View style={styles.menuBox}>
-                <TouchableOpacity
-                  style={styles.menuItem}
-                  activeOpacity={0.7}
-                  onPress={handleConnectCamera}
-                >
-                  <Ionicons
-                    name="key-outline"
-                    size={20}
-                    color={COLORS.textPrimary}
-                  />
-                  <Text style={styles.menuText}>수정하기?</Text>
-                </TouchableOpacity>
-
-                <View style={styles.menuDivider} />
-
                 <TouchableOpacity
                   style={styles.menuItem}
                   activeOpacity={0.7}
@@ -508,12 +483,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     borderRadius: 10,
     gap: 10,
-  },
-  menuDivider: {
-    height: 1,
-    backgroundColor: COLORS.divider,
-    marginHorizontal: 8,
-    marginVertical: 4,
   },
   menuText: {
     fontSize: 15,

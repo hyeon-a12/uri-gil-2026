@@ -25,7 +25,7 @@ import {
   type FolderItem,
   type FolderStatus,
 } from '@/services/folderService';
-import { countDisplayItems, getRecordingsByFolder } from '@/services/recordingService';
+import { getRecordingsByFolder } from '@/services/recordingService';
 
 const fabShadow = Platform.select({
   ios: {
@@ -66,7 +66,6 @@ type CreatedTrip = {
   themes: string[];
   clipLengthSeconds: number;
   shootingStyle: FolderItem['shootingStyle'];
-  gridTemplateId: FolderItem['gridTemplateId'];
 };
 
 function formatDate(date: Date): string {
@@ -112,7 +111,7 @@ export default function MyRoutesScreen() {
             dateRange: folder.dateRange,
             status: getFolderStatus(folder),
             visitedCount,
-            clipCount: countDisplayItems(recordings),
+            clipCount: recordings.length,
           };
         }),
       );
@@ -167,7 +166,6 @@ export default function MyRoutesScreen() {
       themes: trip.themes,
       clipLengthSeconds: trip.clipLengthSeconds,
       shootingStyle: trip.shootingStyle,
-      gridTemplateId: trip.gridTemplateId,
     };
 
     try {
