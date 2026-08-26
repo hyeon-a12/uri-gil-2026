@@ -1,52 +1,19 @@
 import React, { useCallback, useState } from 'react';
 import { StyleSheet, View, ScrollView, Pressable } from 'react-native';
+import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { AppText as Text } from '@/components/AppText';
+import { Card, ListRow } from '@/components/common';
+import { colors } from '@/constants/menu-theme';
 import { getAllFolders, getFolderStatus } from '@/services/folderService';
 import { getAllRecordings } from '@/services/recordingService';
-import * as SecureStore from 'expo-secure-store';
-
-import { COLORS as SHARED_COLORS } from '@/constants/color';
-const COLORS = {
-  background: SHARED_COLORS.background,
-  card: SHARED_COLORS.background,
-
-  primary: SHARED_COLORS.accent,
-  primaryDark: SHARED_COLORS.accentPressed,// 눌렸을 때나 강조할 때 쓸 어두운 오렌지
-  primarySoft: SHARED_COLORS.main,// 아주 연한 오렌지 배경
-
-  textPrimary: SHARED_COLORS.textPrimary,
-  textSecondary: SHARED_COLORS.textSecondary,// 중간 중요도의 텍스트 (본문 등)
-  textTertiary: SHARED_COLORS.textSecondary,
-
-  border: SHARED_COLORS.border,
-
-  shadow: SHARED_COLORS.shadow,
-};
-const MenuItem = ({
-  title,
-  rightText = '',
-  onPress,
-}: {
-  title: string;
-  rightText?: string;
-  onPress?: () => void;
-}) => (
-  <Pressable style={styles.menuItem} onPress={onPress}>
-    <Text style={styles.menuItemText}>{title}</Text>
-    <View style={styles.menuItemRight}>
-
-      {rightText ? <Text style={styles.menuItemRightText}>{rightText}</Text> : null}
-      <Feather name="chevron-right" size={20} color={COLORS.textTertiary} />
-    </View>
-  </Pressable>
-);
+import { useProfileStore } from '@/store/useProfileStore';
 
 export default function MyPageScreen() {
   const router = useRouter();
-  const [nickname, setNickname] = useState('');
+  const profile = useProfileStore((state) => state.profile);
   const [stats, setStats] = useState({
     completedRoutes: 0,
     recordedClips: 0,
@@ -85,38 +52,31 @@ export default function MyPageScreen() {
   );
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
       <ScrollView
         style={styles.container}
         contentContainerStyle={styles.contentContainer}
+        showsVerticalScrollIndicator={false}
       >
-
-        
-        <View style={styles.headerToolbar}>
-          <Feather name="bell" size={24} color={COLORS.textPrimary} style={styles.icon} />
-        </View>
-
         <View style={styles.greetingSection}>
           <View style={styles.profileCircle}>
-            <Feather name="user" size={24} color={COLORS.textTertiary} />
+            {profile.avatarUri ? (
+              <Image source={{ uri: profile.avatarUri }} style={styles.profileCircleImage} />
+            ) : (
+              <Feather name="user" size={24} color={colors.textTertiary} />
+            )}
           </View>
-          <Text style={styles.greetingText}>
-            안녕하세요{'\n'}{nickname}님
-          </Text>
+          <Text style={styles.greetingText}>안녕하세요 {profile.nickname}님</Text>
         </View>
 
         <View style={styles.section}>
-
-          <View style={styles.orderCard}>
+          <Card style={styles.orderCard}>
             <View style={styles.orderCardHeader}>
               <Text style={styles.orderCardTitle}>
-                {nickname}님이 기록한 여행이에요
+                {profile.nickname}님이 기록한 여행이에요
               </Text>
-              <Feather name="chevron-right" size={18} color={COLORS.textSecondary} />
             </View>
-            <Text style={styles.orderCardDesc}>날짜 ?</Text>
 
-            
             <View style={styles.orderStatusContainer}>
               {[
                 { label: '완료한 루트', value: stats.completedRoutes },
@@ -129,86 +89,62 @@ export default function MyPageScreen() {
                 </View>
               ))}
             </View>
-          </View>
+          </Card>
         </View>
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>나의 활동</Text>
 
-          <View style={styles.activityCardList}>
-            {[
-              { title: '내 루트', icon: 'map' as const, route: '/my-routes' as const },
-              { title: '촬영한 클립', icon: 'film' as const, route: '/my-clips' as const },
-              { title: '방문한 장소', icon: 'map-pin' as const, route: '/visited-places' as const },
-            ].map((item) => (
-              <Pressable
-                key={item.title}
-                style={styles.activityCard}
-                onPress={item.route ? () => router.push(item.route) : undefined}
-              >
-                <Feather name={item.icon} size={22} color={COLORS.primary} />
-                <Text style={styles.activityCardTitle}>{item.title}</Text>
-              </Pressable>
-            ))}
-          </View>
-        </View>
-
-        <View style={styles.section}>
-          <View style={styles.menuCard}>
-            <Text style={styles.sectionTitle}>나의 정보</Text>
-            <MenuItem title="나의 정보 관리" onPress={() => router.push('/profile-edit')} />
-            <MenuItem title="알림 설정" onPress={() => router.push('/notification-settings')} />
-            <MenuItem title="위치 정보 및 개인정보 처리방침" onPress={() => router.push('/privacy-policy')} />
-          </View>
-        </View>
-
-        <View style={styles.section}>
-          <View style={styles.menuCard}>
-            <View style={styles.sectionHeaderRow}>
-              <Text style={styles.sectionTitle}>고객센터</Text>
+          <Pressable
+            style={({ pressed }) => [
+              styles.activityCard,
+              pressed && styles.activityCardPressed,
+            ]}
+            onPress={() => router.push('/my-routes')}
+          >
+            <View style={styles.activityIconCircle}>
+              <Feather name="map" size={20} color={colors.accent} />
             </View>
-            <MenuItem title=" Q&A 리스트" onPress={() => router.push('/faq')} />
-            <MenuItem title="1:1 문의하기" onPress={() => router.push('/inquiry')} />
-            <MenuItem title="공지사항" onPress={() => router.push('/notice')} />
-          </View>
+            <Text style={styles.activityCardTitle}>내 여행</Text>
+            <Feather name="chevron-right" size={20} color={colors.textTertiary} />
+          </Pressable>
         </View>
 
         <View style={styles.section}>
-          <View style={styles.menuCard}>
-            <Text style={styles.sectionTitle}>프로그램 정보</Text>
-
-            <View style={[styles.menuItem, { borderBottomWidth: 0 }]}>
-              <Text style={styles.menuItemText}>현재 버전</Text>
-              <Text style={styles.versionText}>Version 3.5.1</Text>
-            </View>
-          </View>
+          <Card style={styles.menuCard}>
+            <ListRow
+              title="나의 정보 관리"
+              onPress={() => router.push('/profile-edit')}
+              style={styles.menuRow}
+            />
+            <ListRow
+              title="알림 설정"
+              onPress={() => router.push('/notification-settings')}
+              style={styles.menuRow}
+            />
+            <ListRow
+              title="위치 정보 및 개인정보 처리방침"
+              onPress={() => router.push('/privacy-policy')}
+              numberOfLines={1}
+              style={styles.menuRow}
+            />
+            <ListRow
+              isLast
+              title="공지사항"
+              onPress={() => router.push('/notice')}
+              style={styles.menuRow}
+            />
+          </Card>
         </View>
-
-        <View style={styles.footer}>
-
-          <View style={styles.footerCsBox}>
-            <Text style={styles.footerCsTitle}>고객센터 <Text style={styles.footerCsNumber}>1588-7667</Text> (유료)</Text>
-            <Text style={styles.footerCsTime}>평일 9:30~18:00</Text>
-          </View>
-
-          
-          <View style={styles.footerLinks}>
-            {['로그아웃', '고객센터', '이용약관'].map((link, idx) => (
-              <Text key={idx} style={styles.footerLinkText}>{link}</Text>
-            ))}
-
-            <Text style={[styles.footerLinkText, { fontWeight: 'bold', color: COLORS.textPrimary }]}>개인정보처리방침</Text>
-          </View>
-        </View>
-
       </ScrollView>
     </SafeAreaView>
   );
 }
+
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: colors.bg,
   },
   container: {
     flex: 1,
@@ -216,91 +152,58 @@ const styles = StyleSheet.create({
   contentContainer: {
     paddingBottom: 60,
   },
-  headerToolbar: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 8,
-    gap: 16,
-  },
-  icon: {
-    marginLeft: 8,
-  },
   greetingSection: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 14,
     paddingHorizontal: 20,
-    paddingTop: 12,
+    paddingTop: 20,
     paddingBottom: 24,
   },
   profileCircle: {
     width: 52,
     height: 52,
     borderRadius: 26,
-    backgroundColor: COLORS.card,
+    backgroundColor: colors.card,
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  profileCircleImage: {
+    width: '100%',
+    height: '100%',
   },
   greetingText: {
-    fontSize: 26,
-    fontWeight: 'bold',
-    color: COLORS.textPrimary,
-    lineHeight: 32,
+    fontSize: 22,
+    fontWeight: '800',
+    color: colors.text,
+    lineHeight: 28,
   },
   section: {
     paddingHorizontal: 20,
     paddingVertical: 7,
   },
   sectionTitle: {
-    fontSize: 19,
-    color: COLORS.textPrimary,
-    marginBottom: 16,
-    fontWeight: 'bold',
-  },
-  sectionHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 17,
-  },
-  shortcutBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  shortcutText: {
-    fontSize: 12,
-    color: COLORS.textTertiary,
-    marginRight: 2,
+    fontSize: 16,
+    color: colors.text,
+    marginBottom: 12,
+    fontWeight: '800',
   },
   orderCard: {
-    backgroundColor: COLORS.card,
-    borderRadius: 23,
     padding: 20,
-    shadowColor: COLORS.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
   },
   orderCardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 6,
+    marginBottom: 20,
   },
   orderCardTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: COLORS.textPrimary,
-  },
-  orderCardDesc: {
-    fontSize: 12,
-    color: COLORS.textTertiary,
-    marginBottom: 24,
+    fontSize: 15,
+    fontWeight: '700',
+    color: colors.text,
   },
   orderStatusContainer: {
     flexDirection: 'row',
@@ -311,113 +214,54 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flex: 1,
   },
+  // 이 화면에서 사용자가 제일 궁금해할 숫자라, sectionTitle(16)보다도 크고
+  // accent 컬러로 확실히 튀게 강조합니다.
   orderStatusNumber: {
-    fontSize: 22,
-    fontWeight: '600',
-    color: COLORS.textSecondary,
-    marginBottom: 8,
+    fontSize: 24,
+    fontWeight: '800',
+    color: colors.accent,
+    marginBottom: 6,
   },
   orderStatusLabel: {
     fontSize: 11,
-    color: COLORS.textSecondary,
-  },
-  activityCardList: {
-    flexDirection: 'row',
-    gap: 8,
+    color: colors.textSub,
+    fontWeight: '600',
   },
   activityCard: {
-    flex: 1,
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: COLORS.card,
-    borderRadius: 23,
-    paddingVertical: 20,
-    paddingHorizontal: 8,
-    gap: 10,
-    shadowColor: COLORS.shadow,
+    gap: 12,
+    backgroundColor: colors.card,
+    borderRadius: 20,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 8,
     elevation: 2,
+  },
+  activityCardPressed: {
+    opacity: 0.85,
+  },
+  activityIconCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.accentSoft,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   activityCardTitle: {
-    fontSize: 13,
-    fontWeight: '500',
-    color: COLORS.textPrimary,
-    textAlign: 'center',
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '700',
+    color: colors.text,
   },
   menuCard: {
-    backgroundColor: COLORS.card,
-    borderRadius: 23,
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 4,
-    shadowColor: COLORS.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  menuItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 18,
-  },
-  menuItemText: {
-    fontSize: 16,
-    color: COLORS.textPrimary,
-    fontWeight: '500',
-  },
-  menuItemRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  menuItemRightText: {
-    fontSize: 14,
-    color: COLORS.textTertiary,
-    marginRight: 8,
-  },
-  versionText: {
-    fontSize: 14,
-    color: COLORS.textTertiary,
-  },
-  footer: {
-    backgroundColor: COLORS.background,
-    padding: 20,
-    paddingBottom: 40,
-  },
-  footerCsBox: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: COLORS.card,
     padding: 16,
-    borderRadius: 8,
-    marginBottom: 20,
   },
-  footerCsTitle: {
-    fontSize: 13,
-    color: COLORS.textSecondary,
-  },
-  footerCsNumber: {
-    fontSize: 15,
-    fontWeight: 'bold',
-    color: COLORS.textPrimary,
-  },
-  footerCsTime: {
-    fontSize: 12,
-    color: COLORS.textTertiary,
-  },
-  footerLinks: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-    gap: 12,
-  },
-  footerLinkText: {
-    fontSize: 12,
-    color: COLORS.textSecondary,
-    marginBottom: 8,
+  menuRow: {
+    paddingVertical: 20,
   },
 });
