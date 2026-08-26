@@ -307,6 +307,8 @@ async function renderVideo(exportData: {
     formData.append('clipMetadata', JSON.stringify(exportData.clips.map((c: any) => ({
       id: c.id,
       isMuted: c.isMuted,
+      placeName: c.placeName,
+      recordedAt: c.recordedAt,
     }))));
 
     if (exportData.folderId) {
@@ -994,6 +996,8 @@ export default function VideoEditScreen() {
                 id: clip.id,
                 videoUri: clip.videoUri ?? '',
                 isMuted: getEditState(clip.id).isMuted,
+                placeName: clip.placeName ?? '', 
+                recordedAt: clip.recordedAt ?? '',
               })),
               globalSetting: {
                 infoContentType: globalEditState.infoContentType,
