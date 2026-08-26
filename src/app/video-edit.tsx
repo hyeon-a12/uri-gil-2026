@@ -146,7 +146,7 @@ function getFontFamily(fontId: FontId, bold: boolean): string {
 const TEXT_COLOR_OPTIONS = ['#FFFFFF', '#222222', '#FF7F5C', '#FFD54F', '#7EC8E3'];
 
 const MIN_TEXT_FONT_SIZE = 10;
-const MAX_TEXT_FONT_SIZE = 28;
+const MAX_TEXT_FONT_SIZE = 60;
 
 function clampFontSize(size: number): number {
   return Math.min(MAX_TEXT_FONT_SIZE, Math.max(MIN_TEXT_FONT_SIZE, size));

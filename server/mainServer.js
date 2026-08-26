@@ -27,8 +27,8 @@ const FONT_MAP = {
     bold: 'MaruBuri-Bold.ttf',
   },
   keriskedu: {
-    regular: 'KERISKEDU_B.ttf',
-    bold: 'KERISKEDU_B-Bold.ttf',
+    regular: 'KERISKEDU_R.ttf',
+    bold: 'KERISKEDU_B.ttf',
   },
   hakgyoansimnadeuri: {
     regular: 'HakgyoansimNadeuri-Light.ttf',
