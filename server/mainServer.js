@@ -16,7 +16,7 @@ const UPLOAD_DIR = path.join(__dirname, 'uploads');
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 });
 
-const FONT_DIR = path.join(__dirname, '..', 'assets', 'fonts');
+const FONT_DIR = path.join(__dirname, 'assets', 'fonts');
 const FONT_MAP = {
   pretendard: {
     regular: 'Pretendard-Regular.ttf',
