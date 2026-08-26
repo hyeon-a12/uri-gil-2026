@@ -99,14 +99,14 @@ function formatTime(recordedAt) {
   return `${hours}\uff1a${minutes}`;
 }
 
-function makeDrawtext(text, xPosition, yPosition, color, bold, fontId) {
+function makeDrawtext(text, xPosition, yPosition, color, bold, fontId, fontSize) {
   const fontPath = getFontPath(fontId, bold);  
   return {
     filter: 'drawtext',
     options: {
       text: text,
       fontfile: fontPath,
-      fontsize: 30,
+      fontsize: fontSize || 30,
       fontcolor: color || 'white',
       x: xPosition,
       y: yPosition,
@@ -177,45 +177,29 @@ app.post('/process-video', upload.array('videos', 20), async(req, res) => {
         if (meta.recordedAt) {
           const timeStr = formatTime(meta.recordedAt);
           filters.push(makeDrawtext(
-            timeStr,
-            x,
-            y,
-            timeStyle.color,
-            timeStyle.bold,
-            timeStyle.fontId,
+            timeStr, x, y,
+            timeStyle.color, timeStyle.bold, timeStyle.fontId, timeStyle.fontSize
           ));
         }
       } else if (infoType === 'location') {
         if (meta.placeName) {
           filters.push(makeDrawtext(
-            meta.placeName,
-            x,
-            y,
-            placeStyle.color,
-            placeStyle.bold,
-            timeStyle.fontId,
+            meta.placeName, x, y,
+            placeStyle.color, placeStyle.bold, placeStyle.fontId, placeStyle.fontSize  // ← fontId 수정
           ));
         }
       } else if (infoType === 'both') {
         if (meta.recordedAt) {
           const timeStr = formatTime(meta.recordedAt);
           filters.push(makeDrawtext(
-            timeStr,
-            x,
-            adjustY(y, -25),
-            timeStyle.color,
-            timeStyle.bold,
-            timeStyle.fontId,
+            timeStr, x, adjustY(y, -25),
+            timeStyle.color, timeStyle.bold, timeStyle.fontId, timeStyle.fontSize
           ));
         }
-        if (meta.placeName) {
+        if (meta.placeName) {   // ← 별도의 if로 분리
           filters.push(makeDrawtext(
-            meta.placeName,
-            x,
-            adjustY(y, 25),
-            placeStyle.color,
-            placeStyle.bold,
-            timeStyle.fontId,
+            meta.placeName, x, adjustY(y, 25),
+            placeStyle.color, placeStyle.bold, placeStyle.fontId, placeStyle.fontSize
           ));
         }
       }
