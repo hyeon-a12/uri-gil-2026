@@ -15,11 +15,12 @@ import {
   View,
 } from "react-native";
 import * as Location from "expo-location";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppText as Text } from "@/components/AppText";
-import { GridVideoPreview } from "@/components/location-confirm/GridVideoPreview";
-import { VideoPreview } from "@/components/location-confirm/VideoPreview";
+import KakaoMapView, {
+  KakaoMapPin,
+} from "@/components/KakaoMapView";
 import { COLORS as APP_COLORS } from "@/constants/color";
 import { saveRecording } from "@/services/recordingService";
 import { useTripStore } from "@/store/useTripStore";
@@ -105,6 +106,88 @@ function formatDistance(distance?: number): string {
   return `${(distance / 1000).toFixed(1)}km`;
 }
 
+// EXPO_PUBLIC_KAKAO_REST_API_KEY가 아직 준비되지 않았을 때(또는 요청 실패 시) 검색 흐름을
+// 계속 데모할 수 있도록 쓰는 목데이터입니다. 촬영 좌표에서 위경도를 살짝 떨어뜨려
+// 만들기 때문에, 실제 검색 결과처럼 거리순 정렬과 반경 표시가 자연스럽게 동작합니다.
+const MOCK_PLACE_SEEDS: {
+  name: string;
+  category: string;
+  address: string;
+  deltaLat: number;
+  deltaLng: number;
+}[] = [
+  { name: "객리단길", category: "관광명소", address: "전주시 완산구 경원동", deltaLat: 0.006, deltaLng: -0.004 },
+  { name: "팔복예술공장", category: "관광명소", address: "전주시 덕진구 팔복동", deltaLat: -0.012, deltaLng: 0.015 },
+  { name: "덕진공원", category: "관광명소", address: "전주시 덕진구 덕진동", deltaLat: 0.018, deltaLng: 0.006 },
+  { name: "한옥마을 전통찻집", category: "카페", address: "전주시 완산구 풍남동", deltaLat: 0.001, deltaLng: 0.001 },
+  { name: "골목 끝 로스터리", category: "카페", address: "전주시 완산구 태조로", deltaLat: -0.003, deltaLng: 0.002 },
+  { name: "전주 콩나물국밥집", category: "음식점", address: "전주시 완산구 중앙동", deltaLat: 0.002, deltaLng: -0.002 },
+  { name: "풍남문 분식", category: "음식점", address: "전주시 완산구 풍남동", deltaLat: -0.001, deltaLng: -0.003 },
+  { name: "전동성당", category: "관광명소", address: "전주시 완산구 태조로", deltaLat: 0.0008, deltaLng: 0.0015 },
+  { name: "오목대", category: "관광명소", address: "전주시 완산구 기린대로", deltaLat: 0.004, deltaLng: 0.003 },
+  { name: "경기전", category: "관광명소", address: "전주시 완산구 태조로", deltaLat: -0.0006, deltaLng: 0.0009 },
+];
+
+function haversineDistanceMeters(
+  a: CapturedCoordinates,
+  b: CapturedCoordinates,
+): number {
+  const R = 6371000;
+  const toRad = (deg: number) => (deg * Math.PI) / 180;
+  const dLat = toRad(b.latitude - a.latitude);
+  const dLng = toRad(b.longitude - a.longitude);
+  const lat1 = toRad(a.latitude);
+  const lat2 = toRad(b.latitude);
+
+  const h =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+
+  return Math.round(2 * R * Math.asin(Math.sqrt(h)));
+}
+
+function buildMockPlaces(
+  center: CapturedCoordinates,
+  keyword: string,
+): KakaoPlace[] {
+  const normalized = keyword.trim().toLowerCase();
+
+  return MOCK_PLACE_SEEDS.filter(
+    (seed) =>
+      !normalized ||
+      seed.name.toLowerCase().includes(normalized) ||
+      seed.category.toLowerCase().includes(normalized),
+  )
+    .map((seed, index) => {
+      const latitude = center.latitude + seed.deltaLat;
+      const longitude = center.longitude + seed.deltaLng;
+      return {
+        id: `mock-${index}-${seed.name}`,
+        name: seed.name,
+        category: seed.category,
+        address: seed.address,
+        distance: haversineDistanceMeters(center, { latitude, longitude }),
+        latitude,
+        longitude,
+      };
+    })
+    .sort((a, b) => (a.distance ?? 0) - (b.distance ?? 0));
+}
+
+/** 검색 결과를 지도 핀으로 변환합니다. 선택된 장소만 포인트 컬러로 강조합니다. */
+function buildMapPins(
+  places: KakaoPlace[],
+  selectedPlaceId: string | undefined,
+): KakaoMapPin[] {
+  return places.map((place, index) => ({
+    id: place.id,
+    label: String(index + 1),
+    lat: place.latitude,
+    lng: place.longitude,
+    color: place.id === selectedPlaceId ? COLORS.primary : "#B9BFC9",
+  }));
+}
+
 /**
  * 촬영 완료 후 장소를 검색하고 확정하는 화면입니다.
  *
@@ -163,6 +246,8 @@ export default function LocationConfirmScreen() {
   const [places, setPlaces] = useState<KakaoPlace[]>([]);
   const [isLoadingPlaces, setIsLoadingPlaces] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
+  // Kakao REST API 키가 아직 앱에서 못 읽는 상태(또는 요청 실패)라 목데이터로 대체했을 때만 true.
+  const [isMockData, setIsMockData] = useState(false);
   const [selectedPlace, setSelectedPlace] = useState<KakaoPlace | null>(null);
   const [isManualEntryOpen, setIsManualEntryOpen] = useState(false);
   const [manualPlaceName, setManualPlaceName] = useState("");
@@ -171,6 +256,7 @@ export default function LocationConfirmScreen() {
   const videoUri = videoUris[0];
   const isGridSet = videoUris.length > 1;
   const searchRequestIdRef = useRef(0);
+  const insets = useSafeAreaInsets();
 
   const sheetHeight = useRef(new Animated.Value(DEFAULT_SHEET_HEIGHT)).current;
   const lastHeightRef = useRef(DEFAULT_SHEET_HEIGHT);
@@ -239,13 +325,16 @@ export default function LocationConfirmScreen() {
   }, [loadFallbackDeviceLocation]);
 
   const searchPlacesAroundShootingLocation = useCallback(
-    async (keyword: string) => {
-      if (!shootingCoordinates) return;
-
+    async (keyword: string, coordinates: CapturedCoordinates) => {
       const apiKey = process.env.EXPO_PUBLIC_KAKAO_REST_API_KEY;
+
+      // 키가 아직 앱에서 못 읽는 상태(REST API 연동 전)라면 네트워크 요청 없이
+      // 바로 목데이터로 검색 흐름을 보여줍니다.
       if (!apiKey) {
-        setSearchError("Kakao REST API 키가 설정되지 않았어요.");
-        setPlaces([]);
+        setIsLoadingPlaces(false);
+        setSearchError(null);
+        setIsMockData(true);
+        setPlaces(buildMockPlaces(coordinates, keyword));
         return;
       }
 
@@ -255,28 +344,22 @@ export default function LocationConfirmScreen() {
 
       try {
         const params = new URLSearchParams({
-          x: String(shootingCoordinates.longitude),
-          y: String(shootingCoordinates.latitude),
+          query: keyword,
+          x: String(coordinates.longitude),
+          y: String(coordinates.latitude),
           radius: String(SEARCH_RADIUS_METERS),
           sort: "distance",
           size: "15",
         });
 
-        let endpoint = "https://dapi.kakao.com/v2/local/search/category.json";
-
-        // 빈 검색창에서는 촬영 위치와 가까운 음식점을 기본 제안합니다.
-        if (keyword) {
-          endpoint = "https://dapi.kakao.com/v2/local/search/keyword.json";
-          params.set("query", keyword);
-        } else {
-          params.set("category_group_code", "FD6");
-        }
-
-        const response = await fetch(`${endpoint}?${params.toString()}`, {
-          headers: {
-            Authorization: `KakaoAK ${apiKey}`,
+        const response = await fetch(
+          `https://dapi.kakao.com/v2/local/search/keyword.json?${params.toString()}`,
+          {
+            headers: {
+              Authorization: `KakaoAK ${apiKey}`,
+            },
           },
-        });
+        );
 
         if (!response.ok) {
           const errorText = await response.text();
@@ -297,16 +380,18 @@ export default function LocationConfirmScreen() {
 
         // 빠르게 타이핑할 때 이전 요청이 늦게 도착해 최신 결과를 덮어쓰지 않도록 막습니다.
         if (requestId === searchRequestIdRef.current) {
+          setIsMockData(false);
           setPlaces(mappedPlaces);
         }
       } catch (error) {
+        // 실제 검색 요청이 실패해도 화면이 막히지 않도록 목데이터로 대체합니다.
+        console.warn(
+          "[LocationConfirm] 검색 실패로 목데이터로 대체합니다:",
+          error,
+        );
         if (requestId === searchRequestIdRef.current) {
-          setPlaces([]);
-          setSearchError(
-            error instanceof Error
-              ? error.message
-              : "주변 장소를 불러오지 못했어요.",
-          );
+          setIsMockData(true);
+          setPlaces(buildMockPlaces(coordinates, keyword));
         }
       } finally {
         if (requestId === searchRequestIdRef.current) {
@@ -314,19 +399,26 @@ export default function LocationConfirmScreen() {
         }
       }
     },
-    [shootingCoordinates],
+    [],
   );
 
   // 350ms 디바운스를 둬서 글자마다 API 요청이 발생하지 않게 합니다.
+  // 검색어가 없을 때는 더 이상 "촬영 위치 주변 추천"을 자동으로 보여주지 않고,
+  // 사용자가 직접 검색해야 목록이 뜹니다.
   useEffect(() => {
-    if (!shootingCoordinates) return;
+    const trimmed = query.trim();
 
-    const timer = setTimeout(
-      () => {
-        void searchPlacesAroundShootingLocation(query.trim());
-      },
-      query.trim().length > 0 ? 350 : 0,
-    );
+    if (!shootingCoordinates || !trimmed) {
+      setPlaces([]);
+      setSearchError(null);
+      setIsMockData(false);
+      setIsLoadingPlaces(false);
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      void searchPlacesAroundShootingLocation(trimmed, shootingCoordinates);
+    }, 350);
 
     return () => clearTimeout(timer);
   }, [query, searchPlacesAroundShootingLocation, shootingCoordinates]);
@@ -347,8 +439,13 @@ export default function LocationConfirmScreen() {
   }, [manualAddress, manualPlaceName, shootingCoordinates]);
 
   const placeToSave = selectedPlace ?? manuallyAddedPlace;
-  const canShowManualEntry =
-    !isLoadingPlaces && (places.length === 0 || Boolean(searchError));
+  // 검색 결과가 있어도 원하는 장소가 없을 수 있어, 로딩 중이 아니면 목록 맨 아래에 항상 노출합니다.
+  const showManualEntry = !isLoadingPlaces;
+
+  const mapPins = useMemo(
+    () => buildMapPins(places, selectedPlace?.id),
+    [places, selectedPlace],
+  );
 
   const handleComplete = async () => {
     if (!placeToSave) return;
@@ -409,24 +506,39 @@ export default function LocationConfirmScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={["top"]}>
+    <View style={styles.safeArea}>
       <KeyboardAvoidingView
         style={styles.keyboardAvoidingView}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         <View style={styles.container}>
-          <View style={styles.topSection}>
+          <View style={styles.mapArea}>
+            <KakaoMapView
+              pins={mapPins}
+              currentLocation={
+                shootingCoordinates
+                  ? {
+                      lat: shootingCoordinates.latitude,
+                      lng: shootingCoordinates.longitude,
+                    }
+                  : null
+              }
+              height={SCREEN_HEIGHT}
+              pathColor={COLORS.primary}
+            />
+
             <Pressable
               onPress={() => router.back()}
               style={({ pressed }) => [
                 styles.backButton,
+                { top: insets.top + 10 },
                 pressed && styles.backButtonPressed,
               ]}
               hitSlop={10}
             >
               <Ionicons
                 name="chevron-back"
-                size={23}
+                size={20}
                 color={COLORS.textPrimary}
               />
               <Text allowFontScaling={false} style={styles.backLabel}>
@@ -434,21 +546,17 @@ export default function LocationConfirmScreen() {
               </Text>
             </Pressable>
 
-            <View style={styles.videoContainer}>
-              {isGridSet ? (
-                <GridVideoPreview videoUris={videoUris} />
-              ) : (
-                <VideoPreview videoUri={videoUri ?? null} />
-              )}
-              {isGridSet && (
-                <View style={styles.gridBadge} pointerEvents="none">
-                  <Ionicons name="apps-outline" size={13} color="#FFFFFF" />
-                  <Text allowFontScaling={false} style={styles.gridBadgeText}>
-                    그리드 {videoUris.length}칸 동시 재생 미리보기
-                  </Text>
-                </View>
-              )}
-            </View>
+            {isGridSet && (
+              <View
+                style={[styles.gridBadge, { top: insets.top + 10 }]}
+                pointerEvents="none"
+              >
+                <Ionicons name="apps-outline" size={13} color="#FFFFFF" />
+                <Text allowFontScaling={false} style={styles.gridBadgeText}>
+                  그리드 {videoUris.length}칸 동시 촬영
+                </Text>
+              </View>
+            )}
           </View>
 
           <Animated.View style={[styles.sheet, { height: sheetHeight }]}>
@@ -508,7 +616,6 @@ export default function LocationConfirmScreen() {
                   setSelectedPlace(null);
                   setIsManualEntryOpen(false);
                 }}
-                placeholder="장소·주소·카테고리 검색"
                 placeholderTextColor={COLORS.textSecondary}
                 returnKeyType="search"
                 autoCorrect={false}
@@ -531,59 +638,124 @@ export default function LocationConfirmScreen() {
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={false}
             >
-              <View style={styles.resultHeader}>
-                <Text style={styles.resultTitle}>
-                  {query.trim()
-                    ? `“${query.trim()}” 검색 결과`
-                    : "촬영 위치 주변 추천"}
-                </Text>
-                {shootingCoordinates && (
-                  <Text style={styles.resultRange}>
-                    반경 {SEARCH_RADIUS_METERS / 1000}km
-                  </Text>
-                )}
-              </View>
+              {query.trim().length === 0 ? null : (
+                <>
+                  <View style={styles.resultHeader}>
+                    <Text style={styles.resultTitle}>
+                      “{query.trim()}” 검색 결과
+                    </Text>
+                    {shootingCoordinates && (
+                      <Text style={styles.resultRange}>
+                        반경 {SEARCH_RADIUS_METERS / 1000}km
+                      </Text>
+                    )}
+                  </View>
 
-              {isLoadingPlaces ? (
-                <View style={styles.statusRow}>
-                  <Ionicons
-                    name="ellipsis-horizontal"
-                    size={22}
-                    color={COLORS.primary}
-                  />
-                  <Text style={styles.statusText}>
-                    주변 장소를 찾고 있어요.
-                  </Text>
-                </View>
-              ) : null}
+                  {isMockData && !isLoadingPlaces ? (
+                    <View style={styles.mockNotice}>
+                      <Ionicons
+                        name="information-circle-outline"
+                        size={16}
+                        color={COLORS.textSecondary}
+                      />
+                      <Text style={styles.mockNoticeText}>
+                        검색 API 연동 전이라 예시 데이터를 보여드리고 있어요.
+                      </Text>
+                    </View>
+                  ) : null}
 
-              {!isLoadingPlaces && searchError ? (
-                <View style={styles.statusRow}>
-                  <Ionicons
-                    name="alert-circle-outline"
-                    size={21}
-                    color={COLORS.primary}
-                  />
-                  <Text style={styles.statusText}>{searchError}</Text>
-                </View>
-              ) : null}
+                  {isLoadingPlaces ? (
+                    <View style={styles.statusRow}>
+                      <Ionicons
+                        name="ellipsis-horizontal"
+                        size={22}
+                        color={COLORS.primary}
+                      />
+                      <Text style={styles.statusText}>
+                        주변 장소를 찾고 있어요.
+                      </Text>
+                    </View>
+                  ) : null}
 
-              {!isLoadingPlaces && !searchError && places.length === 0 ? (
-                <View style={styles.statusRow}>
-                  <Ionicons
-                    name="search-outline"
-                    size={21}
-                    color={COLORS.textSecondary}
-                  />
-                  <Text style={styles.statusText}>
-                    {shootingCoordinates
-                      ? "해당 위치 근처의 장소를 찾지 못했어요."
-                      : "위치 확인 후 검색 결과를 보여드릴게요."}
-                  </Text>
-                </View>
-              ) : null}
+                  {!isLoadingPlaces && searchError ? (
+                    <View style={styles.statusRow}>
+                      <Ionicons
+                        name="alert-circle-outline"
+                        size={21}
+                        color={COLORS.primary}
+                      />
+                      <Text style={styles.statusText}>{searchError}</Text>
+                    </View>
+                  ) : null}
 
-              {canShowManualEntry ? (
+                  {!isLoadingPlaces && !searchError && places.length === 0 ? (
+                    <View style={styles.statusRow}>
+                      <Ionicons
+                        name="search-outline"
+                        size={21}
+                        color={COLORS.textSecondary}
+                      />
+                      <Text style={styles.statusText}>
+                        해당 검색어로 장소를 찾지 못했어요.
+                      </Text>
+                    </View>
+                  ) : null}
+                </>
+              )}
+
+              {places.map((place) => {
+                const selected = selectedPlace?.id === place.id;
+                return (
+                  <Pressable
+                    key={place.id}
+                    onPress={() => {
+                      setSelectedPlace(place);
+                      setIsManualEntryOpen(false);
+                    }}
+                    style={({ pressed }) => [
+                      styles.placeCard,
+                      selected && styles.placeCardSelected,
+                      pressed && styles.placeCardPressed,
+                    ]}
+                  >
+                    <View
+                      style={[
+                        styles.placeIcon,
+                        selected && styles.placeIconSelected,
+                      ]}
+                    >
+                      <Ionicons
+                        name="location"
+                        size={20}
+                        color={selected ? "#FFFFFF" : COLORS.primary}
+                      />
+                    </View>
+                    <View style={styles.placeTextBox}>
+                      <View style={styles.placeNameRow}>
+                        <Text numberOfLines={1} style={styles.placeName}>
+                          {place.name}
+                        </Text>
+                        <Text style={styles.distanceText}>
+                          {formatDistance(place.distance)}
+                        </Text>
+                      </View>
+                      <Text numberOfLines={1} style={styles.placeCategory}>
+                        {place.category}
+                      </Text>
+                      <Text numberOfLines={1} style={styles.placeAddress}>
+                        {place.address}
+                      </Text>
+                    </View>
+                    <View
+                      style={[styles.radio, selected && styles.radioSelected]}
+                    >
+                      {selected && <View style={styles.radioDot} />}
+                    </View>
+                  </Pressable>
+                );
+              })}
+
+              {showManualEntry ? (
                 <View style={styles.manualAddSection}>
                   <Pressable
                     onPress={() => {
@@ -660,63 +832,11 @@ export default function LocationConfirmScreen() {
                   ) : null}
                 </View>
               ) : null}
-
-              {places.map((place) => {
-                const selected = selectedPlace?.id === place.id;
-                return (
-                  <Pressable
-                    key={place.id}
-                    onPress={() => {
-                      setSelectedPlace(place);
-                      setIsManualEntryOpen(false);
-                    }}
-                    style={({ pressed }) => [
-                      styles.placeCard,
-                      selected && styles.placeCardSelected,
-                      pressed && styles.placeCardPressed,
-                    ]}
-                  >
-                    <View
-                      style={[
-                        styles.placeIcon,
-                        selected && styles.placeIconSelected,
-                      ]}
-                    >
-                      <Ionicons
-                        name="location"
-                        size={20}
-                        color={selected ? "#FFFFFF" : COLORS.primary}
-                      />
-                    </View>
-                    <View style={styles.placeTextBox}>
-                      <View style={styles.placeNameRow}>
-                        <Text numberOfLines={1} style={styles.placeName}>
-                          {place.name}
-                        </Text>
-                        <Text style={styles.distanceText}>
-                          {formatDistance(place.distance)}
-                        </Text>
-                      </View>
-                      <Text numberOfLines={1} style={styles.placeCategory}>
-                        {place.category}
-                      </Text>
-                      <Text numberOfLines={1} style={styles.placeAddress}>
-                        {place.address}
-                      </Text>
-                    </View>
-                    <View
-                      style={[styles.radio, selected && styles.radioSelected]}
-                    >
-                      {selected && <View style={styles.radioDot} />}
-                    </View>
-                  </Pressable>
-                );
-              })}
             </ScrollView>
           </Animated.View>
         </View>
       </KeyboardAvoidingView>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -724,43 +844,43 @@ const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: COLORS.background },
   keyboardAvoidingView: { flex: 1 },
   container: { flex: 1, backgroundColor: COLORS.background },
-  topSection: { flex: 1, paddingHorizontal: 18, paddingBottom: 12 },
+  // 지도는 박스 안에 갇히지 않고 화면 폭 전체를 그대로 채웁니다(홈 화면과 동일한 패턴).
+  // 시트가 위로 끌어올려지면 flex:1이 자동으로 줄어들어 지도가 함께 줄고,
+  // 시트를 내리면 그만큼 지도가 위로 넓게 드러납니다.
+  mapArea: { flex: 1, overflow: "hidden" },
   backButton: {
-    minHeight: 48,
+    position: "absolute",
+    left: 16,
+    minHeight: 44,
+    paddingHorizontal: 14,
     flexDirection: "row",
     alignItems: "center",
-    gap: 3,
+    gap: 4,
+    borderRadius: 22,
+    backgroundColor: "#FFFFFF",
+    shadowColor: "#172033",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.14,
+    shadowRadius: 8,
+    elevation: 5,
   },
-  backButtonPressed: { opacity: 0.6 },
+  backButtonPressed: { opacity: 0.7 },
   backLabel: {
     color: COLORS.textPrimary,
-    fontSize: 14,
-    lineHeight: 19,
+    fontSize: 13,
+    lineHeight: 18,
     fontWeight: "700",
-  },
-  videoContainer: {
-    flex: 1,
-    minHeight: 100,
-    overflow: "hidden",
-    borderRadius: 22,
-    backgroundColor: "#E8E5DF",
-    shadowColor: COLORS.shadow,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 3,
   },
   gridBadge: {
     position: "absolute",
-    top: 12,
-    left: 12,
+    right: 16,
     flexDirection: "row",
     alignItems: "center",
     gap: 5,
     paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingVertical: 8,
     borderRadius: 14,
-    backgroundColor: "rgba(0,0,0,0.5)",
+    backgroundColor: "rgba(0,0,0,0.55)",
   },
   gridBadgeText: { color: "#FFFFFF", fontSize: 11, fontWeight: "700" },
   sheet: {
@@ -891,6 +1011,20 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "600",
     lineHeight: 19,
+  },
+  mockNotice: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 3,
+    paddingBottom: 2,
+  },
+  mockNoticeText: {
+    flex: 1,
+    color: COLORS.textSecondary,
+    fontSize: 11,
+    fontWeight: "500",
+    lineHeight: 16,
   },
   placeCard: {
     minHeight: 82,
