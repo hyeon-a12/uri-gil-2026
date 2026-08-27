@@ -5,6 +5,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   SafeAreaView,
+  Modal,
   ScrollView,
   StyleSheet,
   Text,
@@ -21,7 +22,33 @@ export default function JoinScreen() {
 
   const [showPassword, setShowPassword] = useState(false);
   const [showPasswordConfirm, setShowPasswordConfirm] = useState(false);
-  const [agreeTerms, setAgreeTerms] = useState(false);
+  const [agreeService, setAgreeService] = useState(false);
+  const [agreePrivacy, setAgreePrivacy] = useState(false);
+  const [agreeAge, setAgreeAge] = useState(false);
+  const [agreeMarketing, setAgreeMarketing] = useState(false);
+  const [agreeSms, setAgreeSms] = useState(false);
+  const [agreeEmail, setAgreeEmail] = useState(false);
+  const [termsModal, setTermsModal] = useState<'service' | 'privacy' | 'marketing' | null>(null);
+
+  const requiredAgreed = agreeService && agreePrivacy && agreeAge;
+  const allAgreed = requiredAgreed && agreeMarketing && agreeSms && agreeEmail;
+
+  const toggleAll = () => {
+    const next = !allAgreed;
+    setAgreeService(next);
+    setAgreePrivacy(next);
+    setAgreeAge(next);
+    setAgreeMarketing(next);
+    setAgreeSms(next);
+    setAgreeEmail(next);
+  };
+
+  const toggleMarketing = () => {
+    const next = !agreeMarketing;
+    setAgreeMarketing(next);
+    setAgreeSms(next);
+    setAgreeEmail(next);
+  };
 
   const handleJoin = () => {
     const trimmedNickname = nickname.trim();
@@ -69,11 +96,8 @@ export default function JoinScreen() {
       return;
     }
 
-    if (!agreeTerms) {
-      Alert.alert(
-        '약관 동의',
-        '이용약관 및 개인정보 처리방침에 동의해주세요.',
-      );
+    if (!requiredAgreed) {
+      Alert.alert('약관 동의', '필수 약관에 모두 동의해주세요.');
       return;
     }
 
@@ -82,6 +106,9 @@ export default function JoinScreen() {
       nickname: trimmedNickname,
       email: trimmedEmail,
       password,
+      marketingConsent: agreeMarketing,
+      smsConsent: agreeSms,
+      emailConsent: agreeEmail,
     });
 
     Alert.alert(
@@ -208,24 +235,37 @@ export default function JoinScreen() {
               </TouchableOpacity>
             </View>
 
-            <TouchableOpacity
-              style={styles.agreementRow}
-              activeOpacity={0.8}
-              onPress={() => setAgreeTerms((previous) => !previous)}
-            >
-              <View
-                style={[
-                  styles.checkbox,
-                  agreeTerms && styles.checkboxChecked,
-                ]}
-              >
-                {agreeTerms && <Text style={styles.checkText}>✓</Text>}
-              </View>
+            <View style={styles.termsSection}>
+              <Text style={styles.termsTitle}>약관 동의</Text>
 
-              <Text style={styles.agreementText}>
-                이용약관 및 개인정보 처리방침에 동의합니다.
-              </Text>
-            </TouchableOpacity>
+              <TouchableOpacity style={styles.allAgreeRow} onPress={toggleAll} activeOpacity={0.8}>
+                <View style={[styles.checkbox, allAgreed && styles.checkboxChecked]}>
+                  {allAgreed && <Text style={styles.checkText}>✓</Text>}
+                </View>
+                <View style={styles.termsTextWrap}>
+                  <Text style={styles.allAgreeText}>전체 동의</Text>
+                  <Text style={styles.allAgreeHelper}>필수 및 선택 항목에 모두 동의합니다.</Text>
+                </View>
+              </TouchableOpacity>
+
+              <View style={styles.divider} />
+
+              <TermRow checked={agreeService} onToggle={() => setAgreeService(!agreeService)} label="[필수] 이용약관 동의" onView={() => setTermsModal('service')} />
+              <TermRow checked={agreePrivacy} onToggle={() => setAgreePrivacy(!agreePrivacy)} label="[필수] 개인정보 수집 및 이용 동의" onView={() => setTermsModal('privacy')} />
+              <TermRow checked={agreeAge} onToggle={() => setAgreeAge(!agreeAge)} label="[필수] 만 14세 이상입니다." />
+              <TermRow checked={agreeMarketing} onToggle={toggleMarketing} label="[선택] 광고성 정보 수신 동의" onView={() => setTermsModal('marketing')} />
+
+              <View style={styles.channelRow}>
+                <TouchableOpacity style={styles.channelItem} onPress={() => { const next = !agreeSms; setAgreeSms(next); if (next) setAgreeMarketing(true); }}>
+                  <View style={[styles.smallCheckbox, agreeSms && styles.checkboxChecked]}>{agreeSms && <Text style={styles.smallCheckText}>✓</Text>}</View>
+                  <Text style={styles.channelText}>SMS</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.channelItem} onPress={() => { const next = !agreeEmail; setAgreeEmail(next); if (next) setAgreeMarketing(true); }}>
+                  <View style={[styles.smallCheckbox, agreeEmail && styles.checkboxChecked]}>{agreeEmail && <Text style={styles.smallCheckText}>✓</Text>}</View>
+                  <Text style={styles.channelText}>이메일</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
 
             <TouchableOpacity
               style={styles.joinButton}
@@ -247,7 +287,40 @@ export default function JoinScreen() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <Modal visible={termsModal !== null} transparent animationType="slide" onRequestClose={() => setTermsModal(null)}>
+        <View style={styles.modalBackdrop}>
+          <TouchableOpacity style={styles.modalDismissArea} activeOpacity={1} onPress={() => setTermsModal(null)} />
+          <View style={styles.bottomSheet}>
+            <View style={styles.sheetHandle} />
+            <View style={styles.sheetHeader}>
+              <Text style={styles.sheetTitle}>{termsModal === 'service' ? '이용약관' : termsModal === 'privacy' ? '개인정보 수집 및 이용 동의' : '광고성 정보 수신 동의'}</Text>
+              <TouchableOpacity onPress={() => setTermsModal(null)}><Text style={styles.closeText}>×</Text></TouchableOpacity>
+            </View>
+            <ScrollView style={styles.termsContent} showsVerticalScrollIndicator={false}>
+              <Text style={styles.termsBody}>{termsModal === 'service' ? '서비스 이용약관 내용을 여기에 연결해주세요.' : termsModal === 'privacy' ? '개인정보 수집·이용 목적, 수집 항목, 보유 및 이용 기간 등의 내용을 여기에 연결해주세요.' : '광고성 정보 수신 및 마케팅 활용에 관한 내용을 여기에 연결해주세요.'}</Text>
+            </ScrollView>
+            <TouchableOpacity style={styles.sheetButton} onPress={() => setTermsModal(null)}><Text style={styles.sheetButtonText}>확인</Text></TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
+  );
+}
+
+type TermRowProps = { checked: boolean; onToggle: () => void; label: string; onView?: () => void };
+
+function TermRow({ checked, onToggle, label, onView }: TermRowProps) {
+  return (
+    <View style={styles.termRow}>
+      <TouchableOpacity style={styles.termCheckArea} onPress={onToggle} activeOpacity={0.8}>
+        <View style={[styles.checkbox, checked && styles.checkboxChecked]}>
+          {checked && <Text style={styles.checkText}>✓</Text>}
+        </View>
+        <Text style={styles.termText}>{label}</Text>
+      </TouchableOpacity>
+      {onView && <TouchableOpacity style={styles.viewTermsButton} onPress={onView}><Text style={styles.viewTermsText}>약관보기</Text></TouchableOpacity>}
+    </View>
   );
 }
 
@@ -435,4 +508,34 @@ const styles = StyleSheet.create({
     fontFamily: 'SpoqaHanSansNeo-Bold',
     marginLeft: 8,
   },
+
+
+  termsSection: { marginTop: 8 },
+  termsTitle: { color: '#222222', fontSize: 14, fontFamily: 'SpoqaHanSansNeo-Medium', marginBottom: 12 },
+  allAgreeRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10 },
+  termsTextWrap: { flex: 1 },
+  allAgreeText: { color: '#222222', fontSize: 15, fontFamily: 'SpoqaHanSansNeo-Bold' },
+  allAgreeHelper: { color: '#9A9A9A', fontSize: 11, fontFamily: 'SpoqaHanSansNeo-Regular', marginTop: 3 },
+  divider: { height: 1, backgroundColor: '#EEEEEE', marginVertical: 8 },
+  termRow: { minHeight: 44, flexDirection: 'row', alignItems: 'center' },
+  termCheckArea: { flex: 1, flexDirection: 'row', alignItems: 'center', paddingVertical: 8 },
+  termText: { flex: 1, color: '#555555', fontSize: 13, fontFamily: 'SpoqaHanSansNeo-Regular' },
+  viewTermsButton: { paddingVertical: 10, paddingLeft: 12 },
+  viewTermsText: { color: '#8A8A8A', fontSize: 12, fontFamily: 'SpoqaHanSansNeo-Medium', textDecorationLine: 'underline' },
+  channelRow: { flexDirection: 'row', paddingLeft: 32, gap: 24, marginTop: 2, marginBottom: 4 },
+  channelItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6 },
+  smallCheckbox: { width: 18, height: 18, borderRadius: 5, borderWidth: 1, borderColor: '#DDDDDD', alignItems: 'center', justifyContent: 'center', marginRight: 7 },
+  smallCheckText: { color: '#FFFFFF', fontSize: 11, fontWeight: '700' },
+  channelText: { color: '#666666', fontSize: 13, fontFamily: 'SpoqaHanSansNeo-Regular' },
+  modalBackdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.35)' },
+  modalDismissArea: { flex: 1 },
+  bottomSheet: { maxHeight: '72%', minHeight: 420, backgroundColor: '#FFFFFF', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 24, paddingTop: 10, paddingBottom: 24 },
+  sheetHandle: { width: 40, height: 4, borderRadius: 2, backgroundColor: '#D8D8D8', alignSelf: 'center', marginBottom: 18 },
+  sheetHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 },
+  sheetTitle: { flex: 1, color: '#222222', fontSize: 19, fontFamily: 'SpoqaHanSansNeo-Bold', paddingRight: 12 },
+  closeText: { color: '#333333', fontSize: 32, lineHeight: 32, fontFamily: 'SpoqaHanSansNeo-Regular' },
+  termsContent: { flexGrow: 0, marginBottom: 20 },
+  termsBody: { color: '#666666', fontSize: 13, lineHeight: 22, fontFamily: 'SpoqaHanSansNeo-Regular' },
+  sheetButton: { height: 54, borderRadius: 16, backgroundColor: '#FF7F5C', alignItems: 'center', justifyContent: 'center' },
+  sheetButtonText: { color: '#FFFFFF', fontSize: 15, fontFamily: 'SpoqaHanSansNeo-Bold' },
 });
