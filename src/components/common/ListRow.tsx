@@ -11,11 +11,12 @@ type ListRowProps = {
   isLast?: boolean; // true면 아래쪽 구분선을 그리지 않습니다 (카드의 마지막 행).
   onPress?: () => void;
   showChevron?: boolean;
+  numberOfLines?: number; // 지정하면 title이 그 줄 수를 넘을 때 말줄임 처리됩니다.
   style?: StyleProp<ViewStyle>;
 };
 
 // 마이페이지 메뉴 화면들의 리스트 한 줄(제목 + 부제목 + 오른쪽 내용)을 그리는 공통 컴포넌트입니다.
-export function ListRow({ title, subtitle, right, isLast = false, onPress, showChevron = false, style }: ListRowProps) {
+export function ListRow({ title, subtitle, right, isLast = false, onPress, showChevron = false, numberOfLines, style }: ListRowProps) {
   const Wrapper = onPress ? Pressable : View;
 
   return (
@@ -29,7 +30,7 @@ export function ListRow({ title, subtitle, right, isLast = false, onPress, showC
       onPress={onPress}
     >
       <View style={styles.textGroup}>
-        <Text style={styles.title}>{title}</Text>
+        <Text numberOfLines={numberOfLines} style={styles.title}>{title}</Text>
         {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
       </View>
       <View style={styles.right}>

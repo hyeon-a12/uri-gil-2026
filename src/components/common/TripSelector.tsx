@@ -6,11 +6,12 @@ import { AppText as Text } from '@/components/AppText';
 
 import { useTripStore } from '@/store/useTripStore';
 import { TripSwitchSheet } from './TripSwitchSheet';
+import { COLORS as SHARED_COLORS } from '@/constants/color';
 
 const COLORS = {
-  textPrimary: '#222222',
-  textSecondary: '#8A8A8A',
-  white: '#FFFFFF',
+  textPrimary: SHARED_COLORS.textPrimary,
+  textSecondary: SHARED_COLORS.textSecondary,
+  white: SHARED_COLORS.background,
 };
 
 /**

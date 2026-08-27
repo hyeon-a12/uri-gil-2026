@@ -3,6 +3,8 @@ export { ListRow } from './ListRow';
 export { Badge } from './Badge';
 export type { BadgeVariant } from './Badge';
 export { ScreenHeader } from './ScreenHeader';
+export { HapticPressable } from './HapticPressable';
+export { PrimaryButton } from './PrimaryButton';
 export { SectionLabel } from './SectionLabel';
 export { Toggle } from './Toggle';
 export { TripSelector } from './TripSelector';

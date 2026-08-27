@@ -1,7 +1,6 @@
 import React, { useCallback, useState } from 'react';
 import {
   Alert,
-  Pressable,
   StyleSheet,
   View,
   TouchableOpacity,
@@ -16,29 +15,31 @@ import { Ionicons, Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { setActiveFolder, clearActiveFolder, getActiveFolder } from '@/services/activeFolderService';
 import { getAllFolders, saveFolder, deleteFolder as deleteFolderFromStorage, FolderItem } from '@/services/folderService';
-import { getRecordingsByFolder } from '@/services/recordingService';
+import { countDisplayItems, getRecordingsByFolder } from '@/services/recordingService';
 import { useTripStore } from '@/store/useTripStore';
 import NewTripModal from '@/components/NewTripModal';
+import { COLORS as SHARED_COLORS } from '@/constants/color';
+import { TextInput } from 'react-native-gesture-handler';
 
 const COLORS = {
-  background: '#FFFFFF',
-  card: '#FFFFFF',
+  background: SHARED_COLORS.background,
+  card: SHARED_COLORS.background,
 
-  primary: '#FF7F5C',
-  primarySoft: '#FFF3DF',
+  primary: SHARED_COLORS.accent,
+  primarySoft: SHARED_COLORS.main,
 
-  accent: '#3182F6',
+  accent: SHARED_COLORS.statusTag,
 
-  textPrimary: '#222222',
-  textSecondary: '#8A8A8A',
-  textTertiary: '#8A8A8A',
+  textPrimary: SHARED_COLORS.textPrimary,
+  textSecondary: SHARED_COLORS.textSecondary,
+  textTertiary: SHARED_COLORS.textSecondary,
 
-  border: '#DDDDDD',
-  divider: '#DDDDDD',
+  border: SHARED_COLORS.border,
+  divider: SHARED_COLORS.border,
 
   handle: '#999A95',
-  shadow: '#4B4138',
-  delete: '#E46F61',
+  shadow: SHARED_COLORS.shadow,
+  delete: SHARED_COLORS.danger,
   disabled: '#D8D5CF',
 
   overlay: 'rgba(0,0,0,0.25)',
@@ -56,6 +57,7 @@ export default function ClipManageScreen() {
   
   type FolderWithCount = FolderItem & { clipCount: number };
   const [folders, setFolders] = useState<FolderWithCount[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const loadFolders = async () => {
     try {
@@ -67,7 +69,7 @@ export default function ClipManageScreen() {
           const records = await getRecordingsByFolder(f.id);
           return {
             ...f,
-            clipCount: records.length,
+            clipCount: countDisplayItems(records),
             isCurrentActive: f.id === activeId,
           };
         }),
@@ -90,6 +92,10 @@ export default function ClipManageScreen() {
   const [selectedFolderForMenu, setSelectedFolderForMenu] =
     useState<FolderItem | null>(null);
   const [newTripModalVisible, setNewTripModalVisible] = useState(false);
+
+  const filteredFolders = folders.filter((f) =>
+    f.title.toLowerCase().includes(searchQuery.toLowerCase()),
+  );
 
   const handleFolderPress = (folder: FolderItem) => {
     router.push({
@@ -146,6 +152,7 @@ export default function ClipManageScreen() {
     if (selectedFolderForMenu) {
       await setActiveFolder(selectedFolderForMenu.id);
       useTripStore.getState().setCurrentTrip(selectedFolderForMenu);
+      setActiveFolderId(selectedFolderForMenu.id);
       setSelectedFolderForMenu(null);
     }
   };
@@ -166,6 +173,7 @@ export default function ClipManageScreen() {
               if (activeFolderId === folder.id) {
                 await clearActiveFolder();
                 useTripStore.getState().clearCurrentTrip();
+                setActiveFolderId(null);
               }
 
               await deleteFolderFromStorage(folder.id);
@@ -186,32 +194,36 @@ export default function ClipManageScreen() {
     const isActive = item.id === activeFolderId;
 
     return (
-      <TouchableOpacity
-        style={styles.folderCard}
-        activeOpacity={0.7}
-        onPress={() => handleFolderPress(item)}
-      >
-        <Image source={{ uri: item.thumbnail }} style={styles.folderThumbnail} />
-
-        <View style={styles.folderInfo}>
-          <Text style={styles.folderTitle}>
-            {item.title}
-            {isActive && <Text style={styles.activeTag}> (진행중)</Text>}
-          </Text>
-          <Text style={styles.folderSubText}>{item.dateRange}</Text>
-          <Text style={styles.clipCountText}>클립 {item.clipCount}개</Text>
-        </View>
-
+      <>
         <TouchableOpacity
-          style={styles.moreButton}
-          onPress={(e) => {
-            e.stopPropagation();
-            setSelectedFolderForMenu(item);
-          }}
+          style={styles.folderCard}
+          activeOpacity={0.7}
+          onPress={() => handleFolderPress(item)}
         >
-          <Feather name="more-horizontal" size={20} color={COLORS.textSecondary} />
+          <Image source={{ uri: item.thumbnail }} style={styles.folderThumbnail} />
+
+          <View style={styles.folderInfo}>
+            <Text style={styles.folderTitle}>
+              {item.title}
+              {isActive && <Text style={styles.activeTag}> (진행중)</Text>}
+            </Text>
+            <Text style={styles.folderSubText}>{item.dateRange}</Text>
+            <Text style={styles.clipCountText}>클립 {item.clipCount}개</Text>
+          </View>
+
+          <TouchableOpacity
+            style={styles.moreButton}
+            onPress={(e) => {
+              e.stopPropagation();
+              setSelectedFolderForMenu(item);
+            }}
+          >
+            <Feather name="more-horizontal" size={20} color={COLORS.textSecondary} />
+          </TouchableOpacity>
         </TouchableOpacity>
-      </TouchableOpacity>
+
+        <View style={styles.itemDivider} />
+      </>
     );
   };
 
@@ -228,76 +240,31 @@ export default function ClipManageScreen() {
         <View style={styles.headerButton} />
       </View>
 
-      <View style={styles.tabContainer}>
-        <TouchableOpacity
-          style={[
-            styles.tabButton,
-            activeTab === 'editing' && styles.activeTabButton,
-          ]}
-          onPress={() => setActiveTab('editing')}
-        >
-          <Text
-            style={[
-              styles.tabText,
-              activeTab === 'editing' && styles.activeTabText,
-            ]}
-          >
-            History
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[
-            styles.tabButton,
-            activeTab === 'myTravel' && styles.activeTabButton,
-          ]}
-          onPress={() => setActiveTab('myTravel')}
-        >
-          <Text
-            style={[
-              styles.tabText,
-              activeTab === 'myTravel' && styles.activeTabText,
-            ]}
-          >
-            나의 여행
-          </Text>
-        </TouchableOpacity>
+      <View style={styles.searchContainer}>
+        <View style={styles.searchBox}>
+          <Ionicons
+            name="search"
+            size={18}
+            color={COLORS.textSecondary}
+            style={styles.searchIcon}
+          />
+          <TextInput
+            style={styles.searchInput}
+            placeholder='여행 검색'
+            placeholderTextColor={COLORS.textSecondary}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+          />
+        </View>
       </View>
 
       <FlatList
-        data={folders}
+        data={filteredFolders}
         keyExtractor={(item) => item.id}
         renderItem={renderFolderItem}
         contentContainerStyle={styles.listContent}
-        ListHeaderComponent={
-          <>
-            {activeTab === 'editing' && (
-              <TouchableOpacity
-                style={styles.createBanner}
-                activeOpacity={0.8}
-                onPress={handleCreateFolder}
-              >
-                <View style={styles.addButton}>
-                  <Ionicons name="add" size={24} color={COLORS.card} />
-                </View>
-                <View style={styles.bannerTextContainer}>
-                  <Text style={styles.bannerTitle}>
-                    {locationName
-                      ? `'${locationName}' 클립 만들기`
-                      : '여행 일정 생성하기'}
-                  </Text>
-                  <Text style={styles.bannerSubtitle}>
-                    새로운 여행을 생성하고 클립을 추가해보세요.
-                  </Text>
-                </View>
-              </TouchableOpacity>
-            )}
-
-            <Text style={styles.sectionTitle}>
-              {activeTab === 'editing' ? '최신 여행' : '내 여행 목록'}
-            </Text>
-          </>
-        }
+        ItemSeparatorComponent={() => <View style={styles.separator} />}
+        showsVerticalScrollIndicator={false}
       />
 
       <Modal
@@ -316,11 +283,11 @@ export default function ClipManageScreen() {
                   onPress={handleConnectCamera}
                 >
                   <Ionicons
-                    name="camera-outline"
+                    name="key-outline"
                     size={20}
                     color={COLORS.textPrimary}
                   />
-                  <Text style={styles.menuText}>카메라 연결하기</Text>
+                  <Text style={styles.menuText}>수정하기?</Text>
                 </TouchableOpacity>
 
                 <View style={styles.menuDivider} />
@@ -391,36 +358,43 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 
-  // Tabs
-  tabContainer: {
+  // Search
+  searchContainer: {
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 12,
+  },
+  searchBox: {
     flexDirection: 'row',
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.divider,
-  },
-  tabButton: {
-    flex: 1,
-    paddingVertical: 14,
     alignItems: 'center',
+    backgroundColor: COLORS.background,
+    borderRadius: 12,
+    paddingHorizontal: 15,
+    height: 42,
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
-  activeTabButton: {
-    borderBottomWidth: 2,
-    borderBottomColor: COLORS.primary,
+  searchIcon: {
+    marginRight: 8,
   },
-  tabText: {
-    fontSize: 15,
-    fontWeight: '500',
-    color: COLORS.textTertiary,
-  },
-  activeTabText: {
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
     color: COLORS.textPrimary,
-    fontWeight: '700',
+    padding: 0,
   },
 
   // List
   listContent: {
+    justifyContent: 'center',
     paddingHorizontal: 20,
     paddingTop: 16,
     paddingBottom: 40,
+  },
+  separator: {
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'stretch',
   },
 
   // Create Banner
@@ -470,9 +444,9 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   folderThumbnail: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: 55,
+    height: 55,
+    borderRadius: 25,
     backgroundColor: COLORS.border,
   },
   folderInfo: {
@@ -486,7 +460,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   activeTag: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '700',
     color: COLORS.accent,
   },
@@ -501,6 +475,11 @@ const styles = StyleSheet.create({
   },
   moreButton: {
     padding: 8,
+  },
+  itemDivider: {
+    height: 1,
+    backgroundColor: COLORS.divider,
+    opacity: 0.5,
   },
 
   // Modal

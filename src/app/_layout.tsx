@@ -3,6 +3,7 @@ import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import { hydrateCurrentTrip } from '@/store/useTripStore';
+import { hydrateProfile } from '@/store/useProfileStore';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -13,6 +14,16 @@ export default function RootLayout() {
     'SpoqaHanSansNeo-Regular': require('../../assets/fonts/SpoqaHanSansNeo-Regular.ttf'),
     'SpoqaHanSansNeo-Medium': require('../../assets/fonts/SpoqaHanSansNeo-Medium.ttf'),
     'SpoqaHanSansNeo-Bold': require('../../assets/fonts/SpoqaHanSansNeo-Bold.ttf'),
+    'Pretendard-Regular': require('../../assets/fonts/Pretendard-Regular.ttf'),
+    'Pretendard-Bold': require('../../assets/fonts/Pretendard-Bold.ttf'),
+    'MaruBuri-Regular': require('../../assets/fonts/MaruBuri-Regular.ttf'),
+    'MaruBuri-Bold': require('../../assets/fonts/MaruBuri-Bold.ttf'),
+    'KERISKEDU-Regular': require('../../assets/fonts/KERISKEDU_R.ttf'),
+    'KERISKEDU-Bold': require('../../assets/fonts/KERISKEDU_B.ttf'),
+    'HakgyoansimNadeuri-Light': require('../../assets/fonts/HakgyoansimNadeuri-Light.ttf'),
+    'HakgyoansimNadeuri-Bold': require('../../assets/fonts/HakgyoansimNadeuri-Bold.ttf'),
+    'HakgyoansimByeolbichhaneul-Light': require('../../assets/fonts/HakgyoansimByeolbichhaneul-Light.ttf'),
+    'HakgyoansimByeolbichhaneul-Bold': require('../../assets/fonts/HakgyoansimByeolbichhaneul-Bold.ttf'),
   });
 
   useEffect(() => {
@@ -25,6 +36,7 @@ export default function RootLayout() {
   // AsyncStorage에 저장돼 있던 활성 폴더로 한 번 채워둡니다.
   useEffect(() => {
     void hydrateCurrentTrip();
+    void hydrateProfile();
   }, []);
 
   if (!fontsLoaded) {

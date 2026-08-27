@@ -63,7 +63,7 @@ export default function DevPreviewScreen() {
 const styles = StyleSheet.create({
   scrollView: {
     flex: 1,
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.background,
   },
   contentContainer: {
     flexGrow: 1,
@@ -81,7 +81,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 24,
     fontWeight: '700',
-    color: COLORS.text,
+    color: COLORS.textPrimary,
     textAlign: 'center',
   },
   description: {
@@ -91,19 +91,19 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
   previewButton: {
-    backgroundColor: COLORS.locationSelect,
+    backgroundColor: COLORS.accent,
     borderRadius: 12,
     paddingVertical: 16,
     alignItems: 'center',
   },
   cameraButton: {
-    backgroundColor: COLORS.primary,
+    backgroundColor: COLORS.accent,
     borderRadius: 12,
     paddingVertical: 16,
     alignItems: 'center',
   },
   previewButtonText: {
-    color: COLORS.white,
+    color: COLORS.background,
     fontSize: 16,
     fontWeight: '700',
   },
@@ -115,7 +115,7 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
   },
   previewButtonOutlineText: {
-    color: COLORS.text,
+    color: COLORS.textPrimary,
     fontSize: 16,
     fontWeight: '600',
   },
@@ -129,7 +129,7 @@ const styles = StyleSheet.create({
   noteTitle: {
     fontSize: 14,
     fontWeight: '700',
-    color: COLORS.text,
+    color: COLORS.textPrimary,
   },
   noteText: {
     fontSize: 13,
@@ -138,7 +138,7 @@ const styles = StyleSheet.create({
   },
   webHint: {
     fontSize: 12,
-    color: COLORS.textTertiary,
+    color: COLORS.textSecondary,
     textAlign: 'center',
   },
   pressed: {

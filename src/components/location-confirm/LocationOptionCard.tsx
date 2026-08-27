@@ -39,14 +39,14 @@ export function LocationOptionCard({ location, selected, onPress }: LocationOpti
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.background,
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 14,
     gap: 4,
   },
   cardSelected: {
-    backgroundColor: COLORS.locationSelect,
+    backgroundColor: COLORS.accent,
   },
   cardPressed: {
     opacity: 0.92,
@@ -60,7 +60,7 @@ const styles = StyleSheet.create({
   name: {
     fontSize: 16,
     fontWeight: '700',
-    color: COLORS.text,
+    color: COLORS.textPrimary,
   },
   meta: {
     fontSize: 14,
@@ -72,7 +72,7 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   textSelected: {
-    color: COLORS.white,
+    color: COLORS.background,
   },
   addressSelected: {
     color: 'rgba(255, 255, 255, 0.85)',
