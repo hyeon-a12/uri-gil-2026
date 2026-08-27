@@ -9,6 +9,7 @@ import { AppText as Text } from '@/components/AppText';
 import { colors } from '@/constants/menu-theme';
 import { cardShadow, ScreenHeader, PrimaryButton } from '@/components/common';
 import { useProfileStore, updateProfile } from '@/store/useProfileStore';
+import { apiFetch } from '@/services/api';
 
 export default function ProfileEditScreen() {
   const profile = useProfileStore((state) => state.profile);
@@ -63,11 +64,25 @@ export default function ProfileEditScreen() {
     ]);
   };
 
-  // TODO: 실제 회원 탈퇴 처리(계정 삭제 API 호출 등)는 인증 플로우가 생기면 연결합니다.
   const handleWithdraw = () => {
     Alert.alert('회원 탈퇴', '탈퇴하면 저장된 여행 기록이 모두 삭제돼요. 계속할까요?', [
       { text: '취소', style: 'cancel' },
-      { text: '탈퇴', style: 'destructive', onPress: () => router.back() },
+      {
+        text: '탈퇴',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await apiFetch('/auth/me', { method: 'DELETE' });
+            await SecureStore.deleteItemAsync('access_token');
+            await SecureStore.deleteItemAsync('user_id');
+            await SecureStore.deleteItemAsync('nickname');
+            router.replace('/login');
+          } catch (error) {
+            console.error('[handleWithdraw] 탈퇴 실패:', error);
+            Alert.alert('탈퇴 실패', '잠시 후 다시 시도해주세요.');
+          }
+        },
+      },
     ]);
   };
 

@@ -2,7 +2,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from database import get_db
-from models import User
+from models import User, Route, RouteSpot, Clip, Video
 from schemas import UserCreate, UserLogin, UserResponse
 import bcrypt
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -88,3 +88,23 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
 @router.get("/me")
 def read_current_user(current_user: User = Depends(get_current_user)):
     return {"id": current_user.id, "email": current_user.email, "nickname": current_user.nickname}
+
+
+@router.delete("/me")
+def delete_account(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    # 연관된 데이터부터 순서대로 삭제 (FK 제약 때문에 순서 중요)
+    user_routes = db.query(Route).filter(Route.user_id == current_user.id).all()
+    route_ids = [r.id for r in user_routes]
+
+    if route_ids:
+        db.query(Video).filter(Video.route_id.in_(route_ids)).delete(synchronize_session=False)
+        db.query(Clip).filter(Clip.route_id.in_(route_ids)).delete(synchronize_session=False)
+        db.query(RouteSpot).filter(RouteSpot.route_id.in_(route_ids)).delete(synchronize_session=False)
+        db.query(Route).filter(Route.id.in_(route_ids)).delete(synchronize_session=False)
+
+    db.delete(current_user)
+    db.commit()
+    return {"message": "계정이 삭제되었습니다"}
