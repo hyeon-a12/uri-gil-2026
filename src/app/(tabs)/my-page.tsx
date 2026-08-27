@@ -22,10 +22,6 @@ export default function MyPageScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      SecureStore.getItemAsync('nickname').then((saved) => {
-        if (saved) setNickname(saved);
-      });
-
       (async () => {
         const [folders, recordings] = await Promise.all([
           getAllFolders(),

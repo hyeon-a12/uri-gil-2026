@@ -1,3 +1,5 @@
+import { getProfile } from '@/services/profileService'; 
+import { updateProfile } from '@/store/useProfileStore';
 import * as SecureStore from 'expo-secure-store';
 import { router } from 'expo-router';
 import { useState } from 'react';
@@ -62,6 +64,14 @@ export default function LoginScreen() {
       await SecureStore.setItemAsync('access_token', data.access_token);
       await SecureStore.setItemAsync('user_id', String(data.user_id));
       await SecureStore.setItemAsync('nickname', data.nickname);
+
+      // 기존에 저장된 프로필(bio, avatarUri)은 유지하고, 닉네임만 서버 값으로 갱신
+      const existingProfile = await getProfile();
+      await updateProfile({
+        ...existingProfile,
+        nickname: data.nickname,
+      });
+
 
       router.replace('/(tabs)/home');
     } catch (error) {
