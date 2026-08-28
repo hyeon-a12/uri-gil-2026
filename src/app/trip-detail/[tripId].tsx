@@ -1,15 +1,34 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useLocalSearchParams, useFocusEffect } from 'expo-router';
+import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { AppText as Text } from '@/components/AppText';
 import { colors } from '@/constants/menu-theme';
 import { ScreenHeader } from '@/components/common';
 import { RouteMapPreview } from '@/components/RouteMapPreview';
-import { getAllFolders, type FolderItem } from '@/services/folderService';
+import NewTripModal from '@/components/NewTripModal';
+import {
+  deleteFolder,
+  getAllFolders,
+  parseDateRange,
+  updateFolder,
+  type FolderItem,
+} from '@/services/folderService';
 import { getRecordingsByFolder } from '@/services/recordingService';
 import { getTripScheduleStops } from '@/services/trip-schedule-service';
 import { buildPlanData, type PlanStop, type PlanTravelLog } from '@/services/tripPlanService';
+import { useTripStore, clearCurrentTrip as clearActiveTrip } from '@/store/useTripStore';
+
+function formatDate(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}.${month}.${day}.`;
+}
+
+function buildDateRange(startDate: Date, endDate: Date): string {
+  return `${formatDate(startDate)} ~ ${formatDate(endDate)}`;
+}
 
 export default function TripDetailScreen() {
   // 파일명이 [tripId].tsx 라서, URL의 그 부분이 자동으로 tripId라는 파라미터로 들어옴
@@ -20,30 +39,101 @@ export default function TripDetailScreen() {
   const [stops, setStops] = useState<PlanStop[]>([]);
   const [travelLogs, setTravelLogs] = useState<PlanTravelLog[]>([]);
   const [dayNumbers, setDayNumbers] = useState<number[]>([]);
+  const [settingsVisible, setSettingsVisible] = useState(false);
+
+  const loadTrip = useCallback(async () => {
+    const folders = await getAllFolders();
+    const folder = folders.find((f) => f.id === tripId);
+    if (!folder) {
+      setTrip(null);
+      return;
+    }
+
+    const [recordings, scheduleStops] = await Promise.all([
+      getRecordingsByFolder(tripId),
+      getTripScheduleStops(tripId),
+    ]);
+    const plan = buildPlanData(recordings, folder, scheduleStops);
+
+    setTrip(folder);
+    setStops(plan.stops);
+    setTravelLogs(plan.travelLogs);
+    setDayNumbers(plan.dayNumbers);
+  }, [tripId]);
 
   useFocusEffect(
     useCallback(() => {
-      (async () => {
-        const folders = await getAllFolders();
-        const folder = folders.find((f) => f.id === tripId);
-        if (!folder) {
-          setTrip(null);
-          return;
-        }
-
-        const [recordings, scheduleStops] = await Promise.all([
-          getRecordingsByFolder(tripId),
-          getTripScheduleStops(tripId),
-        ]);
-        const plan = buildPlanData(recordings, folder, scheduleStops);
-
-        setTrip(folder);
-        setStops(plan.stops);
-        setTravelLogs(plan.travelLogs);
-        setDayNumbers(plan.dayNumbers);
-      })();
-    }, [tripId]),
+      void loadTrip();
+    }, [loadTrip]),
   );
+
+  const settingsInitialValues = useMemo(() => {
+    if (!trip) return undefined;
+    const range = parseDateRange(trip.dateRange);
+    return {
+      name: trip.title,
+      region: trip.region ?? null,
+      memo: trip.memo ?? '',
+      partySize: trip.partySize ?? 1,
+      themes: trip.themes ?? [],
+      clipLengthSeconds: trip.clipLengthSeconds ?? 3,
+      shootingStyle: trip.shootingStyle ?? 'basic',
+      startDate: range?.start ?? new Date(),
+      endDate: range?.end ?? new Date(),
+    };
+  }, [trip]);
+
+  const handleSavedSettings: React.ComponentProps<typeof NewTripModal>['onSaved'] = async (
+    updatedTrip,
+  ) => {
+    if (!trip) return;
+    try {
+      await updateFolder(trip.id, {
+        title: updatedTrip.name.trim(),
+        dateRange: buildDateRange(updatedTrip.startDate, updatedTrip.endDate),
+        region: updatedTrip.region,
+        memo: updatedTrip.memo,
+        partySize: updatedTrip.partySize,
+        themes: updatedTrip.themes,
+        clipLengthSeconds: updatedTrip.clipLengthSeconds,
+        shootingStyle: updatedTrip.shootingStyle,
+      });
+
+      // 현재 활성 여행이면 화면 상단 등에 쓰이는 캐시도 최신 값으로 갱신합니다.
+      const currentTrip = useTripStore.getState().currentTrip;
+      if (currentTrip?.id === trip.id) {
+        useTripStore.getState().setCurrentTrip({
+          ...currentTrip,
+          title: updatedTrip.name.trim(),
+          dateRange: buildDateRange(updatedTrip.startDate, updatedTrip.endDate),
+          region: updatedTrip.region,
+          memo: updatedTrip.memo,
+          partySize: updatedTrip.partySize,
+          themes: updatedTrip.themes,
+        });
+      }
+
+      await loadTrip();
+    } catch (error) {
+      console.error('[TripDetailScreen] 여행 저장 실패:', error);
+      Alert.alert('저장 실패', '여행 정보를 저장하는 중 문제가 발생했습니다.');
+    }
+  };
+
+  const handleDeleteTrip = async () => {
+    if (!trip) return;
+    try {
+      const currentTrip = useTripStore.getState().currentTrip;
+      if (currentTrip?.id === trip.id) {
+        await clearActiveTrip();
+      }
+      await deleteFolder(trip.id);
+      router.back();
+    } catch (error) {
+      console.error('[TripDetailScreen] 여행 삭제 실패:', error);
+      Alert.alert('삭제 실패', '여행을 삭제하는 중 문제가 발생했습니다.');
+    }
+  };
 
   if (trip === undefined) {
     return (
@@ -64,8 +154,29 @@ export default function TripDetailScreen() {
 
   return (
     <View style={styles.screen}>
-      <ScreenHeader title={trip.title} />
+      <ScreenHeader
+        title={trip.title}
+        right={
+          <Pressable
+            hitSlop={10}
+            onPress={() => setSettingsVisible(true)}
+            style={({ pressed }) => pressed && { opacity: 0.6 }}
+          >
+            <Ionicons name="settings-outline" size={22} color={colors.text} />
+          </Pressable>
+        }
+      />
       <TripPlanView trip={trip} stops={stops} travelLogs={travelLogs} dayNumbers={dayNumbers} />
+
+      <NewTripModal
+        visible={settingsVisible}
+        mode="edit"
+        initialValues={settingsInitialValues}
+        onClose={() => setSettingsVisible(false)}
+        onCreated={() => undefined}
+        onSaved={handleSavedSettings}
+        onDelete={handleDeleteTrip}
+      />
     </View>
   );
 }
@@ -167,6 +278,8 @@ function TripPlanView({ trip, stops, travelLogs, dayNumbers }: TripPlanViewProps
                     <Text style={styles.planStopMeta}>
                       {stop.source === 'ai-recommendation'
                         ? 'AI 추천으로 추가됨'
+                        : stop.source === 'manual'
+                        ? '직접 추가한 장소'
                         : `${stop.time} · 클립 ${stop.clips.length}개`}
                     </Text>
                   </View>
@@ -239,8 +352,13 @@ const styles = StyleSheet.create({
   heroTitle: { fontSize: 13, fontWeight: '700', color: colors.textSub },
   mapWrapper: { marginBottom: 20 },
 
+  // 헤더 아래 남은 공간이 아니라 화면 전체 높이 기준 정중앙에 오도록 절대 위치로 겹칩니다.
   planEmptyState: {
-    flex: 1,
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 40,

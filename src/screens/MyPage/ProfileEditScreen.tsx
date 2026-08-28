@@ -109,14 +109,6 @@ export default function ProfileEditScreen() {
         <Field label="닉네임" value={nickname} onChangeText={setNickname} />
         <Field label="한줄 소개" value={bio} onChangeText={setBio} />
 
-        {/* 카카오 연동 계정은 수정 불가 — readonly */}
-        <View style={styles.fieldWrap}>
-          <Text style={styles.fieldLabel}>연결된 계정</Text>
-          <View style={styles.readonlyBox}>
-            <Text style={styles.readonlyText}>카카오 계정 연동됨</Text>
-          </View>
-        </View>
-
         <PrimaryButton label="저장" onPress={handleSave} style={styles.saveButton} />
 
         <Pressable style={styles.outlineBtn} onPress={handleLogout}>
@@ -203,8 +195,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   fieldInput: { flex: 1, fontSize: 14, color: colors.text, paddingVertical: 10 },
-  readonlyBox: { backgroundColor: colors.card, borderRadius: 12, padding: 13 },
-  readonlyText: { fontSize: 14, color: colors.textSub },
   saveButton: { marginTop: 6, marginBottom: 12 },
   outlineBtn: {
     padding: 13,

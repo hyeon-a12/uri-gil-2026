@@ -13,6 +13,8 @@ export type TripScheduleStop = {
   latitude: number;
   longitude: number;
   order: number;
+  /** 여행 시작일 기준 며칠째 일정인지 (1부터 시작). 예전에 저장된 값엔 없을 수 있어 optional. */
+  day?: number;
   distanceFromPreviousMeters?: number;
   createdAt: string;
 };

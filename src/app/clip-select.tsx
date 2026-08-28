@@ -178,12 +178,14 @@ function ClipSelectionCard({
 export default function ClipSelectScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { id: paramFolderId } = useLocalSearchParams<{
+  const { id: paramFolderId, title: paramFolderTitle } = useLocalSearchParams<{
     id?: string;
+    title?: string;
   }>();
 
   const currentTrip = useTripStore((state) => state.currentTrip);
   const folderId = paramFolderId ?? currentTrip?.id;
+  const folderTitle = paramFolderTitle ?? currentTrip?.title;
 
   const [clips, setClips] = useState<ClipItem[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -492,15 +494,21 @@ export default function ClipSelectScreen() {
           styles.listContent,
           { paddingBottom: FOOTER_HEIGHT + insets.bottom + 16 },
         ]}
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>추가된 영상이 없습니다.</Text>
-            <Text style={styles.emptySubText}>
-              '+ 클립 추가하기'를 눌러 영상을 등록해보세요.
-            </Text>
-          </View>
-        }
       />
+
+      {/* FlatList의 ListEmptyComponent는 콘텐츠 높이만큼만 차지해서 화면 중앙에 오지
+          않으므로, 화면 전체를 덮는 절대 위치 오버레이로 따로 그립니다. */}
+      {clips.length === 0 && (
+        <View style={styles.emptyContainer} pointerEvents="none">
+          <Ionicons name="videocam-outline" size={32} color={COLORS.textTertiary} />
+          <Text style={styles.emptyText}>아직 촬영한 클립이 없어요</Text>
+          <Text style={styles.emptySubText}>
+            {folderTitle
+              ? `${folderTitle}에서 촬영한 클립이 없어요. 카메라로 첫 클립을 남겨보세요.`
+              : '카메라로 촬영해서 클립을 추가해보세요.'}
+          </Text>
+        </View>
+      )}
 
       <View style={[styles.footer, { paddingBottom: insets.bottom }]}>
         <View style={styles.footerInfo}>
@@ -1051,19 +1059,30 @@ const styles = StyleSheet.create({
   dragHandle: {
     padding: 8,
   },
+  // 헤더/툴바 아래 남은 공간이 아니라 화면 전체 높이 기준 정중앙에 오도록 절대 위치로 겹칩니다.
   emptyContainer: {
-    paddingVertical: 60,
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 40,
+    gap: 8,
   },
   emptyText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#8E8E93',
+    marginTop: 6,
+    fontSize: 15,
+    fontWeight: '800',
+    color: COLORS.textPrimary,
   },
   emptySubText: {
-    fontSize: 13,
-    color: '#C7C7CC',
-    marginTop: 4,
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: '500',
+    color: COLORS.textSecondary,
+    textAlign: 'center',
   },
   footer: {
     position: 'absolute',

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,9 @@ import {
   Dimensions,
   StyleProp,
   ViewStyle,
+  KeyboardAvoidingView,
+  Platform,
+  Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -110,6 +113,14 @@ type Props = {
   onClose: () => void;
   /** 여행 생성이 최종 확정된 순간 부모(Home/내 루트)에 데이터를 넘겨줍니다. */
   onCreated: (trip: TripForm & { startDate: Date; endDate: Date }) => void;
+  /** 'edit'이면 새 여행 만들기 마법사 대신 기존 여행의 설정값을 수정하는 용도로 동작합니다. */
+  mode?: 'create' | 'edit';
+  /** mode가 'edit'일 때 폼을 채울 기존 여행 값. */
+  initialValues?: Partial<TripForm> & { startDate: Date; endDate: Date };
+  /** mode가 'edit'일 때 저장 버튼을 눌렀을 때 호출됩니다. */
+  onSaved?: (trip: TripForm & { startDate: Date; endDate: Date }) => void;
+  /** mode가 'edit'일 때만 노출되는 여행 삭제 버튼의 콜백. */
+  onDelete?: () => void;
 };
 
 // ── 날짜 유틸 ────────────────────────────────────────────────
@@ -339,9 +350,29 @@ function SelectableChip({
 }
 
 // ── 메인 컴포넌트 ────────────────────────────────────────────
-export default function NewTripModal({ visible, onClose, onCreated }: Props) {
+export default function NewTripModal({
+  visible,
+  onClose,
+  onCreated,
+  mode = 'create',
+  initialValues,
+  onSaved,
+  onDelete,
+}: Props) {
   const [step, setStep] = useState<Step>(1);
   const [form, setForm] = useState<TripForm>(INITIAL_FORM);
+
+  // 수정 모드로 열릴 때마다 기존 여행 값으로 폼을 채우고 1단계부터 보여줍니다.
+  useEffect(() => {
+    if (!visible) return;
+    if (mode === 'edit' && initialValues) {
+      setForm({ ...INITIAL_FORM, ...initialValues });
+    } else {
+      setForm(INITIAL_FORM);
+    }
+    setStep(1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible, mode]);
 
   const months = useMemo(() => getUpcomingMonths(5), []);
   const [selectedMonthIdx, setSelectedMonthIdx] = useState(0);
@@ -403,6 +434,27 @@ export default function NewTripModal({ visible, onClose, onCreated }: Props) {
     setStep('success');
   }
 
+  function handleSave() {
+    const { startDate, endDate } = form;
+    if (!startDate || !endDate) return;
+    onSaved?.({ ...form, startDate, endDate });
+    handleClose();
+  }
+
+  function handleDeletePress() {
+    Alert.alert('여행 삭제', `${form.name || '이 여행'}을(를) 삭제할까요?`, [
+      { text: '취소', style: 'cancel' },
+      {
+        text: '삭제',
+        style: 'destructive',
+        onPress: () => {
+          onDelete?.();
+          handleClose();
+        },
+      },
+    ]);
+  }
+
   const isStep1Valid = form.name.trim().length > 0 && !!form.region;
   const isStep2Valid = !!form.startDate && !!form.endDate;
 
@@ -413,15 +465,31 @@ export default function NewTripModal({ visible, onClose, onCreated }: Props) {
       animationType="slide"
       onRequestClose={handleClose}
     >
-      <View style={styles.overlay}>
+      <KeyboardAvoidingView
+        style={styles.overlay}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
         <View style={styles.card}>
           {step !== 'success' && (
             <>
               <View style={styles.headerRow}>
-                <Text style={styles.headerTitle}>새 여행 만들기</Text>
-                <TouchableOpacity onPress={handleClose} hitSlop={10}>
-                  <Ionicons name="close" size={22} color={COLORS.gray500} />
-                </TouchableOpacity>
+                <Text style={styles.headerTitle}>
+                  {mode === 'edit' ? '여행 설정' : '새 여행 만들기'}
+                </Text>
+                <View style={styles.headerActions}>
+                  {mode === 'edit' && (
+                    <TouchableOpacity
+                      onPress={handleDeletePress}
+                      hitSlop={10}
+                      style={{ marginRight: 16 }}
+                    >
+                      <Ionicons name="trash-outline" size={20} color={COLORS.accent} />
+                    </TouchableOpacity>
+                  )}
+                  <TouchableOpacity onPress={handleClose} hitSlop={10}>
+                    <Ionicons name="close" size={22} color={COLORS.gray500} />
+                  </TouchableOpacity>
+                </View>
               </View>
             </>
           )}
@@ -742,9 +810,9 @@ export default function NewTripModal({ visible, onClose, onCreated }: Props) {
                 </TouchableOpacity>
                 <View style={{ flex: 1, marginLeft: 12 }}>
                   <PrimaryButton
-                    label="여행 만들기!"
-                    icon="airplane-outline"
-                    onPress={handleCreate}
+                    label={mode === 'edit' ? '저장' : '여행 만들기!'}
+                    icon={mode === 'edit' ? undefined : 'airplane-outline'}
+                    onPress={mode === 'edit' ? handleSave : handleCreate}
                   />
                 </View>
               </View>
@@ -765,26 +833,16 @@ export default function NewTripModal({ visible, onClose, onCreated }: Props) {
                   : ''}
               </Text>
 
-              <View style={styles.successHintRow}>
-                <Ionicons name="location-outline" size={14} color={COLORS.gray500} />
-                <Text style={styles.successHintText}>
-                  이제 내 루트에서 장소 핀을 찍어 계획을 세워보세요
-                </Text>
-              </View>
-
               <View style={{ height: 20 }} />
               <PrimaryButton
-                label="내 루트에서 계획하기 →"
+                label="완료"
                 onPress={handleClose}
                 style={{ width: '91%' }}
               />
-              <TouchableOpacity style={{ marginTop: 14 }} onPress={handleClose}>
-                <Text style={styles.laterText}>나중에 하기</Text>
-              </TouchableOpacity>
             </View>
           )}
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
@@ -863,6 +921,10 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '800',
     color: COLORS.black,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   stepIndicatorRow: {
     flexDirection: 'row',
@@ -1177,20 +1239,5 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: COLORS.gray500,
     marginBottom: 16,
-  },
-  successHintRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 20,
-  },
-  successHintText: {
-    fontSize: 12,
-    color: COLORS.gray500,
-    textAlign: 'center',
-  },
-  laterText: {
-    fontSize: 13,
-    color: COLORS.gray400,
   },
 });

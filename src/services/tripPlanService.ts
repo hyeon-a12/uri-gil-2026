@@ -15,8 +15,8 @@ export interface PlanStop {
   name: string;
   day: number;
   time: string;
-  /** AI 추천을 확정해서 추가된 스톱인지, 실제 촬영 기록에서 만들어진 스톱인지 구분합니다. */
-  source?: 'ai-recommendation' | 'recording';
+  /** AI 추천을 확정해서 추가된 스톱인지, 직접 검색해서 추가한 스톱인지, 실제 촬영 기록에서 만들어진 스톱인지 구분합니다. */
+  source?: 'ai-recommendation' | 'manual' | 'recording';
   clips: {
     id: string;
     thumbnail: string;
@@ -128,17 +128,20 @@ export function buildPlanData(
     id: stop.id,
     order: 0, // 아래에서 전체 순서를 다시 매길 때 덮어씌워집니다.
     name: stop.title,
-    day: 1,
-    time: 'AI 추천',
-    source: 'ai-recommendation',
+    day: stop.day ?? 1,
+    time: stop.source === 'manual' ? '직접 추가' : 'AI 추천',
+    source: stop.source,
     clips: [],
   }));
 
-  // 확정한 AI 추천은 일정의 앞부분에 순서대로, 실제 촬영 기록은 그 뒤에 이어집니다.
-  const stops = [...aiStops, ...recordedStops].map((stop, index) => ({
-    ...stop,
-    order: index + 1,
-  }));
+  // 같은 day 안에서는 확정된 장소(AI 추천/직접 추가)가 먼저, 실제 촬영 기록이 뒤에 오도록
+  // day별로 묶은 뒤 전체 순번을 다시 매깁니다.
+  const stops = [...aiStops, ...recordedStops]
+    .sort((a, b) => a.day - b.day)
+    .map((stop, index) => ({
+      ...stop,
+      order: index + 1,
+    }));
   const dayNumbers = Array.from(
     new Set([...stops.map((s) => s.day), ...travelLogs.map((l) => l.day)]),
   ).sort((a, b) => a - b);

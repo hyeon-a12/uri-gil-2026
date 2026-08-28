@@ -52,7 +52,8 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: colors.text,
     textAlign: 'center',
-    marginRight: 36, // 왼쪽 뒤로가기 버튼 너비만큼 밀어서 제목을 진짜 가운데에 맞춥니다.
+    // backButton(36)과 right(최소 36)이 이미 좌우 대칭이라 marginRight로
+    // 추가 보정하면 오히려 제목이 왼쪽으로 치우칩니다(더는 넣지 마세요).
   },
   right: {
     minWidth: 36,

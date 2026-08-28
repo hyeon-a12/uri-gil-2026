@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { useFocusEffect, useLocalSearchParams } from "expo-router";
+import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { parseDateRange, type FolderItem } from "@/services/folderService";
 import { getRecordingsByFolder } from "@/services/recordingService";
 import {
@@ -627,6 +627,7 @@ function MemoEditorModal({
 
 type RoutePlanViewProps = {
   hasTrip: boolean;
+  tripId?: string;
   stops: PlanStop[];
   dayNumbers: number[];
 };
@@ -638,6 +639,7 @@ type RoutePlanViewProps = {
 // 메모는 아직 별도 저장소가 없어서 이전과 동일하게 화면 안에서만 유지됩니다.
 function RoutePlanView({
   hasTrip,
+  tripId,
   stops,
   dayNumbers,
 }: RoutePlanViewProps) {
@@ -820,6 +822,8 @@ function RoutePlanView({
                       >
                         {stop.source === "ai-recommendation"
                           ? "AI 추천으로 추가됨"
+                          : stop.source === "manual"
+                          ? "직접 추가한 장소"
                           : `${stop.time} · 클립 ${stop.clips.length}개`}
                       </Text>
                     </View>
@@ -900,10 +904,11 @@ function RoutePlanView({
           <View style={styles.planAddRow}>
             <Pressable
               onPress={() => {
-                Alert.alert(
-                  "장소 추가",
-                  `Day ${selectedDay}에 새 장소를 추가할 예정입니다.`,
-                );
+                if (!tripId) return;
+                router.push({
+                  pathname: "/add-place",
+                  params: { tripId, day: String(selectedDay) },
+                });
               }}
               style={({ pressed }) => [
                 styles.planAddButton,
@@ -1383,6 +1388,7 @@ export default function MyRouteScreen() {
         ) : (
           <RoutePlanView
             hasTrip={!!currentTrip}
+            tripId={currentTrip?.id}
             stops={planData.stops}
             dayNumbers={planData.dayNumbers}
           />
