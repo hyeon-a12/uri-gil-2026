@@ -32,11 +32,4 @@ export type RecordingData = {
     longitude: number;
     placeName?: string;
   };
-  /**
-   * 그리드 촬영(칸별로 나눠 찍어 나중에 분할 화면으로 합칠 클립들)일 때만 채워짐.
-   * 같은 그리드 세트의 클립들이 공유하는 묶음 id — 서버에서 합칠 때 이 id로 grouping.
-   */
-  gridGroupId?: string;
-  /** 그리드 세트 안에서 몇 번째 칸이었는지 (0부터 시작). */
-  gridSlotIndex?: number;
 };

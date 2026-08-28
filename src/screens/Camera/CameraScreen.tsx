@@ -16,19 +16,14 @@ import {
   StyleSheet,
   View,
 } from 'react-native';
-import Svg, { Circle, Rect, Line, Path } from 'react-native-svg';
-import { BlurView } from 'expo-blur';
+import Svg, { Circle, Rect, Path } from 'react-native-svg';
 import * as Haptics from 'expo-haptics';
 import { AppText as Text } from '@/components/AppText';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { navigateToLocationConfirm } from '@/navigation/recordingNavigation';
 import { useTripStore } from '@/store/useTripStore';
-import {
-  GRID_TEMPLATE_SLOT_COUNTS,
-  type ShootingStyleId,
-  type GridTemplateId,
-} from '@/services/folderService';
+import { type ShootingStyleId } from '@/services/folderService';
 import CameraChangeIcon from '@/assets/images/camera_change.svg';
 import { COLORS as SHARED_COLORS } from '@/constants/color';
 
@@ -47,17 +42,11 @@ const SHOOTING_STYLES: {
   description: string;
 }[] = [
   { id: 'basic', label: '기본 스타일', description: '가이드 없이 자유롭게' },
-  { id: 'grid', label: '그리드 선택', description: '클립을 분할 화면으로' },
   { id: 'doll', label: '인형과 함께', description: '소품 놓을 위치 표시' },
   { id: 'mirror', label: '원형 거울', description: '거울 놓을 위치 표시' },
 ];
 
-const GRID_TEMPLATES: { id: GridTemplateId; label: string }[] = [
-  { id: 'rows3', label: '3분할' },
-  { id: 'rows2', label: '2분할' },
-];
-
-// 게이지(그리드 스타일 진행률 배지)에서 "여기서 0.5x로 바꾸세요" 타이밍 비율.
+// "여기서 0.5x로 바꾸세요" 진동 타이밍 비율.
 const ZOOM_SWITCH_RATIO = 0.5;
 
 // 셔터 버튼(styles.shutterButton)과 같은 값으로 유지해야 합니다. 버튼이 정사각형이
@@ -234,56 +223,7 @@ function headArcPath(
   return `M ${startX} ${startY} A ${headRadius} ${headRadius} 0 ${largeArc} 1 ${endX} ${endY}`;
 }
 
-/**
- * 그리드 촬영 중일 때 프리뷰 위에 겹쳐 그리는 칸 분할 오버레이.
- *
- * 칸 구분선은 항상 보여주고, 지금 찍는 칸(activeIndex)만 클리어하게 두고(= 매번
- * "1번 칸 찍을 때"와 똑같은 카메라 화면), 이미 찍은 칸은 블러+체크 표시, 아직
- * 안 찍은 칸은 블러만 표시합니다. 칸이 넘어갈 때마다 클리어한 자리가 같이 옮겨가면서
- * 진행 상황이 눈에 보여요.
- */
-function GridSplitOverlay({
-  slotCount,
-  activeIndex,
-}: {
-  slotCount: number;
-  activeIndex: number;
-}) {
-  const cellPercent = 100 / slotCount;
-
-  return (
-    <View pointerEvents="none" style={StyleSheet.absoluteFillObject}>
-      {Array.from({ length: slotCount }).map((_, i) => {
-        const isDone = i < activeIndex;
-        const isActive = i === activeIndex;
-
-        return (
-          <View
-            key={i}
-            style={[styles.gridCell, { top: `${i * cellPercent}%`, height: `${cellPercent}%` }]}
-          >
-            {!isActive && (
-              <BlurView intensity={60} tint="dark" style={StyleSheet.absoluteFillObject} />
-            )}
-            {isDone && (
-              <View style={styles.gridCellCheck}>
-                <Ionicons name="checkmark" size={14} color={COLORS.white} />
-              </View>
-            )}
-          </View>
-        );
-      })}
-      {Array.from({ length: slotCount - 1 }).map((_, i) => (
-        <View
-          key={`divider-${i}`}
-          style={[styles.gridDividerLine, { top: `${(i + 1) * cellPercent}%` }]}
-        />
-      ))}
-    </View>
-  );
-}
-
-/** 화면 중앙 스타일 가이드 자리 (그리드 제외 — 인형/사람 스타일용).
+/** 화면 중앙 스타일 가이드 자리 (인형/사람 스타일용).
  * 구도를 사용자가 매번 조정하게 하면 "5초 안에 촬영 시작" 원칙과 부딪혀서,
  * 인형/사람 모두 정해진 자리에 고정된 가이드만 보여줍니다. */
 function CenterGuide({ shootingStyle }: { shootingStyle: ShootingStyleId }) {
@@ -392,20 +332,6 @@ function StylePreview({ styleId }: { styleId: ShootingStyleId }) {
         fill="none"
       />
 
-      {styleId === 'grid' && (
-        <>
-          <Line x1={2} y1={h / 3} x2={w - 2} y2={h / 3} stroke={COLORS.accent} strokeWidth={1.5} />
-          <Line
-            x1={2}
-            y1={(h / 3) * 2}
-            x2={w - 2}
-            y2={(h / 3) * 2}
-            stroke={COLORS.accent}
-            strokeWidth={1.5}
-          />
-        </>
-      )}
-
       {styleId === 'doll' && (
         <Circle
           cx={w / 2}
@@ -433,44 +359,6 @@ function StylePreview({ styleId }: { styleId: ShootingStyleId }) {
   );
 }
 
-/** 그리드 템플릿 하나를 아주 작게 미리 보여주는 아이콘. */
-function GridTemplatePreview({ templateId }: { templateId: GridTemplateId }) {
-  const w = 32;
-  const h = 44;
-  const line = (x1: number, y1: number, x2: number, y2: number, key: string) => (
-    <Line key={key} x1={x1} y1={y1} x2={x2} y2={y2} stroke={COLORS.accent} strokeWidth={1.5} />
-  );
-
-  return (
-    <Svg width={w} height={h}>
-      <Rect
-        x={1}
-        y={1}
-        width={w - 2}
-        height={h - 2}
-        rx={4}
-        stroke={COLORS.textSecondary}
-        strokeWidth={1.2}
-        fill="none"
-      />
-      {templateId === 'rows3' && (
-        <>
-          {line(2, h / 3, w - 2, h / 3, 'a')}
-          {line(2, (h / 3) * 2, w - 2, (h / 3) * 2, 'b')}
-        </>
-      )}
-      {templateId === 'rows2' && line(2, h / 2, w - 2, h / 2, 'a')}
-      {templateId === 'cols2' && line(w / 2, 2, w / 2, h - 2, 'a')}
-      {templateId === 'grid4' && (
-        <>
-          {line(w / 2, 2, w / 2, h - 2, 'a')}
-          {line(2, h / 2, w - 2, h / 2, 'b')}
-        </>
-      )}
-    </Svg>
-  );
-}
-
 export default function CameraScreen() {
   const insets = useSafeAreaInsets();
   const cameraRef = useRef<CameraView>(null);
@@ -480,25 +368,7 @@ export default function CameraScreen() {
   // 촬영 스타일은 여행 만들기 단계가 아니라 이 화면에서 그때그때 고릅니다
   // (추후 다시 수정할 예정 — 지금은 촬영 세션 동안만 쓰이는 로컬 상태예요).
   const [shootingStyle, setShootingStyle] = useState<ShootingStyleId>('basic');
-  const [gridTemplateId, setGridTemplateId] = useState<GridTemplateId | null>(null);
   const [styleSheetVisible, setStyleSheetVisible] = useState(false);
-
-  // 그리드 촬영 진행 상태 — 칸 1 → 칸 2 → ... 순서로 이 화면 안에서 연속 촬영하고,
-  // 마지막 칸까지 다 찍은 뒤에만 장소 확인 화면으로 한 번에 넘어갑니다.
-  const [gridSlotIndex, setGridSlotIndex] = useState(0);
-  const [gridClipUris, setGridClipUris] = useState<string[]>([]);
-  const [gridDurationsMs, setGridDurationsMs] = useState<number[]>([]);
-
-  const gridSlotCount = gridTemplateId ? GRID_TEMPLATE_SLOT_COUNTS[gridTemplateId] : 0;
-  const isGridMode = shootingStyle === 'grid' && gridSlotCount > 0;
-
-  // 그리드가 아닌 스타일로 바꾸거나 템플릿을 바꾸면 진행 중이던 그리드 촬영은
-  // 의미가 없어지니 초기화합니다.
-  useEffect(() => {
-    setGridSlotIndex(0);
-    setGridClipUris([]);
-    setGridDurationsMs([]);
-  }, [shootingStyle, gridTemplateId]);
 
   const maxClipSeconds = RECORD_DURATION_SECONDS;
 
@@ -522,12 +392,9 @@ export default function CameraScreen() {
   const canRecord = clipCount < MAX_CLIPS && permissionsReady;
   const progress = Math.min(elapsedSeconds / maxClipSeconds, 1);
 
-  // 상단 스타일 트리거 pill에 보여줄 텍스트. '그리드 선택'은 어떤 분할을 골랐는지가
-  // 중요하니, 템플릿까지 정해지면 그 템플릿 이름("3분할 (가로 3단)" 등)을 대신 보여줍니다.
+  // 상단 스타일 트리거 pill에 보여줄 텍스트.
   const styleTriggerLabel =
-    (shootingStyle === 'grid' && gridTemplateId
-      ? GRID_TEMPLATES.find((t) => t.id === gridTemplateId)?.label
-      : SHOOTING_STYLES.find((s) => s.id === shootingStyle)?.label) ?? '기본 스타일';
+    SHOOTING_STYLES.find((s) => s.id === shootingStyle)?.label ?? '기본 스타일';
 
   // getAvailableLensesAsync()가 돌려주는 건 표시용 이름(localizedName)이라
   // 정확한 문자열을 미리 알 수 없습니다 — 키워드로 찾습니다. "wide" 계열 렌즈는
@@ -656,33 +523,7 @@ export default function CameraScreen() {
         Math.min(currentCount + 1, MAX_CLIPS),
       );
 
-      if (isGridMode) {
-        const updatedUris = [...gridClipUris, video.uri];
-        const updatedDurations = [...gridDurationsMs, durationMs];
-        const nextSlotIndex = gridSlotIndex + 1;
-
-        if (nextSlotIndex < gridSlotCount) {
-          // 아직 찍을 칸이 남았으면 장소 확인 화면으로 넘어가지 않고, 이 화면
-          // 안에서 다음 칸 촬영으로 이어갑니다.
-          setGridClipUris(updatedUris);
-          setGridDurationsMs(updatedDurations);
-          setGridSlotIndex(nextSlotIndex);
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        } else {
-          // 마지막 칸까지 다 찍었으면 그제야 한 번에 장소 확인 화면으로 이동.
-          navigateToLocationConfirm(
-            updatedUris,
-            undefined,
-            updatedDurations,
-            `grid_${Date.now()}`,
-          );
-          setGridClipUris([]);
-          setGridDurationsMs([]);
-          setGridSlotIndex(0);
-        }
-      } else {
-        navigateToLocationConfirm(video.uri, undefined, durationMs);
-      }
+      navigateToLocationConfirm(video.uri, undefined, durationMs);
     } catch (error) {
       console.error('Video recording failed:', error);
       Alert.alert('촬영에 실패했습니다', '잠시 후 다시 촬영해주세요.');
@@ -745,10 +586,6 @@ export default function CameraScreen() {
             <CenterGuide shootingStyle={shootingStyle} />
           </View>
 
-          {isGridMode && (
-            <GridSplitOverlay slotCount={gridSlotCount} activeIndex={gridSlotIndex} />
-          )}
-
           <Pressable
             hitSlop={16}
             onPress={handleClose}
@@ -756,16 +593,6 @@ export default function CameraScreen() {
           >
             <Ionicons name="close" size={22} color={COLORS.white} />
           </Pressable>
-
-          {isGridMode && (
-            <View style={styles.gridProgressRow} pointerEvents="none">
-              <View style={styles.gridProgressBadge}>
-                <Text allowFontScaling={false} style={styles.gridProgressText}>
-                  {gridSlotIndex + 1} / {gridSlotCount}칸 촬영 중
-                </Text>
-              </View>
-            </View>
-          )}
 
           {/* 촬영 스타일 선택 진입점. 여행 만들기 모달에서 하던 걸 여기로
               옮겨서, 촬영 버튼을 누르고 들어온 이 화면에서 바로 정할 수 있어요. */}
@@ -914,13 +741,7 @@ export default function CameraScreen() {
                     style={[styles.styleCard, selected && styles.styleCardSelected]}
                     onPress={() => {
                       setShootingStyle(option.id);
-                      if (option.id === 'grid') {
-                        // 그리드는 어떤 분할로 할지 하나 더 골라야 하니, 템플릿을
-                        // 고르기 전까지는 시트를 닫지 않습니다.
-                        setGridTemplateId(null);
-                      } else {
-                        setStyleSheetVisible(false);
-                      }
+                      setStyleSheetVisible(false);
                     }}
                   >
                     {selected && (
@@ -939,43 +760,6 @@ export default function CameraScreen() {
                 );
               })}
             </View>
-
-            {shootingStyle === 'grid' && (
-              <View style={styles.gridTemplateSection}>
-                <Text allowFontScaling={false} style={styles.gridTemplateHint}>
-                  어떤 모양으로 나눌까요?
-                </Text>
-                <View style={styles.gridTemplateRow}>
-                  {GRID_TEMPLATES.map((template) => {
-                    const selected = gridTemplateId === template.id;
-                    return (
-                      <Pressable
-                        key={template.id}
-                        style={[
-                          styles.gridTemplateChip,
-                          selected && styles.gridTemplateChipSelected,
-                        ]}
-                        onPress={() => {
-                          setGridTemplateId(template.id);
-                          setStyleSheetVisible(false);
-                        }}
-                      >
-                        <GridTemplatePreview templateId={template.id} />
-                        <Text
-                          allowFontScaling={false}
-                          style={[
-                            styles.gridTemplateChipLabel,
-                            selected && styles.gridTemplateChipLabelSelected,
-                          ]}
-                        >
-                          {template.label}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-              </View>
-            )}
           </Pressable>
         </Pressable>
       </Modal>
@@ -1024,51 +808,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     color: COLORS.white,
-  },
-
-  // 그리드 촬영 진행 상황(위 n / m칸) 배지 — 화면 상단 중앙, 닫기/스타일 버튼과 겹치지
-  // 않도록 그 아래 줄에 둡니다.
-  gridProgressRow: {
-    position: 'absolute',
-    top: 54,
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-  },
-  gridProgressBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 14,
-    backgroundColor: STYLE_TRIGGER_BG,
-  },
-  gridProgressText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: COLORS.white,
-  },
-
-  // 그리드 칸 분할 오버레이 — 칸 하나(top/height는 인라인으로 계산해서 넣음)
-  gridCell: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  gridCellCheck: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: COLORS.accent,
-  },
-  gridDividerLine: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    height: StyleSheet.hairlineWidth * 2,
-    backgroundColor: 'rgba(255,255,255,0.85)',
   },
 
   guideArea: {
@@ -1227,44 +966,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: COLORS.textSecondary,
     textAlign: 'center',
-  },
-  gridTemplateSection: {
-    marginTop: 12,
-    backgroundColor: '#F7F7F7',
-    borderRadius: 16,
-    padding: 12,
-  },
-  gridTemplateHint: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: COLORS.black,
-    marginBottom: 10,
-  },
-  gridTemplateRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  gridTemplateChip: {
-    width: '47%',
-    backgroundColor: COLORS.white,
-    borderWidth: 1.5,
-    borderColor: '#EEEEEE',
-    borderRadius: 12,
-    paddingVertical: 10,
-    alignItems: 'center',
-    gap: 4,
-  },
-  gridTemplateChipSelected: {
-    borderColor: COLORS.accent,
-  },
-  gridTemplateChipLabel: {
-    fontSize: 11,
-    color: COLORS.textSecondary,
-  },
-  gridTemplateChipLabelSelected: {
-    color: COLORS.accent,
-    fontWeight: '700',
   },
   permissionScreen: {
     flex: 1,

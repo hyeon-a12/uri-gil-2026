@@ -23,8 +23,6 @@ async function persistVideoFile(tempUri: string, id: string): Promise<string> {
 export async function saveRecording(
     data: Omit<RecordingData, 'id' | 'videoUri'> & { videoUri: string },
 ): Promise<RecordingData> {
-    // Date.now()만 쓰면 그리드 촬영처럼 saveRecording()을 반복문으로 연달아 호출할 때
-    // 같은 밀리초에 겹쳐서 id(=파일명)가 충돌할 수 있어 랜덤 suffix를 더합니다.
     const id = `rec_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const persistedUri = await persistVideoFile(data.videoUri, id);
 
@@ -48,24 +46,6 @@ export async function getRecordingsByFolder(
 ): Promise<RecordingData[]> {
     const all = await getAllRecordings();
     return all.filter((r) => r.folderId === folderId);
-}
-
-/**
- * 클립 목록/폴더 화면들이 전부 같은 gridGroupId를 가진 클립들(그리드로 나눠 찍은
- * 칸들)을 카드 하나로 묶어서 보여주기 때문에, "클립 N개" 같은 개수 표시도 낱개
- * 클립 수가 아니라 이 "카드 개수" 기준으로 세야 화면에 보이는 카드 수와 맞습니다.
- */
-export function countDisplayItems(records: RecordingData[]): number {
-    const seenGroups = new Set<string>();
-    let count = 0;
-    for (const r of records) {
-        if (r.gridGroupId) {
-            if (seenGroups.has(r.gridGroupId)) continue;
-            seenGroups.add(r.gridGroupId);
-        }
-        count++;
-    }
-    return count;
 }
 
 export async function getAllRecordings(): Promise<RecordingData[]> {

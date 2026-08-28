@@ -114,7 +114,6 @@ const handleCreatedTrip: React.ComponentProps<typeof NewTripModal>['onCreated'] 
       themes: trip.themes,
       clipLengthSeconds: trip.clipLengthSeconds,
       shootingStyle: trip.shootingStyle,
-      gridTemplateId: trip.gridTemplateId,
     };
 
     try {

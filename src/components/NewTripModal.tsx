@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import type { ShootingStyleId, GridTemplateId } from '@/services/folderService';
+import type { ShootingStyleId } from '@/services/folderService';
 import { COLORS as SHARED_COLORS } from '@/constants/color';
 
 /**
@@ -73,12 +73,11 @@ const THEMES = [
 // 1단계(기본 정보)와 3단계(테마)를 한 화면으로 합쳐서 전체 4단계 → 3단계로 줄었습니다.
 type Step = 1 | 2 | 3 | 'success';
 
-// ShootingStyleId/GridTemplateId는 저장 스키마(FolderItem)에도 쓰여서 folderService.ts로
-// 옮겼습니다. 촬영 스타일/그리드 템플릿을 실제로 고르는 과정은 여행 생성 모달이 아니라
-// 카메라 화면(CameraScreen)으로 옮겨졌어요 — 촬영 버튼을 누른 그 화면에서 정할 수 있게요.
-// 여기 TripForm에는 여전히 필드가 남아있는데, FolderItem 저장 스키마와 다른 화면들
-// (clip-manage, MyRoutesScreen 등)이 이 필드들을 그대로 읽어가기 때문에 기본값만 채워서
-// 넘겨줍니다.
+// ShootingStyleId는 저장 스키마(FolderItem)에도 쓰여서 folderService.ts로 옮겼습니다.
+// 촬영 스타일을 실제로 고르는 과정은 여행 생성 모달이 아니라 카메라 화면(CameraScreen)으로
+// 옮겨졌어요 — 촬영 버튼을 누른 그 화면에서 정할 수 있게요. 여기 TripForm에는 여전히
+// 필드가 남아있는데, FolderItem 저장 스키마와 다른 화면들(clip-manage, MyRoutesScreen 등)이
+// 이 필드를 그대로 읽어가기 때문에 기본값만 채워서 넘겨줍니다.
 
 type TripForm = {
   name: string;
@@ -90,7 +89,6 @@ type TripForm = {
   themes: string[];
   clipLengthSeconds: number;
   shootingStyle: ShootingStyleId;
-  gridTemplateId: GridTemplateId | null; // shootingStyle === 'grid'일 때만 의미 있음
 };
 
 const INITIAL_FORM: TripForm = {
@@ -105,7 +103,6 @@ const INITIAL_FORM: TripForm = {
   clipLengthSeconds: 3,
   // 촬영 스타일은 카메라 화면에서 정하니, 여기서는 저장 스키마용 기본값만 둡니다.
   shootingStyle: 'basic',
-  gridTemplateId: null,
 };
 
 type Props = {

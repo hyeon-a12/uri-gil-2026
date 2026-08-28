@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as MediaLibrary from 'expo-media-library';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -54,24 +54,6 @@ interface EditableClip {
   placeName?: string;
   recordedAt?: string; // ISO
   durationSeconds: number;
-  /** 그리드 촬영(칸별로 나눠 찍은 클립)일 때만 채워짐 — 같은 값이면 같은 그리드 세트. */
-  gridGroupId?: string;
-  /** 그리드 세트 안에서 몇 번째 칸이었는지 (0부터 시작). */
-  gridSlotIndex?: number;
-}
-
-/** 타임라인/전체 재생에 실제로 쓰는 항목 — 낱개 클립이거나, 같은 그리드 세트끼리
- * 묶인 항목. 그리드 항목은 재생할 때도 한 항목으로 취급해서 칸들을 동시에 재생해요. */
-type TimelineItem =
-  | { kind: 'single'; clip: EditableClip }
-  | { kind: 'grid'; groupId: string; members: EditableClip[] };
-
-/** 항목 하나(그리드 세트 포함)가 최종 영상에서 차지하는 길이. 그리드 세트는 칸들이
- * 동시에 재생되니 다 더하면 실제보다 길어져요 — 가장 긴 칸 하나의 길이만큼만 차지해요. */
-function getItemDurationSeconds(item: TimelineItem): number {
-  return item.kind === 'single'
-    ? item.clip.durationSeconds
-    : Math.max(0, ...item.members.map((m) => m.durationSeconds));
 }
 
 // ── 도구바 ───────────────────────────────────────────────────
@@ -93,18 +75,6 @@ const INFO_CONTENT_OPTIONS: { id: InfoContentType; label: string }[] = [
   { id: 'location', label: '위치' },
   { id: 'time', label: '시간' },
   { id: 'both', label: '시간 + 위치' },
-];
-
-type InfoTextAlign = 'left' | 'center' | 'right';
-
-const ALIGN_OPTIONS: {
-  id: InfoTextAlign;
-  label: string;
-  icon: keyof typeof MaterialCommunityIcons.glyphMap;
-}[] = [
-  { id: 'left', label: '왼쪽 정렬', icon: 'format-align-left' },
-  { id: 'center', label: '중앙 정렬', icon: 'format-align-center' },
-  { id: 'right', label: '오른쪽 정렬', icon: 'format-align-right' },
 ];
 
 type FontId =
@@ -145,6 +115,9 @@ function getFontFamily(fontId: FontId, bold: boolean): string {
 
 const TEXT_COLOR_OPTIONS = ['#FFFFFF', '#222222', '#FF7F5C', '#FFD54F', '#7EC8E3'];
 
+// 정렬은 더 이상 사용자가 조절하지 않고 항상 중앙으로 고정합니다.
+const FIXED_TEXT_ALIGN = 'center' as const;
+
 const MIN_TEXT_FONT_SIZE = 10;
 const MAX_TEXT_FONT_SIZE = 60;
 
@@ -179,11 +152,11 @@ const TEXT_POSITION_GRID: TextPosition[] = [
 const DEFAULT_TEXT_POSITION: TextPosition = 'center';
 
 // ── 편집 상태 ────────────────────────────────────────────────
-// "정보"(infoContentType)/"위치"(textPosition)/"정렬"(textAlign)/시간·장소
-// 각각의 글꼴·색상·크기(timeStyle/placeStyle)는 클립마다 다르게 두면 오히려
-// 헷갈려서 영상 전체에 하나만 적용되는 전역 설정으로 뺐습니다. 음소거는
-// 클립마다 다르게 쓰는 게 자연스러워서 clipId를 키로 쓰는 객체로 클립별
-// 독립 설정을 유지합니다.
+// "정보"(infoContentType)/"위치"(textPosition)/시간·장소 각각의 글꼴·색상·크기
+// (timeStyle/placeStyle)는 클립마다 다르게 두면 오히려 헷갈려서 영상 전체에
+// 하나만 적용되는 전역 설정으로 뺐습니다. 정렬(중앙)은 고정값이라 더 이상 이
+// 상태에 두지 않습니다. 음소거는 클립마다 다르게 쓰는 게 자연스러워서
+// clipId를 키로 쓰는 객체로 클립별 독립 설정을 유지합니다.
 interface TextElementStyle {
   fontId: FontId;
   bold: boolean;
@@ -195,7 +168,7 @@ const DEFAULT_TEXT_ELEMENT_STYLE: TextElementStyle = {
   fontId: 'pretendard',
   bold: false,
   color: '#FFFFFF',
-  fontSize: 15,
+  fontSize: 20,
 };
 
 function isDefaultTextElementStyle(style: TextElementStyle): boolean {
@@ -210,7 +183,6 @@ function isDefaultTextElementStyle(style: TextElementStyle): boolean {
 interface GlobalEditState {
   infoContentType: InfoContentType | null;
   textPosition: TextPosition;
-  textAlign: InfoTextAlign;
   timeStyle: TextElementStyle;
   placeStyle: TextElementStyle;
 }
@@ -218,7 +190,6 @@ interface GlobalEditState {
 const DEFAULT_GLOBAL_EDIT_STATE: GlobalEditState = {
   infoContentType: null,
   textPosition: DEFAULT_TEXT_POSITION,
-  textAlign: 'left',
   timeStyle: { ...DEFAULT_TEXT_ELEMENT_STYLE },
   placeStyle: { ...DEFAULT_TEXT_ELEMENT_STYLE },
 };
@@ -227,7 +198,6 @@ function isDefaultGlobalEditState(state: GlobalEditState): boolean {
   return (
     state.infoContentType === DEFAULT_GLOBAL_EDIT_STATE.infoContentType &&
     state.textPosition === DEFAULT_GLOBAL_EDIT_STATE.textPosition &&
-    state.textAlign === DEFAULT_GLOBAL_EDIT_STATE.textAlign &&
     isDefaultTextElementStyle(state.timeStyle) &&
     isDefaultTextElementStyle(state.placeStyle)
   );
@@ -276,7 +246,6 @@ async function renderVideo(exportData: {
   globalSetting: {
     infoContentType: string | null;
     textPosition: string;
-    textAlign: string;
     timeStyle: TextElementStyle;
     placeStyle: TextElementStyle;
   };
@@ -388,86 +357,6 @@ async function renderVideo(exportData: {
   }
 }
 
-/** 그리드 세트 안의 클립 하나. 재생/정지는 화면 전체 재생 버튼(isPlaying)에 맞춥니다.
- * 썸네일을 VideoView 뒤에 깔아둬서, 새 클립으로 넘어갈 때 플레이어가 첫 프레임을
- * 디코딩하는 짧은 순간에도 화면이 까맣게 깜빡이지 않고 썸네일이 대신 보이게 합니다. */
-function GroupPreviewCell({
-  uri,
-  thumbnailUri,
-  isPlaying,
-}: {
-  uri?: string;
-  thumbnailUri?: string;
-  isPlaying: boolean;
-}) {
-  const player = useVideoPlayer(uri ?? null, (p) => {
-    p.loop = true;
-    // 칸마다 소리가 다 나오면 겹쳐서 시끄러우니 미리보기에서는 음소거합니다.
-    p.muted = true;
-  });
-
-  useEffect(() => {
-    if (isPlaying) {
-      player.play();
-    } else {
-      player.pause();
-    }
-  }, [isPlaying, player]);
-
-  return (
-    <>
-      {thumbnailUri && (
-        <Image source={{ uri: thumbnailUri }} style={StyleSheet.absoluteFill} />
-      )}
-      <VideoView
-        player={player}
-        style={StyleSheet.absoluteFill}
-        contentFit="cover"
-        nativeControls={false}
-      />
-    </>
-  );
-}
-
-/** 그리드로 나눠 찍은 클립들을 실제 분할 구도 그대로 프리뷰에 동시 재생. 터치는
- * 그대로 통과시켜서(pointerEvents 없음) 프리뷰 배경 탭으로 선택 해제하는
- * 기존 동작이 그리드일 때도 똑같이 동작하게 둡니다. */
-function GroupPreviewPlayers({
-  clips,
-  isPlaying,
-}: {
-  clips: EditableClip[];
-  isPlaying: boolean;
-}) {
-  const cellPercent = 100 / clips.length;
-
-  return (
-    <>
-      {clips.map((clip, index) => (
-        <View
-          key={clip.id}
-          style={[
-            styles.groupPreviewCell,
-            { top: `${index * cellPercent}%`, height: `${cellPercent}%` },
-          ]}
-        >
-          <GroupPreviewCell
-            uri={clip.videoUri}
-            thumbnailUri={clip.thumbnailUri}
-            isPlaying={isPlaying}
-          />
-        </View>
-      ))}
-      {clips.slice(1).map((_, index) => (
-        <View
-          key={`divider-${index}`}
-          style={[styles.groupPreviewDivider, { top: `${(index + 1) * cellPercent}%` }]}
-        />
-      ))}
-    </>
-  );
-}
-
 export default function VideoEditScreen() {
   const insets = useSafeAreaInsets();
 
@@ -507,8 +396,6 @@ export default function VideoEditScreen() {
             placeName: record.location?.placeName ?? undefined,
             recordedAt: record.recordedAt,
             durationSeconds: Math.floor((record.durationMs ?? 0) / 1000),
-            gridGroupId: record.gridGroupId,
-            gridSlotIndex: record.gridSlotIndex,
           });
         }
         
@@ -537,55 +424,9 @@ export default function VideoEditScreen() {
 
   const editingClip = clips.find((c) => c.id === editingClipId) ?? null;
 
-  // 편집 대상 클립이 그리드로 나눠 찍은 세트의 일부면, 같은 세트의 다른 칸들도
-  // 같이 찾아둡니다 — 프리뷰에서 그리드로 합쳐서 보여줄 때 씁니다.
-  // (2명 이상일 때만 "그리드"로 취급 — 그룹 id가 있어도 멤버가 1개뿐이면 그냥 단일 클립.)
-  const editingClipGroup = useMemo(() => {
-    if (!editingClip?.gridGroupId) return null;
-    const members = clips
-      .filter((c) => c.gridGroupId === editingClip.gridGroupId)
-      .sort((a, b) => (a.gridSlotIndex ?? 0) - (b.gridSlotIndex ?? 0));
-    return members.length > 1 ? members : null;
-  }, [editingClip, clips]);
-
-  // 타임라인에 실제로 그릴 항목 — 낱개 클립이거나, 같은 그리드 세트끼리 묶인 타일.
-  const timelineItems = useMemo(() => {
-    const membersByGroup = new Map<string, EditableClip[]>();
-    for (const clip of clips) {
-      if (!clip.gridGroupId) continue;
-      const list = membersByGroup.get(clip.gridGroupId) ?? [];
-      list.push(clip);
-      membersByGroup.set(clip.gridGroupId, list);
-    }
-
-    const items: TimelineItem[] = [];
-    const renderedGroups = new Set<string>();
-
-    for (const clip of clips) {
-      if (!clip.gridGroupId) {
-        items.push({ kind: 'single', clip });
-        continue;
-      }
-      const members = membersByGroup.get(clip.gridGroupId) ?? [];
-      if (members.length <= 1) {
-        items.push({ kind: 'single', clip });
-        continue;
-      }
-      if (renderedGroups.has(clip.gridGroupId)) continue;
-      renderedGroups.add(clip.gridGroupId);
-
-      const sortedMembers = [...members].sort(
-        (a, b) => (a.gridSlotIndex ?? 0) - (b.gridSlotIndex ?? 0),
-      );
-      items.push({ kind: 'grid', groupId: clip.gridGroupId, members: sortedMembers });
-    }
-
-    return items;
-  }, [clips]);
-
   const totalDurationSeconds = useMemo(
-    () => timelineItems.reduce((sum, item) => sum + getItemDurationSeconds(item), 0),
-    [timelineItems],
+    () => clips.reduce((sum, clip) => sum + clip.durationSeconds, 0),
+    [clips],
   );
 
   // 큰 눈금 간격은 전체 길이에 맞춰 자동으로 성깁니다 — 짧은 영상은 5초마다,
@@ -601,7 +442,7 @@ export default function VideoEditScreen() {
     return ticks;
   }, [totalDurationSeconds]);
 
-  // 정보 종류/위치/정렬/시간·장소 스타일은 영상 전체에 하나만 적용되는 전역 설정입니다.
+  // 정보 종류/위치/시간·장소 스타일은 영상 전체에 하나만 적용되는 전역 설정입니다.
   const [globalEditState, setGlobalEditState] = useState<GlobalEditState>(
     DEFAULT_GLOBAL_EDIT_STATE,
   );
@@ -653,58 +494,37 @@ export default function VideoEditScreen() {
     Object.values(editStates).some((state) => !isDefaultClipEditState(state));
 
   // ── 재생 ────────────────────────────────────────────────
-  // 클립이 선택돼 있으면(editingClipId) 그 클립(또는 그리드 세트) 하나만 재생하고
-  // 끝나면 멈춰요. 선택된 클립이 없으면 타임라인 항목(timelineItems) 순서대로
-  // 이어서 재생합니다 — 그리드로 묶인 항목은 한 항목으로 취급해서, 칸들을 동시에
-  // 재생하고 그 항목이 끝나면 다음 항목으로 넘어갑니다.
+  // 클립이 선택돼 있으면(editingClipId) 그 클립 하나만 재생하고 끝나면 멈춰요.
+  // 선택된 클립이 없으면 클립 목록(clips) 순서대로 이어서 재생합니다.
   const [playItemIndex, setPlayItemIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
 
-  const playingItem: TimelineItem | null = editingClipId
+  const playingItem: EditableClip | null = editingClipId
     ? null
-    : timelineItems[playItemIndex] ?? null;
+    : clips[playItemIndex] ?? null;
 
-  // 지금 재생해야 할 게 그리드 세트면(선택 모드든 전체 재생 모드든) 이 배열에 담김.
-  const playingGroup: EditableClip[] | null = editingClipId
-    ? editingClipGroup
-    : playingItem?.kind === 'grid'
-      ? playingItem.members
-      : null;
-
-  // 단일 재생/타임라인 하이라이트용 "대표 클립". 그리드일 땐 첫 번째 칸이 대표예요.
   const playingClip: EditableClip | null = editingClipId
     ? editingClip
-    : playingItem?.kind === 'single'
-      ? playingItem.clip
-      : playingItem?.kind === 'grid'
-        ? playingItem.members[0]
-        : null;
+    : playingItem;
 
   // 재생 눈금바 위에서 움직이는 재생 위치 표시(playhead)용 계산. 지금 재생/선택
   // 중인 항목이 전체 타임라인에서 몇 번째인지 찾고(activeTimelineIndex), 그 앞에
   // 있는 항목들의 길이를 더해 "이 항목이 시작하는 지점"(itemStartSeconds)을 구합니다.
   const activeTimelineIndex = useMemo(() => {
     if (!editingClipId) return playItemIndex;
-    const idx = timelineItems.findIndex((item) =>
-      item.kind === 'single'
-        ? item.clip.id === editingClipId
-        : item.members.some((m) => m.id === editingClipId),
-    );
+    const idx = clips.findIndex((clip) => clip.id === editingClipId);
     return idx === -1 ? 0 : idx;
-  }, [editingClipId, playItemIndex, timelineItems]);
+  }, [editingClipId, playItemIndex, clips]);
 
   const itemStartSeconds = useMemo(() => {
     let sum = 0;
     for (let i = 0; i < activeTimelineIndex; i++) {
-      sum += getItemDurationSeconds(timelineItems[i]);
+      sum += clips[i].durationSeconds;
     }
     return sum;
-  }, [timelineItems, activeTimelineIndex]);
+  }, [clips, activeTimelineIndex]);
 
-  const activeItemDurationSeconds =
-    timelineItems[activeTimelineIndex] != null
-      ? getItemDurationSeconds(timelineItems[activeTimelineIndex])
-      : 0;
+  const activeItemDurationSeconds = clips[activeTimelineIndex]?.durationSeconds ?? 0;
 
   // 재생 위치(초 단위)를 부드럽게 움직이는 Animated.Value. 항목이 바뀌면 그 항목의
   // 시작 지점으로 즉시 점프하고(아래 첫 번째 effect), 재생 중이면 남은 시간 동안
@@ -739,7 +559,7 @@ export default function VideoEditScreen() {
   const advanceToNextItem = () => {
     setPlayItemIndex((prevIndex) => {
       const nextIndex = prevIndex + 1;
-      if (nextIndex < timelineItems.length) {
+      if (nextIndex < clips.length) {
         return nextIndex;
       }
       setIsPlaying(false);
@@ -751,9 +571,7 @@ export default function VideoEditScreen() {
     p.loop = false;
   });
 
-  // 단일 클립 재생이 끝났을 때: 선택 모드면 그냥 멈추고, 전체 재생 모드면 다음
-  // 타임라인 항목으로 넘어갑니다. (그리드 항목 재생 중엔 이 player 자체를 안 쓰므로
-  // 이 리스너가 안 불립니다 — 그리드는 아래 타이머로 따로 처리해요.)
+  // 클립 재생이 끝났을 때: 선택 모드면 그냥 멈추고, 전체 재생 모드면 다음 클립으로 넘어갑니다.
   useEffect(() => {
     const subscription = player.addListener('playToEnd', () => {
       if (editingClipId) {
@@ -764,30 +582,9 @@ export default function VideoEditScreen() {
     });
     return () => subscription.remove();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [player, editingClipId, timelineItems.length]);
-
-  // 그리드 항목 재생 중일 땐 playToEnd를 낼 단일 플레이어가 없어서, 칸들 중 가장
-  // 긴 길이만큼 타이머로 다음 항목으로 넘깁니다(전체 재생 모드에서만).
-  useEffect(() => {
-    if (editingClipId || !isPlaying || !playingGroup) return;
-
-    const durationMs =
-      Math.max(1, ...playingGroup.map((m) => m.durationSeconds || 0)) * 1000;
-    const timeout = setTimeout(() => {
-      advanceToNextItem();
-    }, durationMs);
-
-    return () => clearTimeout(timeout);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editingClipId, isPlaying, playingGroup, timelineItems.length]);
+  }, [player, editingClipId, clips.length]);
 
   useEffect(() => {
-    if (playingGroup) {
-      // 그리드 그룹 재생은 GroupPreviewPlayers가 칸별로 알아서 재생하니, 단일
-      // player는 멈춰둡니다(같은 소스를 또 재생하면 소리가 겹쳐요).
-      player.pause();
-      return;
-    }
     if (!playingClip?.videoUri) return;
 
     if (isPlaying) {
@@ -799,7 +596,7 @@ export default function VideoEditScreen() {
       player.pause();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [playingClip, playingGroup, isPlaying, player]);
+  }, [playingClip, isPlaying, player]);
 
   const hasPlayableClips = clips.some((c) => !!c.videoUri);
 
@@ -830,7 +627,7 @@ export default function VideoEditScreen() {
   // ── 도구 패널 ────────────────────────────────────────────
   const [activeTool, setActiveTool] = useState<ToolId | null>(null);
 
-  // "텍스트" 시트 안의 서브탭: 표시(정보 종류·정렬) / 스타일(시간·장소 글꼴·색상·크기)
+  // "텍스트" 시트 안의 서브탭: 표시(정보 종류) / 스타일(시간·장소 글꼴·색상)
   const [sheetTab, setSheetTab] = useState<'display' | 'style'>('display');
   // 스타일 탭 안에서 지금 편집 중인 대상(시간 또는 장소)
   const [styleTarget, setStyleTarget] = useState<'time' | 'place'>('time');
@@ -982,7 +779,7 @@ export default function VideoEditScreen() {
 
     Alert.alert(
       '영상 생성하기',
-      `${timelineItems.length}개의 클립으로 영상을 만들까요?\n예상 길이: ${formatTimer(totalDurationSeconds)}`,
+      `${clips.length}개의 클립으로 영상을 만들까요?\n예상 길이: ${formatTimer(totalDurationSeconds)}`,
       [
         { text: '취소', style: 'cancel'},
         {
@@ -1002,7 +799,6 @@ export default function VideoEditScreen() {
               globalSetting: {
                 infoContentType: globalEditState.infoContentType,
                 textPosition: globalEditState.textPosition,
-                textAlign: globalEditState.textAlign,
                 timeStyle: globalEditState.timeStyle,
                 placeStyle: globalEditState.placeStyle,
               },
@@ -1097,32 +893,7 @@ export default function VideoEditScreen() {
           setPreviewBottomY(y + height);
         }}
       >
-        {playingGroup && isPlaying ? (
-          <GroupPreviewPlayers clips={playingGroup} isPlaying={isPlaying} />
-        ) : editingClipGroup ? (
-          // 선택 모드에서 일시정지 중 — 칸별 썸네일을 쌓아서 보여줍니다.
-          editingClipGroup.map((member, index) => (
-            <View
-              key={member.id}
-              style={[
-                styles.groupPreviewCell,
-                {
-                  top: `${(index * 100) / editingClipGroup.length}%`,
-                  height: `${100 / editingClipGroup.length}%`,
-                },
-              ]}
-            >
-              {member.thumbnailUri ? (
-                <Image
-                  source={{ uri: member.thumbnailUri }}
-                  style={styles.previewImage}
-                />
-              ) : (
-                <View style={styles.timelineThumbPlaceholder} />
-              )}
-            </View>
-          ))
-        ) : isPlaying && playingClip?.videoUri ? (
+        {isPlaying && playingClip?.videoUri ? (
           <View style={styles.previewImage}>
             {/* 다음 클립으로 넘어갈 때 새 영상의 첫 프레임을 디코딩하는 짧은 순간
                 화면이 까맣게 깜빡이는 걸 막기 위해, 썸네일을 뒤에 깔아둡니다. */}
@@ -1177,7 +948,7 @@ export default function VideoEditScreen() {
                   style={[
                     styles.infoOverlayText,
                     {
-                      textAlign: editingState.textAlign,
+                      textAlign: FIXED_TEXT_ALIGN,
                       color: editingState.timeStyle.color,
                       fontSize: editingState.timeStyle.fontSize,
                       fontFamily: getFontFamily(
@@ -1208,7 +979,7 @@ export default function VideoEditScreen() {
                   style={[
                     styles.infoOverlayText,
                     {
-                      textAlign: editingState.textAlign,
+                      textAlign: FIXED_TEXT_ALIGN,
                       color: editingState.placeStyle.color,
                       fontSize: editingState.placeStyle.fontSize,
                       fontFamily: getFontFamily(
@@ -1301,80 +1072,21 @@ export default function VideoEditScreen() {
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.timelineRow}
       >
-        {timelineItems.map((item, index) => {
-          if (item.kind === 'single') {
-            const clip = item.clip;
-            const isEditing = clip.id === editingClipId;
-            const isCurrentlyPlaying = isPlaying && playingClip?.id === clip.id;
-            const clipState = getEditState(clip.id);
-
-            return (
-              <TouchableOpacity
-                key={clip.id}
-                onPress={() => {
-                  if (isEditing) {
-                    // 이미 선택된 클립을 다시 누르면 선택 해제
-                    deselectClip();
-                    return;
-                  }
-                  setEditingClipId(clip.id);
-                  setIsPlaying(false);
-                }}
-                style={[
-                  styles.timelineTile,
-                  isEditing && styles.timelineTileEditing,
-                ]}
-                activeOpacity={0.85}
-              >
-                {clip.thumbnailUri ? (
-                  <Image
-                    source={{ uri: clip.thumbnailUri }}
-                    style={styles.timelineThumb}
-                  />
-                ) : (
-                  <View style={styles.timelineThumbPlaceholder} />
-                )}
-
-                <View style={styles.timelineBadge}>
-                  <Text allowFontScaling={false} style={styles.timelineBadgeText}>
-                    {index + 1}
-                  </Text>
-                </View>
-
-                {clipState.isMuted && (
-                  <View style={styles.timelineMuteBadge}>
-                    <Ionicons name="volume-mute" size={10} color="#FFFFFF" />
-                  </View>
-                )}
-
-                {isCurrentlyPlaying && (
-                  <View style={styles.nowPlayingBadge}>
-                    <Ionicons name="volume-high" size={10} color="#FFFFFF" />
-                  </View>
-                )}
-              </TouchableOpacity>
-            );
-          }
-
-          // 그리드로 나눠 찍은 세트 — 칸 개수만큼 썸네일을 쌓아서 타일 하나로 보여줍니다.
-          const { groupId, members } = item;
-          const firstMember = members[0];
-          const isEditing =
-            editingClipId != null && members.some((m) => m.id === editingClipId);
-          const isCurrentlyPlaying =
-            isPlaying && !!playingClip && members.some((m) => m.id === playingClip.id);
-          const clipState = getEditState(firstMember.id);
-          const cellPercent = 100 / members.length;
+        {clips.map((clip, index) => {
+          const isEditing = clip.id === editingClipId;
+          const isCurrentlyPlaying = isPlaying && playingClip?.id === clip.id;
+          const clipState = getEditState(clip.id);
 
           return (
             <TouchableOpacity
-              key={groupId}
+              key={clip.id}
               onPress={() => {
                 if (isEditing) {
+                  // 이미 선택된 클립을 다시 누르면 선택 해제
                   deselectClip();
                   return;
                 }
-                setEditingClipId(firstMember.id);
+                setEditingClipId(clip.id);
                 setIsPlaying(false);
               }}
               style={[
@@ -1383,36 +1095,19 @@ export default function VideoEditScreen() {
               ]}
               activeOpacity={0.85}
             >
-              {members.map((member, memberIndex) => (
-                <View
-                  key={member.id}
-                  style={[
-                    styles.timelineGridCell,
-                    {
-                      top: `${memberIndex * cellPercent}%`,
-                      height: `${cellPercent}%`,
-                    },
-                  ]}
-                >
-                  {member.thumbnailUri ? (
-                    <Image
-                      source={{ uri: member.thumbnailUri }}
-                      style={styles.timelineThumb}
-                    />
-                  ) : (
-                    <View style={styles.timelineThumbPlaceholder} />
-                  )}
-                </View>
-              ))}
+              {clip.thumbnailUri ? (
+                <Image
+                  source={{ uri: clip.thumbnailUri }}
+                  style={styles.timelineThumb}
+                />
+              ) : (
+                <View style={styles.timelineThumbPlaceholder} />
+              )}
 
               <View style={styles.timelineBadge}>
                 <Text allowFontScaling={false} style={styles.timelineBadgeText}>
                   {index + 1}
                 </Text>
-              </View>
-
-              <View style={styles.timelineGridBadge}>
-                <Ionicons name="apps-outline" size={10} color="#FFFFFF" />
               </View>
 
               {clipState.isMuted && (
@@ -1609,46 +1304,6 @@ export default function VideoEditScreen() {
                             >
                               {option.label}
                             </Text>
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </View>
-
-                    <Text
-                      allowFontScaling={false}
-                      style={[styles.sheetSectionLabel, { marginTop: 20 }]}
-                    >
-                      정렬
-                    </Text>
-                    <View style={styles.alignChipRow}>
-                      {ALIGN_OPTIONS.map((align) => {
-                        const isSelected = editingState.textAlign === align.id;
-                        return (
-                          <TouchableOpacity
-                            key={align.id}
-                            onPress={() =>
-                              updateGlobalEditState({ textAlign: align.id })
-                            }
-                            style={[
-                              styles.alignChip,
-                              isSelected && styles.alignChipSelected,
-                            ]}
-                            accessibilityLabel={align.label}
-                          >
-                            {isSelected && (
-                              <View style={styles.fontChipCheckBadge}>
-                                <Ionicons
-                                  name="checkmark"
-                                  size={10}
-                                  color={COLORS.white}
-                                />
-                              </View>
-                            )}
-                            <MaterialCommunityIcons
-                              name={align.icon}
-                              size={18}
-                              color={isSelected ? COLORS.accent : COLORS.gray500}
-                            />
                           </TouchableOpacity>
                         );
                       })}
@@ -1977,19 +1632,6 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
   },
-  // 그리드 프리뷰 — 칸 하나(top/height는 인라인으로 계산해서 넣음)
-  groupPreviewCell: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-  },
-  groupPreviewDivider: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    height: StyleSheet.hairlineWidth * 2,
-    backgroundColor: 'rgba(255,255,255,0.6)',
-  },
   previewPlaceholder: {
     flex: 1,
     alignItems: 'center',
@@ -1997,7 +1639,7 @@ const styles = StyleSheet.create({
   },
   infoOverlay: {
     position: 'absolute',
-    // 그리드 프리뷰의 칸 구분선 등 영상 레이어 위에서 항상 텍스트가 보이도록.
+    // 영상 레이어 위에서 항상 텍스트가 보이도록.
     zIndex: 2,
     borderRadius: 10,
     paddingHorizontal: 10,
@@ -2117,23 +1759,6 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
     backgroundColor: COLORS.gray200,
-  },
-  // 그리드 타일 안, 칸 하나(top/height는 인라인으로 계산해서 넣음)
-  timelineGridCell: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-  },
-  timelineGridBadge: {
-    position: 'absolute',
-    top: 4,
-    right: 4,
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   timelineBadge: {
     position: 'absolute',
@@ -2451,27 +2076,6 @@ const styles = StyleSheet.create({
     color: COLORS.accent,
   },
 
-  alignChipRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  // 글꼴 칩과 같은 테두리/선택 스타일이지만, 텍스트 대신 아이콘 하나만 담는
-  // 정사각형에 가까운 버튼이라 크기를 따로 둡니다.
-  alignChip: {
-    width: 44,
-    height: 40,
-    borderRadius: 9,
-    backgroundColor: COLORS.background,
-    borderWidth: 1,
-    borderColor: COLORS.divider,
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative', // 체크 배지 위치 기준
-  },
-  alignChipSelected: {
-    borderColor: COLORS.accent,
-  },
   fontChipRow: {
     flexDirection: 'row',
     gap: 8,

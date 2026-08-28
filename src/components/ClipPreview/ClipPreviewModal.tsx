@@ -13,7 +13,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { useEvent } from 'expo';
 import { ClipItem } from '@/types/home';
 import { useVideoPlayer, VideoView } from "expo-video";
-import { GridVideoPreview } from '@/components/location-confirm/GridVideoPreview';
 import { COLORS as SHARED_COLORS } from '@/constants/color';
 
 const COLORS = {
@@ -40,8 +39,7 @@ const COLORS = {
 };
 
 interface ClipPreviewModalProps {
-  /** 그리드 클립이면 칸 순서대로 정렬된 배열(2개 이상), 낱개 클립이면 길이 1짜리 배열. */
-  clips: ClipItem[] | null;
+  clip: ClipItem | null;
   onClose: () => void;
 }
 
@@ -55,63 +53,9 @@ const formatDate = (isoString: string) => {
   return `${yyyy}.${mm}.${dd} ${hh}:${min}`;
 };
 
-/** 여러 칸을 한 번에 보여줘야 하면 그리드 미리보기로, 아니면 원래 있던 전체화면
- * 단일 재생 미리보기로 분기합니다. */
-export function ClipPreviewModal({ clips, onClose }: ClipPreviewModalProps) {
-  if (!clips || clips.length === 0) return null;
-  if (clips.length > 1) {
-    return <GridClipPreview clips={clips} onClose={onClose} />;
-  }
-  return <SingleClipPreview clip={clips[0]} onClose={onClose} />;
-}
-
-/** 그리드로 나눠 찍은 클립 여러 개를 실제 분할 구도 그대로 동시 재생하는 전체화면
- * 미리보기. 클립 선택 목록에서 쓰는 GridVideoPreview를 그대로 재사용합니다. */
-function GridClipPreview({ clips, onClose }: { clips: ClipItem[]; onClose: () => void }) {
-  const insets = useSafeAreaInsets();
-  const first = clips[0];
-
-  return (
-    <Modal
-      visible
-      transparent
-      animationType='fade'
-      onRequestClose={onClose}
-      statusBarTranslucent
-    >
-      <View style={previewStyles.container}>
-        <GridVideoPreview
-          videoUris={clips.map((c) => c.uri)}
-          style={previewStyles.gridVideoContainer}
-        />
-
-        <View style={[previewStyles.topBar, { paddingTop: insets.top + 10 }]}>
-          <View style={previewStyles.topInfoRow}>
-            <View style={previewStyles.clipInfo}>
-              <Text
-                numberOfLines={1}
-                allowFontScaling={false}
-                style={previewStyles.clipTitle}
-              >
-                {first.title}
-              </Text>
-              <Text allowFontScaling={false} style={previewStyles.clipDate}>
-                그리드 {clips.length}칸 · {formatDate(first.recordedAt)}
-              </Text>
-            </View>
-
-            <Pressable
-              hitSlop={12}
-              onPress={onClose}
-              style={previewStyles.closeButton}
-            >
-              <Ionicons name='close' size={26} color="#FFFFFF" />
-            </Pressable>
-          </View>
-        </View>
-      </View>
-    </Modal>
-  );
+export function ClipPreviewModal({ clip, onClose }: ClipPreviewModalProps) {
+  if (!clip) return null;
+  return <SingleClipPreview clip={clip} onClose={onClose} />;
 }
 
 function SingleClipPreview({ clip, onClose }: { clip: ClipItem; onClose: () => void }) {
@@ -255,14 +199,6 @@ const previewStyles = StyleSheet.create({
         flex: 1,
         backgroundColor: '#000000',
         justifyContent: 'center',
-    },
-    // 카메라 촬영 화면의 9:16 프레임과 같은 비율로 박스를 잡아서, 그 틀 안에서만
-    // 재생되도록 합니다(화면 전체를 꽉 채우지 않음).
-    gridVideoContainer: {
-        flex: 0,
-        width: '100%',
-        aspectRatio: 9 / 16,
-        borderRadius: 0,
     },
     videoContainer: {
         flex: 1,
