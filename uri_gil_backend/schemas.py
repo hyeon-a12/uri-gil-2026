@@ -11,6 +11,10 @@ class UserCreate(BaseModel):
     sms_consent: Optional[bool] = False
     email_consent: Optional[bool] = False
 
+class UserLogin(BaseModel):
+    email: EmailStr
+    password: str
+
 class UserResponse(BaseModel):
     id: int
     email: str
