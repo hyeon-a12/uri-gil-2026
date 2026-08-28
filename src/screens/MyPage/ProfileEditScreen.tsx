@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import * as SecureStore from 'expo-secure-store';
 import { View, TextInput, Pressable, StyleSheet, Alert } from 'react-native';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
@@ -8,6 +9,7 @@ import { AppText as Text } from '@/components/AppText';
 import { colors } from '@/constants/menu-theme';
 import { cardShadow, ScreenHeader, PrimaryButton } from '@/components/common';
 import { useProfileStore, updateProfile } from '@/store/useProfileStore';
+import { apiFetch } from '@/services/api';
 
 export default function ProfileEditScreen() {
   const profile = useProfileStore((state) => state.profile);
@@ -46,19 +48,41 @@ export default function ProfileEditScreen() {
     router.back();
   };
 
-  // TODO: 실제 로그아웃 처리(토큰 삭제, 로그인 화면 이동 등)는 인증 플로우가 생기면 연결합니다.
   const handleLogout = () => {
     Alert.alert('로그아웃', '로그아웃 하시겠어요?', [
       { text: '취소', style: 'cancel' },
-      { text: '로그아웃', style: 'destructive', onPress: () => router.back() },
+      {
+        text: '로그아웃',
+        style: 'destructive',
+        onPress: async () => {
+          await SecureStore.deleteItemAsync('access_token');
+          await SecureStore.deleteItemAsync('user_id');
+          await SecureStore.deleteItemAsync('nickname');
+          router.replace('/login');
+        },
+      },
     ]);
   };
 
-  // TODO: 실제 회원 탈퇴 처리(계정 삭제 API 호출 등)는 인증 플로우가 생기면 연결합니다.
   const handleWithdraw = () => {
     Alert.alert('회원 탈퇴', '탈퇴하면 저장된 여행 기록이 모두 삭제돼요. 계속할까요?', [
       { text: '취소', style: 'cancel' },
-      { text: '탈퇴', style: 'destructive', onPress: () => router.back() },
+      {
+        text: '탈퇴',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await apiFetch('/auth/me', { method: 'DELETE' });
+            await SecureStore.deleteItemAsync('access_token');
+            await SecureStore.deleteItemAsync('user_id');
+            await SecureStore.deleteItemAsync('nickname');
+            router.replace('/login');
+          } catch (error) {
+            console.error('[handleWithdraw] 탈퇴 실패:', error);
+            Alert.alert('탈퇴 실패', '잠시 후 다시 시도해주세요.');
+          }
+        },
+      },
     ]);
   };
 

@@ -21,6 +21,8 @@ import { useVideoPlayer, VideoView } from 'expo-video';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS as SHARED_COLORS } from '@/constants/color';
 import { getRecordingsByFolder } from '@/services/recordingService';
+import { getAllFolders } from '@/services/folderService';
+import { apiFetch } from '@/services/api';
 
 const COLORS = {
   background: SHARED_COLORS.background,
@@ -144,7 +146,7 @@ function getFontFamily(fontId: FontId, bold: boolean): string {
 const TEXT_COLOR_OPTIONS = ['#FFFFFF', '#222222', '#FF7F5C', '#FFD54F', '#7EC8E3'];
 
 const MIN_TEXT_FONT_SIZE = 10;
-const MAX_TEXT_FONT_SIZE = 28;
+const MAX_TEXT_FONT_SIZE = 60;
 
 function clampFontSize(size: number): number {
   return Math.min(MAX_TEXT_FONT_SIZE, Math.max(MIN_TEXT_FONT_SIZE, size));
@@ -278,7 +280,8 @@ async function renderVideo(exportData: {
     timeStyle: TextElementStyle;
     placeStyle: TextElementStyle;
   };
-}): Promise<{ success: boolean; message?: string }> {
+  
+}): Promise<{ success: boolean; message?: string; videoUri?: string }> {
   if (!process.env.EXPO_PUBLIC_SERVER_URL) {
     return { success: false, message: '.env에 EXPO_PUBLIC_SERVER_URL이 설정되어 있지 않습니다. .env.example을 참고해 자신의 PC IP로 채워주세요.' };
   }
@@ -304,6 +307,8 @@ async function renderVideo(exportData: {
     formData.append('clipMetadata', JSON.stringify(exportData.clips.map((c: any) => ({
       id: c.id,
       isMuted: c.isMuted,
+      placeName: c.placeName,
+      recordedAt: c.recordedAt,
     }))));
 
     if (exportData.folderId) {
@@ -340,9 +345,17 @@ async function renderVideo(exportData: {
       console.log('[rendervideo] 다운로드 시작', result.downloadUrl);
 
       const localPath = FileSystem.documentDirectory + `output_${Date.now()}.mp4`;
-      await FileSystem.downloadAsync(result.downloadUrl, localPath);
+      const downloadResult = await FileSystem.downloadAsync(result.downloadUrl, localPath);
 
-      console.log('[rendervideo] 다운로드 완료', localPath);
+      console.log('[renderVideo] 다운로드 완료', downloadResult.uri, downloadResult.status);
+
+      // 파일이 실제로 존재하고 크기가 있는지 확인
+      const fileInfo = await FileSystem.getInfoAsync(downloadResult.uri);
+      console.log('[renderVideo] 파일 정보:', fileInfo);
+
+      if (!fileInfo.exists || fileInfo.size === 0) {
+        return { success: false, message: '다운로드된 파일이 비어있습니다.' };
+      }
 
       // 갤러리 저장
       const { status } = await MediaLibrary.requestPermissionsAsync(true);
@@ -352,8 +365,17 @@ async function renderVideo(exportData: {
           message: '갤러리 접근 권한이 필요합니다.'
         };
       }
-      await MediaLibrary.saveToLibraryAsync(localPath);
-      console.log('[renderVideo] 갤러리 저장 완료');
+
+      try {
+        const asset = await MediaLibrary.createAssetAsync(downloadResult.uri);
+        console.log('[renderVideo] 갤러리 저장 완료', asset.uri);
+        return { success: true, videoUri: asset.uri };
+      } catch (assetError) {
+        // createAssetAsync가 에러를 던져도 실제로는 파일이 저장된 경우가
+        // 있어서(iOS 알려진 이슈), 일단 성공으로 처리합니다.
+        console.error('[renderVideo] createAssetAsync 실패(저장은 됐을 수 있음):', assetError);
+        return { success: true, videoUri: undefined };
+      }
     }
 
     return { success: true };
@@ -974,6 +996,8 @@ export default function VideoEditScreen() {
                 id: clip.id,
                 videoUri: clip.videoUri ?? '',
                 isMuted: getEditState(clip.id).isMuted,
+                placeName: clip.placeName ?? '', 
+                recordedAt: clip.recordedAt ?? '',
               })),
               globalSetting: {
                 infoContentType: globalEditState.infoContentType,
@@ -989,6 +1013,31 @@ export default function VideoEditScreen() {
             setIsExporting(false);
 
             if (result.success) {
+              // 서버에도 영상 메타데이터 기록 시도 (실패해도 갤러리 저장은 이미 끝났으니 무시)
+              try {
+                const folders = await getAllFolders();
+                const folder = folders.find((f) => f.id === folderId);
+
+                if (folder?.routeId) {
+                  await apiFetch('/videos/', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                      route_id: folder.routeId,
+                      video_url: result.videoUri ?? '',
+                      thumbnail_url: clips[0]?.thumbnailUri ?? null,
+                      is_public: false,
+                    }),
+                  });
+                } else {
+                  console.warn('[handleExport] routeId가 없어 서버에 영상 기록을 건너뜁니다.');
+                }
+              } catch (dbError) {
+                console.error('[handleExport] 영상 DB 저장 실패:', dbError);
+              }
+            }
+
+
+            if (result.success) {
               Alert.alert(
                 '완료',
                 '영상이 갤러리에 저장되었어요.',
@@ -996,7 +1045,7 @@ export default function VideoEditScreen() {
                   {
                     text: '확인',
                     onPress: () => {
-                      router.replace('/');
+                      router.replace('/(tabs)/home');
                     },
                   },
                 ],

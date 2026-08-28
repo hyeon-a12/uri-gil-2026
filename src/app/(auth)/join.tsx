@@ -14,6 +14,8 @@ import {
   View,
 } from 'react-native';
 
+const API_URL = 'https://uri-gil-2026-production.up.railway.app';
+
 export default function JoinScreen() {
   const [nickname, setNickname] = useState('');
   const [email, setEmail] = useState('');
@@ -50,7 +52,7 @@ export default function JoinScreen() {
     setAgreeEmail(next);
   };
 
-  const handleJoin = () => {
+  const handleJoin = async () => {
     const trimmedNickname = nickname.trim();
     const trimmedEmail = email.trim();
 
@@ -101,26 +103,41 @@ export default function JoinScreen() {
       return;
     }
 
-    // TODO: 회원가입 API 연결
-    console.log({
-      nickname: trimmedNickname,
-      email: trimmedEmail,
-      password,
-      marketingConsent: agreeMarketing,
-      smsConsent: agreeSms,
-      emailConsent: agreeEmail,
-    });
+    try {
+      const response = await fetch(`${API_URL}/auth/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nickname: trimmedNickname,
+          email: trimmedEmail,
+          password,
+          marketing_consent: agreeMarketing,
+          sms_consent: agreeSms,
+          email_consent: agreeEmail,
+        }),
+      });
 
-    Alert.alert(
-      '회원가입 완료',
-      '회원가입이 완료되었습니다.',
-      [
-        {
-          text: '로그인하기',
-          onPress: () => router.replace('/login'),
-        },
-      ],
-    );
+      const data = await response.json();
+
+      if (!response.ok) {
+        Alert.alert('회원가입 실패', data.detail || '알 수 없는 오류가 발생했습니다.');
+        return;
+      }
+
+      Alert.alert(
+        '회원가입 완료',
+        '회원가입이 완료되었습니다.',
+        [
+          {
+            text: '로그인하기',
+            onPress: () => router.replace('/login'),
+          },
+        ],
+      );
+    } catch (error) {
+      console.error(error);
+      Alert.alert('오류', '서버와 연결할 수 없습니다. 인터넷 연결을 확인해주세요.');
+    }
   };
 
   return (

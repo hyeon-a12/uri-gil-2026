@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, ForeignKey, Text
+from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, Date, ForeignKey, Text
 from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
 from database import Base
@@ -10,6 +10,9 @@ class User(Base):
     email = Column(String, unique=True, nullable=False)
     password = Column(String, nullable=False)
     nickname = Column(String, nullable=False)
+    marketing_consent = Column(Boolean, default=False)
+    sms_consent = Column(Boolean, default=False)
+    email_consent = Column(Boolean, default=False)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 class Route(Base):
@@ -18,9 +21,13 @@ class Route(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     title = Column(String, nullable=False)
+    region = Column(String)
     theme = Column(String)
     description = Column(Text)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    start_date = Column(Date)
+    end_date = Column(Date)
+    member_count = Column(Integer, default=1)
 
 class RouteSpot(Base):
     __tablename__ = "route_spots"
@@ -28,8 +35,8 @@ class RouteSpot(Base):
     id = Column(Integer, primary_key=True, index=True)
     route_id = Column(Integer, ForeignKey("routes.id"), nullable=False)
     spot_name = Column(String, nullable=False)
-    latitude = Column(Float, nullable=False)
-    longitude = Column(Float, nullable=False)
+    latitude = Column(Float, nullable=True)
+    longitude = Column(Float, nullable=True)
     visit_order = Column(Integer, nullable=False)
     visited_at = Column(DateTime)
 

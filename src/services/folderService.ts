@@ -22,6 +22,7 @@ export interface FolderItem {
     title: string;
     dateRange: string;
     thumbnail: string;
+    routeId?: number;
 
     // 여행 만들기 모달에서 입력받지만 예전에는 저장 안 되고 버려지던 필드들.
     // 기존에 이미 저장된 폴더에는 없을 수 있어서 전부 optional로 둡니다.

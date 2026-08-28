@@ -1,29 +1,44 @@
 # 회원 API
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from database import get_db
-from models import User
+from models import User, Route, RouteSpot, Clip, Video
 from schemas import UserCreate, UserLogin, UserResponse
 import bcrypt
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+
+from jose import jwt, JWTError
+from datetime import datetime, timedelta, timezone
+import os
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+SECRET_KEY = os.getenv("JWT_SECRET_KEY", "임시로컬용시크릿키-반드시Railway환경변수로교체")
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7일
+
+security = HTTPBearer()
+
+def create_access_token(user_id: int):
+    expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    payload = {"sub": str(user_id), "exp": expire}
+    return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
 # 회원가입
 @router.post("/register", response_model=UserResponse)
 def register(user: UserCreate, db: Session = Depends(get_db)):
-    # 이메일 중복 확인
     existing_user = db.query(User).filter(User.email == user.email).first()
     if existing_user:
         raise HTTPException(status_code=400, detail="이미 사용 중인 이메일입니다")
 
-    # 비밀번호 해싱
     hashed_password = bcrypt.hashpw(user.password.encode("utf-8"), bcrypt.gensalt())
 
-    # DB에 저장
     new_user = User(
         email=user.email,
         password=hashed_password.decode("utf-8"),
-        nickname=user.nickname
+        nickname=user.nickname,
+        marketing_consent=user.marketing_consent,
+        sms_consent=user.sms_consent,
+        email_consent=user.email_consent,
     )
     db.add(new_user)
     db.commit()
@@ -42,4 +57,54 @@ def login(user: UserLogin, db: Session = Depends(get_db)):
     if not bcrypt.checkpw(user.password.encode("utf-8"), db_user.password.encode("utf-8")):
         raise HTTPException(status_code=401, detail="이메일 또는 비밀번호가 틀렸습니다")
 
-    return {"message": "로그인 성공", "user_id": db_user.id, "nickname": db_user.nickname}
+    token = create_access_token(db_user.id)
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "user_id": db_user.id,
+        "nickname": db_user.nickname,
+    }
+
+def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security), db: Session = Depends(get_db)) -> User:
+    token = credentials.credentials
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="인증 정보가 유효하지 않습니다",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id: str = payload.get("sub")
+        if user_id is None:
+            raise credentials_exception
+    except JWTError:
+        raise credentials_exception
+
+    user = db.query(User).filter(User.id == int(user_id)).first()
+    if user is None:
+        raise credentials_exception
+    return user
+
+@router.get("/me")
+def read_current_user(current_user: User = Depends(get_current_user)):
+    return {"id": current_user.id, "email": current_user.email, "nickname": current_user.nickname}
+
+
+@router.delete("/me")
+def delete_account(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    # 연관된 데이터부터 순서대로 삭제 (FK 제약 때문에 순서 중요)
+    user_routes = db.query(Route).filter(Route.user_id == current_user.id).all()
+    route_ids = [r.id for r in user_routes]
+
+    if route_ids:
+        db.query(Video).filter(Video.route_id.in_(route_ids)).delete(synchronize_session=False)
+        db.query(Clip).filter(Clip.route_id.in_(route_ids)).delete(synchronize_session=False)
+        db.query(RouteSpot).filter(RouteSpot.route_id.in_(route_ids)).delete(synchronize_session=False)
+        db.query(Route).filter(Route.id.in_(route_ids)).delete(synchronize_session=False)
+
+    db.delete(current_user)
+    db.commit()
+    return {"message": "계정이 삭제되었습니다"}
