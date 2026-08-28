@@ -21,7 +21,7 @@ import KakaoMapView, {
   KakaoMapPin,
   KakaoMapCurrentLocation,
 } from '@/components/KakaoMapView';
-import { ClipPreviewModal } from '@/app/clip-preview'
+import { ClipPreviewModal } from '@/components/ClipPreview/ClipPreviewModal'
 import MyLocationIcon from '@/assets/images/my-location.svg';
 import { AppText as Text } from '@/components/AppText';
 import { HapticPressable, TripSelector } from '@/components/common';
