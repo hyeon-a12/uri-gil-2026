@@ -26,19 +26,19 @@ def create_access_token(user_id: int):
 # 회원가입
 @router.post("/register", response_model=UserResponse)
 def register(user: UserCreate, db: Session = Depends(get_db)):
-    # 이메일 중복 확인
     existing_user = db.query(User).filter(User.email == user.email).first()
     if existing_user:
         raise HTTPException(status_code=400, detail="이미 사용 중인 이메일입니다")
 
-    # 비밀번호 해싱
     hashed_password = bcrypt.hashpw(user.password.encode("utf-8"), bcrypt.gensalt())
 
-    # DB에 저장
     new_user = User(
         email=user.email,
         password=hashed_password.decode("utf-8"),
-        nickname=user.nickname
+        nickname=user.nickname,
+        marketing_consent=user.marketing_consent,
+        sms_consent=user.sms_consent,
+        email_consent=user.email_consent,
     )
     db.add(new_user)
     db.commit()

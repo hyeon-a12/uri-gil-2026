@@ -7,15 +7,17 @@ class UserCreate(BaseModel):
     email: EmailStr
     password: str
     nickname: str
-
-class UserLogin(BaseModel):
-    email: EmailStr
-    password: str
+    marketing_consent: Optional[bool] = False
+    sms_consent: Optional[bool] = False
+    email_consent: Optional[bool] = False
 
 class UserResponse(BaseModel):
     id: int
     email: str
     nickname: str
+    marketing_consent: bool
+    sms_consent: bool
+    email_consent: bool
     created_at: datetime
 
     class Config:
