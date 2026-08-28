@@ -17,7 +17,7 @@ import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { Ionicons, Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as MediaLibrary from 'expo-media-library';
 
-import { ClipPreviewModal } from '@/app/clip-preview'
+import { ClipPreviewModal } from '@/components/ClipPreview/ClipPreviewModal'
 import { deleteRecording, getRecordingsByFolder } from '@/services/recordingService';
 import { useTripStore } from '@/store/useTripStore';
 import { ClipItem } from '@/types/home';
