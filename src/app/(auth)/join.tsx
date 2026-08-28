@@ -103,7 +103,6 @@ export default function JoinScreen() {
       return;
     }
 
-
     try {
       const response = await fetch(`${API_URL}/auth/register`, {
         method: 'POST',
@@ -139,27 +138,6 @@ export default function JoinScreen() {
       console.error(error);
       Alert.alert('오류', '서버와 연결할 수 없습니다. 인터넷 연결을 확인해주세요.');
     }
-
-    // TODO: 회원가입 API 연결
-    console.log({
-      nickname: trimmedNickname,
-      email: trimmedEmail,
-      password,
-      marketing_consent: agreeMarketing,
-      sms_consent: agreeSms,
-      email_consent: agreeEmail,
-    });
-
-    Alert.alert(
-      '회원가입 완료',
-      '회원가입이 완료되었습니다.',
-      [
-        {
-          text: '로그인하기',
-          onPress: () => router.replace('/login'),
-        },
-      ],
-    );
   };
 
   return (
