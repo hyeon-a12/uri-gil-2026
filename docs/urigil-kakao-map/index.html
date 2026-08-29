@@ -7,6 +7,7 @@
   <style>
     html, body, #map { width: 100%; height: 100%; margin: 0; padding: 0; }
     #debug {
+      display: none;
       position: fixed;
       left: 0;
       right: 0;
@@ -44,11 +45,15 @@
     function notifyReactNative(payload) {
       if (window.ReactNativeWebView) {
         window.ReactNativeWebView.postMessage(JSON.stringify(payload));
+        // 앱 안(진짜 WebView)에서는 이 오버레이가 필요 없고, 항상 떠 있으면
+        // 지도 하단에 검은 띠로 보여서 아예 띄우지 않습니다.
+        return;
       }
-      // 앱(WebView) 없이 순수 브라우저(Safari)에서 열었을 때도 원인이
-      // 보이도록, 화면 하단에 그대로 텍스트로 찍어둡니다.
+      // 앱(WebView) 없이 순수 브라우저(Safari)에서 열었을 때만, 원인이
+      // 보이도록 화면 하단에 그대로 텍스트로 찍어둡니다.
       var debugEl = document.getElementById('debug');
       if (debugEl && payload.message) {
+        debugEl.style.display = 'block';
         debugEl.textContent += payload.message + '\n';
       }
     }

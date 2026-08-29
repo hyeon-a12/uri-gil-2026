@@ -15,7 +15,7 @@ import { getAllFolders, saveFolder, updateFolder, type FolderItem } from '@/serv
 import { selectCurrentTrip, useTripStore } from '@/store/useTripStore';
 import NewTripModal from '@/components/NewTripModal';
 import { apiFetch } from '@/services/api';
-import { COLORS as SHARED_COLORS } from '@/constants/color';
+import { COLORS as SHARED_COLORS, RADIUS, SPACING } from '@/constants/color';
 
 const COLORS = {
   background: SHARED_COLORS.background,
@@ -246,8 +246,8 @@ const styles = StyleSheet.create({
   },
   sheet: {
     maxHeight: '75%',
-    paddingHorizontal: 20,
-    paddingTop: 10,
+    paddingHorizontal: SPACING.screenH,
+    paddingTop: SPACING.sm,
     paddingBottom: 28,
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
@@ -257,20 +257,20 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     width: 42,
     height: 5,
-    marginBottom: 18,
+    marginBottom: SPACING.md,
     borderRadius: 3,
     backgroundColor: '#D7D7D7',
     overflow: 'hidden',
   },
   title: {
-    fontSize: 20,
+    fontSize: 18,
     lineHeight: 27,
-    fontWeight: '800',
+    fontWeight: '700',
     color: COLORS.textPrimary,
   },
   subtitle: {
-    marginTop: 4,
-    marginBottom: 16,
+    marginTop: SPACING.xs,
+    marginBottom: SPACING.md,
     fontSize: 12,
     lineHeight: 17,
     fontWeight: '500',
@@ -280,15 +280,15 @@ const styles = StyleSheet.create({
     maxHeight: 420,
   },
   listContent: {
-    paddingBottom: 4,
+    paddingBottom: SPACING.xs,
   },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     minHeight: 72,
-    paddingVertical: 8,
-    paddingHorizontal: 4,
-    gap: 12,
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.xs,
+    gap: SPACING.sm,
   },
   rowPressed: {
     opacity: 0.7,
@@ -296,7 +296,7 @@ const styles = StyleSheet.create({
   thumb: {
     width: 56,
     height: 56,
-    borderRadius: 16,
+    borderRadius: RADIUS.banner,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#F5F5F5',
@@ -316,25 +316,25 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   rowTitle: {
-    fontSize: 15,
+    fontSize: 14,
     lineHeight: 20,
     fontWeight: '700',
     color: COLORS.textPrimary,
   },
   rowSubtitle: {
-    marginTop: 3,
+    marginTop: SPACING.xs,
     fontSize: 12,
     lineHeight: 16,
-    fontWeight: '500',
+    fontWeight: '400',
     color: COLORS.textSecondary,
   },
   addRow: {
-    marginTop: 4,
+    marginTop: SPACING.xs,
   },
   addThumb: {
     width: 56,
     height: 56,
-    borderRadius: 16,
+    borderRadius: RADIUS.banner,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#F5F5F5',
@@ -343,7 +343,7 @@ const styles = StyleSheet.create({
     borderStyle: 'dashed',
   },
   addLabel: {
-    fontSize: 15,
+    fontSize: 14,
     lineHeight: 20,
     fontWeight: '700',
     color: COLORS.textSecondary,

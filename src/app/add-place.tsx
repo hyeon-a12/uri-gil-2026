@@ -19,8 +19,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppText as Text } from '@/components/AppText';
 import KakaoMapView, { KakaoMapPin } from '@/components/KakaoMapView';
-import { COLORS as APP_COLORS } from '@/constants/color';
+import { COLORS as APP_COLORS, RADIUS } from '@/constants/color';
 import { appendTripScheduleStops } from '@/services/trip-schedule-service';
+import { getAllFolders, parseDateRange } from '@/services/folderService';
+import { getDayLabel } from '@/services/tripPlanService';
 import { formatDistance, usePlaceSearch, type PlaceCoordinates } from '@/hooks/usePlaceSearch';
 
 const COLORS = {
@@ -34,7 +36,7 @@ const COLORS = {
   textTertiary: APP_COLORS.textSecondary,
   border: APP_COLORS.border,
   divider: APP_COLORS.border,
-  sheet: APP_COLORS.sheetBackground,
+  surface: APP_COLORS.surface,
   disabled: APP_COLORS.locationButtonDisabled,
   dragHandle: APP_COLORS.locationDragHandle,
   shadow: APP_COLORS.shadow,
@@ -71,8 +73,19 @@ export default function AddPlaceScreen() {
   const [coordinates, setCoordinates] = useState<PlaceCoordinates | null>(null);
   const [locationMessage, setLocationMessage] = useState('현재 위치를 확인하고 있어요.');
   const [isSaving, setIsSaving] = useState(false);
+  const [tripStartDate, setTripStartDate] = useState<Date | null>(null);
 
   const insets = useSafeAreaInsets();
+
+  // 시트 제목에 "Day {n}" 대신 실제 날짜를 보여주기 위해 여행 시작일을 가져옵니다.
+  useEffect(() => {
+    if (!tripId) return;
+    (async () => {
+      const folders = await getAllFolders();
+      const trip = folders.find((folder) => folder.id === tripId);
+      setTripStartDate(trip ? parseDateRange(trip.dateRange)?.start ?? null : null);
+    })();
+  }, [tripId]);
 
   const {
     query,
@@ -128,7 +141,7 @@ export default function AddPlaceScreen() {
         latitude: position.coords.latitude,
         longitude: position.coords.longitude,
       });
-      setLocationMessage('현재 위치 주변 3km를 검색합니다.');
+      setLocationMessage('');
     } catch (error) {
       console.warn('[AddPlaceScreen] 위치를 가져오지 못했습니다:', error);
       setLocationMessage('위치를 확인하지 못했어요. 위치 권한을 확인해주세요.');
@@ -139,7 +152,9 @@ export default function AddPlaceScreen() {
     void loadDeviceLocation();
   }, [loadDeviceLocation]);
 
-  const showManualEntry = !isLoadingPlaces;
+  // 검색어를 입력한 뒤에만 "나만의 장소 추가"를 노출합니다 — 결과가 있어도
+  // 항상 검색 결과 목록 맨 아래에 위치합니다.
+  const showManualEntry = query.trim().length > 0 && !isLoadingPlaces;
   const mapPins = useMemo(() => buildMapPins(places, selectedPlace?.id), [places, selectedPlace]);
 
   const handleComplete = async () => {
@@ -190,9 +205,7 @@ export default function AddPlaceScreen() {
               hitSlop={10}
             >
               <Ionicons name="chevron-back" size={20} color={COLORS.textPrimary} />
-              <Text allowFontScaling={false} style={styles.backLabel}>
-                뒤로
-              </Text>
+
             </Pressable>
           </View>
 
@@ -207,7 +220,7 @@ export default function AddPlaceScreen() {
                   <Ionicons name="location-outline" size={20} color={COLORS.primary} />
                 </View>
                 <Text allowFontScaling={false} numberOfLines={1} style={styles.sheetTitle}>
-                  Day {day}에 추가할 장소
+                  {getDayLabel(day, tripStartDate)}에 추가할 장소
                 </Text>
                 <Pressable
                   onPress={handleComplete}
@@ -221,12 +234,13 @@ export default function AddPlaceScreen() {
                   <Text allowFontScaling={false} style={styles.inlineNextButtonText}>
                     완료
                   </Text>
-                  <Ionicons name="checkmark" size={15} color="#FFFFFF" />
                 </Pressable>
               </View>
-              <Text allowFontScaling={false} style={styles.sheetDescription}>
-                {locationMessage}
-              </Text>
+              {locationMessage ? (
+                <Text allowFontScaling={false} style={styles.sheetDescription}>
+                  {locationMessage}
+                </Text>
+              ) : null}
             </View>
 
             <View style={styles.searchField}>
@@ -255,11 +269,6 @@ export default function AddPlaceScreen() {
             >
               {query.trim().length === 0 ? null : (
                 <>
-                  <View style={styles.resultHeader}>
-                    <Text style={styles.resultTitle}>“{query.trim()}” 검색 결과</Text>
-                    {coordinates && <Text style={styles.resultRange}>반경 3km</Text>}
-                  </View>
-
                   {isMockData && !isLoadingPlaces ? (
                     <View style={styles.mockNotice}>
                       <Ionicons name="information-circle-outline" size={16} color={COLORS.textSecondary} />
@@ -330,10 +339,9 @@ export default function AddPlaceScreen() {
                 <View style={styles.manualAddSection}>
                   <Pressable
                     onPress={toggleManualEntry}
-                    style={({ pressed }) => [
+                    style={[
                       styles.manualAddTrigger,
                       isManualEntryOpen && styles.manualAddTriggerOpen,
-                      pressed && styles.manualAddTriggerPressed,
                     ]}
                   >
                     <View style={styles.manualAddIcon}>
@@ -390,7 +398,11 @@ const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: COLORS.background },
   keyboardAvoidingView: { flex: 1 },
   container: { flex: 1, backgroundColor: COLORS.background },
-  mapArea: { flex: 1, overflow: 'hidden' },
+  // 지도를 화면 전체에 깔고 시트를 그 위에 절대 위치로 띄워야, 시트의
+  // 둥근 모서리 안쪽으로 지도가 비쳐서 라운드 처리가 실제로 보입니다.
+  // (예전처럼 flex로 지도/시트를 위아래로 나누면 시트 뒤가 흰 배경 그대로라
+  // 모서리를 둥글게 깎아도 흰색끼리 겹쳐 티가 안 났습니다.)
+  mapArea: { ...StyleSheet.absoluteFillObject, overflow: 'hidden' },
   backButton: {
     position: 'absolute',
     left: 16,
@@ -410,18 +422,15 @@ const styles = StyleSheet.create({
   backButtonPressed: { opacity: 0.7 },
   backLabel: { color: COLORS.textPrimary, fontSize: 13, lineHeight: 18, fontWeight: '700' },
   sheet: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
     paddingHorizontal: 20,
     paddingBottom: 18,
-    backgroundColor: COLORS.sheet,
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    borderTopWidth: 1,
-    borderColor: COLORS.border,
-    shadowColor: COLORS.shadow,
-    shadowOffset: { width: 0, height: -5 },
-    shadowOpacity: 0.08,
-    shadowRadius: 14,
-    elevation: 12,
+    backgroundColor: COLORS.background,
+    borderTopLeftRadius: RADIUS.sheet,
+    borderTopRightRadius: RADIUS.sheet,
   },
   dragHandleArea: { width: '100%', paddingTop: 12, paddingBottom: 14, alignItems: 'center', justifyContent: 'center' },
   dragHandle: { width: 42, height: 5, borderRadius: 3, backgroundColor: COLORS.dragHandle },
@@ -440,7 +449,7 @@ const styles = StyleSheet.create({
     color: COLORS.textPrimary,
     fontSize: 19,
     lineHeight: 26,
-    fontWeight: '800',
+    fontWeight: '600',
     letterSpacing: -0.5,
   },
   inlineNextButton: {
@@ -468,16 +477,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
     borderRadius: 16,
-    backgroundColor: COLORS.card,
-    borderWidth: 1,
-    borderColor: COLORS.border,
+    backgroundColor: COLORS.surface,
   },
-  searchInput: { flex: 1, color: COLORS.textPrimary, fontSize: 14, fontWeight: '600', padding: 0 },
+  searchInput: { flex: 1, color: COLORS.textPrimary, fontSize: 15, fontWeight: '600', padding: 0 },
   listScroll: { flex: 1, marginTop: 12 },
   listContent: { gap: 9, paddingBottom: 20 },
-  resultHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 3, marginBottom: 2 },
-  resultTitle: { color: COLORS.textPrimary, fontSize: 14, fontWeight: '800' },
-  resultRange: { color: COLORS.textSecondary, fontSize: 12, fontWeight: '600' },
   statusRow: {
     minHeight: 72,
     paddingHorizontal: 16,
@@ -485,9 +489,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
     borderRadius: 16,
-    backgroundColor: COLORS.card,
-    borderWidth: 1,
-    borderColor: COLORS.border,
+    backgroundColor: '#FBFBFA',
   },
   statusText: { flex: 1, color: COLORS.textSecondary, fontSize: 13, fontWeight: '600', lineHeight: 19 },
   mockNotice: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 3, paddingBottom: 2 },
@@ -499,11 +501,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
     borderRadius: 17,
-    backgroundColor: COLORS.card,
-    borderWidth: 1,
-    borderColor: COLORS.border,
+    backgroundColor: '#FBFBFA',
   },
-  placeCardSelected: { borderColor: COLORS.primary, backgroundColor: COLORS.primarySoft },
+  placeCardSelected: { backgroundColor: COLORS.primarySoft },
   placeCardPressed: { opacity: 0.8, transform: [{ scale: 0.995 }] },
   placeIcon: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.primarySoft },
   placeIconSelected: { backgroundColor: COLORS.primary },
@@ -525,28 +525,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 11,
     borderRadius: 17,
-    borderWidth: 1,
-    borderColor: COLORS.border,
     backgroundColor: '#FFF9F6',
   },
-  manualAddTriggerOpen: { borderColor: COLORS.primary },
-  manualAddTriggerPressed: { opacity: 0.8 },
+  manualAddTriggerOpen: { backgroundColor: COLORS.primarySoft },
   manualAddIcon: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 20, backgroundColor: COLORS.primarySoft },
   manualAddCopy: { flex: 1 },
-  manualAddTitle: { color: COLORS.primary, fontSize: 14, fontWeight: '800' },
+  manualAddTitle: { color: COLORS.primary, fontSize: 14, fontWeight: '700' },
   manualAddDescription: { marginTop: 3, color: COLORS.textSecondary, fontSize: 12, fontWeight: '500' },
   manualForm: { gap: 7, padding: 14, borderRadius: 17, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.card },
-  manualFormLabel: { marginTop: 3, color: COLORS.textPrimary, fontSize: 12, fontWeight: '800' },
+  manualFormLabel: { marginTop: 3, color: COLORS.textPrimary, fontSize: 12, fontWeight: '700' },
   manualFormInput: {
     height: 46,
     paddingHorizontal: 13,
     borderRadius: 12,
-    borderWidth: 1,
-    borderColor: COLORS.border,
     color: COLORS.textPrimary,
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '600',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: COLORS.surface,
   },
   manualNotice: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 3 },
   manualNoticeText: { flex: 1, color: COLORS.textSecondary, fontSize: 11, fontWeight: '500', lineHeight: 16 },

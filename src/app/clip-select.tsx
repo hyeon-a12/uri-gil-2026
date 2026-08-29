@@ -21,7 +21,7 @@ import { ClipPreviewModal } from '@/components/ClipPreview/ClipPreviewModal'
 import { deleteRecording, getRecordingsByFolder } from '@/services/recordingService';
 import { useTripStore } from '@/store/useTripStore';
 import { ClipItem } from '@/types/home';
-import { COLORS as SHARED_COLORS } from '@/constants/color';
+import { COLORS as SHARED_COLORS, RADIUS, SPACING } from '@/constants/color';
 
 const COLORS = {
   background: SHARED_COLORS.background,
@@ -598,8 +598,8 @@ const styles = StyleSheet.create({
 
   header: {
     minHeight: 92,
-    paddingHorizontal: 18,
-    paddingBottom: 14,
+    paddingHorizontal: SPACING.md,
+    paddingBottom: SPACING.md,
 
     flexDirection: 'row',
     alignItems: 'flex-end',
@@ -614,20 +614,20 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   headerTitle: {
-    paddingBottom: 10,
+    paddingBottom: SPACING.sm,
 
     color: COLORS.textPrimary,
 
     fontSize: 19,
     lineHeight: 25,
-    fontWeight: '800',
+    fontWeight: '700',
 
     letterSpacing: -0.4,
   },
   selectionToolbar: {
-    paddingHorizontal: 22,
-    paddingTop: 4,
-    paddingBottom: 14,
+    paddingHorizontal: SPACING.lg,
+    paddingTop: SPACING.xs,
+    paddingBottom: SPACING.md,
 
     flexDirection: 'row',
     alignItems: 'center',
@@ -639,26 +639,26 @@ const styles = StyleSheet.create({
 
     fontSize: 13,
     lineHeight: 18,
-    fontWeight: '700',
+    fontWeight: '600',
   },
 
   scrollContent: {
-    paddingHorizontal: 20,
-    paddingTop: 4,
+    paddingHorizontal: SPACING.screenH,
+    paddingTop: SPACING.xs,
   },
 
   clipRow: {
     flexDirection: 'row',
     alignItems: 'center',
 
-    marginBottom: 14,
+    marginBottom: SPACING.md,
   },
 
   selectionButton: {
     width: 26,
     height: 26,
 
-    marginRight: 12,
+    marginRight: SPACING.sm,
 
     borderRadius: 13,
 
@@ -685,7 +685,7 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 132,
 
-    padding: 12,
+    padding: SPACING.sm,
 
     flexDirection: 'row',
     alignItems: 'center',
@@ -748,18 +748,18 @@ const styles = StyleSheet.create({
   },
 
   playIcon: {
-    marginLeft: 2,
+    marginLeft: SPACING.xs,
   },
 
   clipInformation: {
     flex: 1,
 
-    marginLeft: 14,
-    marginRight: 8,
+    marginLeft: SPACING.md,
+    marginRight: SPACING.sm,
   },
 
   recordedAt: {
-    marginTop: 8,
+    marginTop: SPACING.sm,
 
     color: COLORS.textSecondary,
 
@@ -781,7 +781,7 @@ const styles = StyleSheet.create({
   },
 
   emptyTitle: {
-    marginTop: 18,
+    marginTop: SPACING.md,
 
     color: COLORS.textPrimary,
 
@@ -791,7 +791,7 @@ const styles = StyleSheet.create({
   },
 
   emptyDescription: {
-    marginTop: 6,
+    marginTop: SPACING.xs,
 
     color: COLORS.textSecondary,
 
@@ -808,13 +808,13 @@ const styles = StyleSheet.create({
 
     minHeight: 88,
 
-    paddingHorizontal: 14,
-    paddingTop: 12,
+    paddingHorizontal: SPACING.md,
+    paddingTop: SPACING.sm,
 
     flexDirection: 'row',
     alignItems: 'center',
 
-    gap: 8,
+    gap: SPACING.sm,
 
     backgroundColor: COLORS.card,
 
@@ -842,9 +842,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
 
-    gap: 7,
+    gap: SPACING.sm,
 
-    borderRadius: 14,
+    borderRadius: RADIUS.card,
     borderWidth: 1,
     borderColor: COLORS.border,
 
@@ -877,9 +877,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
 
-    gap: 6,
+    gap: SPACING.xs,
 
-    borderRadius: 14,
+    borderRadius: RADIUS.card,
     borderWidth: 1,
     borderColor: COLORS.border,
 
@@ -901,7 +901,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
 
-    borderRadius: 14,
+    borderRadius: RADIUS.card,
 
     backgroundColor: COLORS.primary,
 
@@ -954,9 +954,9 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   subHeader: {
-    paddingVertical: 16,
+    paddingVertical: SPACING.md,
     alignItems: 'center',
-    gap: 8,
+    gap: SPACING.sm,
   },
   description: {
     fontSize: 13,
@@ -965,10 +965,10 @@ const styles = StyleSheet.create({
   addVideoButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
+    gap: SPACING.xs,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: SPACING.xs,
+    borderRadius: RADIUS.banner,
     backgroundColor: COLORS.primaryPressed,
   },
   addVideoText: {
@@ -977,12 +977,12 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
   },
   listContent: {
-    paddingHorizontal: 16,
+    paddingHorizontal: SPACING.md,
   },
   clipItemContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 10,
+    marginBottom: SPACING.sm,
   },
   badgeCheck: {
     width: 26,
@@ -990,7 +990,7 @@ const styles = StyleSheet.create({
     borderRadius: 13,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 10,
+    marginRight: SPACING.sm,
     borderWidth: 1.5,
   },
   badgeCheckActive: {
@@ -1006,8 +1006,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 12,
+    borderRadius: RADIUS.card,
+    padding: SPACING.sm,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1},
     shadowOpacity: 0.03,
@@ -1018,7 +1018,7 @@ const styles = StyleSheet.create({
     position: 'relative',
     width: 60,
     height: 60,
-    borderRadius: 8,
+    borderRadius: RADIUS.badge,
     overflow: 'hidden',
     backgroundColor: '#E5E5EA',
   },
@@ -1034,30 +1034,30 @@ const styles = StyleSheet.create({
   },
   cardInfo: {
     flex: 1,
-    marginLeft: 12,
+    marginLeft: SPACING.sm,
   },
   clipTitle: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '600',
     color: '#1C1C1E',
-    marginBottom: 2,
+    marginBottom: SPACING.xs,
   },
   clipDate: {
     fontSize: 12,
     color: '#AEAEB2',
-    marginBottom: 4,
+    marginBottom: SPACING.xs,
   },
   durationRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 2,
+    gap: SPACING.xs,
   },
   durationText: {
     fontSize: 11,
-    color: '#8E8E93',
+    color: '#AEAEB2',
   },
   dragHandle: {
-    padding: 8,
+    padding: SPACING.sm,
   },
   // 헤더/툴바 아래 남은 공간이 아니라 화면 전체 높이 기준 정중앙에 오도록 절대 위치로 겹칩니다.
   emptyContainer: {
@@ -1069,12 +1069,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 40,
-    gap: 8,
+    gap: SPACING.sm,
   },
   emptyText: {
-    marginTop: 6,
+    marginTop: SPACING.xs,
     fontSize: 15,
-    fontWeight: '800',
+    fontWeight: '700',
     color: COLORS.textPrimary,
   },
   emptySubText: {
@@ -1096,33 +1096,33 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingTop: 16,
+    paddingHorizontal: SPACING.screenH,
+    paddingTop: SPACING.md,
   },
   footerInfo: {
     flex: 1,
-    gap: 4,
+    gap: SPACING.xs,
   },
   footerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: SPACING.sm,
   },
   footerLabel: {
     fontSize: 13,
-    color: '#8E8E93',
+    color: '#1C1C1E',
     width: 72,
   },
   footerValue: {
     fontSize: 13,
     color: '#1C1C1E',
-    fontWeight: '600',
+    fontWeight: '500',
   },
   createButton: {
     backgroundColor: COLORS.primary,
-    paddingHorizontal: 24,
-    paddingVertical: 14,
-    borderRadius: 12,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.md,
+    borderRadius: RADIUS.card,
   },
   createButtonDisabled: {
     backgroundColor: '#FFB8A4',
@@ -1130,7 +1130,7 @@ const styles = StyleSheet.create({
   createButtonText: {
     color: '#FFFFFF',
     fontSize: 15,
-    fontWeight: '700',
+    fontWeight: '600',
   },
   modalOverlay: {
     flex: 1,
@@ -1141,9 +1141,9 @@ const styles = StyleSheet.create({
   menuBox: {
     width: 220,
     backgroundColor: COLORS.card,
-    borderRadius: 16,
-    paddingVertical: 8,
-    paddingHorizontal: 8,
+    borderRadius: RADIUS.banner,
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.sm,
     shadowColor: '#000',
     shadowOpacity: 0.15,
     shadowRadius: 10,
@@ -1153,16 +1153,16 @@ const styles = StyleSheet.create({
   menuItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 10,
-    gap: 10,
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.md,
+    borderRadius: RADIUS.badge,
+    gap: SPACING.sm,
   },
   menuDivider: {
     height: 1,
     backgroundColor: COLORS.divider,
-    marginHorizontal: 8,
-    marginVertical: 4,
+    marginHorizontal: SPACING.sm,
+    marginVertical: SPACING.xs,
   },
   menuText: {
     fontSize: 15,

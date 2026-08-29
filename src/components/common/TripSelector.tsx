@@ -12,6 +12,8 @@ const COLORS = {
   textPrimary: SHARED_COLORS.textPrimary,
   textSecondary: SHARED_COLORS.textSecondary,
   white: SHARED_COLORS.background,
+  accent: SHARED_COLORS.accent,
+  surface: SHARED_COLORS.surface,
 };
 
 /**
@@ -33,11 +35,22 @@ export function TripSelector() {
           activeOpacity={0.85}
           onPress={() => setSheetVisible(true)}
         >
-          <Ionicons name="airplane-outline" size={18} color={COLORS.textSecondary} />
-          <Text numberOfLines={1} style={styles.tripName}>
-            {currentTrip ? currentTrip.title : '여행을 선택해주세요'}
-          </Text>
-          <Ionicons name="chevron-down" size={18} color={COLORS.textPrimary} />
+          <View style={styles.brand}>
+            <View style={styles.logoMark} />
+          </View>
+
+          <View style={styles.tripInfo}>
+            <Text numberOfLines={1} style={styles.tripLabel}>
+              현재 여행
+            </Text>
+            <Text numberOfLines={1} style={styles.tripName}>
+              {currentTrip ? currentTrip.title : '여행을 선택해주세요'}
+            </Text>
+          </View>
+
+          <View style={styles.chevronButton}>
+            <Ionicons name="chevron-down" size={16} color={COLORS.textSecondary} />
+          </View>
         </TouchableOpacity>
       </View>
 
@@ -59,18 +72,47 @@ const styles = StyleSheet.create({
     gap: 10,
     backgroundColor: COLORS.white,
     borderRadius: 24,
-    paddingHorizontal: 16,
-    height: 48,
+    paddingHorizontal: 14,
+    height: 60,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.08,
     shadowRadius: 10,
     elevation: 4,
   },
-  tripName: {
+  brand: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  logoMark: {
+    width: 24,
+    height: 24,
+    borderRadius: 8,
+    backgroundColor: COLORS.accent,
+  },
+  tripInfo: {
     flex: 1,
-    fontSize: 14,
+    marginLeft: 10,
+  },
+  tripLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 0.5,
+    color: COLORS.textSecondary,
+  },
+  tripName: {
+    marginTop: 2,
+    fontSize: 15,
     fontWeight: '700',
     color: COLORS.textPrimary,
+  },
+  chevronButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.surface,
   },
 });

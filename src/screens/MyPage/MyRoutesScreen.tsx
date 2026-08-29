@@ -1,8 +1,6 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import {
   FlatList,
-  Platform,
-  Pressable,
   StyleSheet,
   View,
 } from 'react-native';
@@ -10,38 +8,25 @@ import { Feather } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
 
 import { AppText as Text } from '@/components/AppText';
-import NewTripModal from '@/components/NewTripModal';
 import {
   Badge,
   Card,
+  HapticPressable,
   ListRow,
   ScreenHeader,
 } from '@/components/common';
 import { colors } from '@/constants/menu-theme';
+import { RADIUS, SPACING } from '@/constants/color';
 import {
   getAllFolders,
   getFolderStatus,
-  saveFolder,
-  type FolderItem,
   type FolderStatus,
 } from '@/services/folderService';
 import { getRecordingsByFolder } from '@/services/recordingService';
 
-const fabShadow = Platform.select({
-  ios: {
-    shadowColor: colors.accent,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-  },
-  android: {
-    elevation: 4,
-  },
-});
-
 const statusLabel: Record<FolderStatus, string> = {
   before: '예정',
-  ing: '여행중',
+  ing: '진행중',
   done: '완료',
 };
 
@@ -54,42 +39,13 @@ interface Trip {
   clipCount: number;
 }
 
-type FilterTab = 'all' | 'ing' | 'done';
-
-type CreatedTrip = {
-  name: string;
-  region: string | null;
-  memo: string;
-  startDate: Date;
-  endDate: Date;
-  partySize: number;
-  themes: string[];
-  clipLengthSeconds: number;
-  shootingStyle: FolderItem['shootingStyle'];
-};
-
-function formatDate(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-
-  return `${year}.${month}.${day}.`;
-}
-
-function buildDateRange(startDate: Date, endDate: Date): string {
-  return `${formatDate(startDate)} ~ ${formatDate(endDate)}`;
-}
-
-function createFolderId(): string {
-  return `folder-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-}
+type FilterTab = 'all' | 'before' | 'ing' | 'done';
 
 export default function MyRoutesScreen() {
   const router = useRouter();
 
   const [tab, setTab] = useState<FilterTab>('all');
   const [trips, setTrips] = useState<Trip[]>([]);
-  const [newTripModalVisible, setNewTripModalVisible] = useState(false);
 
   const loadTrips = useCallback(async () => {
     try {
@@ -136,44 +92,11 @@ export default function MyRoutesScreen() {
     [trips, tab],
   );
 
-  const handleCreateTrip = () => {
-    setNewTripModalVisible(true);
-  };
-
   const handlePressTrip = (tripId: string) => {
     router.push({
       pathname: '/trip-detail/[tripId]',
       params: { tripId },
     });
-  };
-
-  const handleCloseNewTripModal = () => {
-    setNewTripModalVisible(false);
-  };
-
-  const handleCreatedTrip = async (trip: CreatedTrip) => {
-    const folder: FolderItem = {
-      id: createFolderId(),
-      title: trip.name.trim(),
-      dateRange: buildDateRange(
-        trip.startDate,
-        trip.endDate,
-      ),
-      thumbnail: '',
-      region: trip.region,
-      memo: trip.memo,
-      partySize: trip.partySize,
-      themes: trip.themes,
-      clipLengthSeconds: trip.clipLengthSeconds,
-      shootingStyle: trip.shootingStyle,
-    };
-
-    try {
-      await saveFolder(folder);
-      await loadTrips();
-    } catch (error) {
-      console.error('새 여행 저장에 실패했습니다.', error);
-    }
   };
 
   return (
@@ -188,12 +111,17 @@ export default function MyRoutesScreen() {
             onPress={() => setTab('all')}
           />
           <FilterChip
-            label="여행중"
+            label="예정"
+            active={tab === 'before'}
+            onPress={() => setTab('before')}
+          />
+          <FilterChip
+            label="진행중"
             active={tab === 'ing'}
             onPress={() => setTab('ing')}
           />
           <FilterChip
-            label="여행완료"
+            label="완료"
             active={tab === 'done'}
             onPress={() => setTab('done')}
           />
@@ -239,26 +167,6 @@ export default function MyRoutesScreen() {
           }
         />
       </View>
-
-      <Pressable
-        style={({ pressed }) => [
-          styles.fab,
-          pressed && styles.fabPressed,
-        ]}
-        onPress={handleCreateTrip}
-      >
-        <Feather
-          name="plus"
-          size={22}
-          color="#FFFFFF"
-        />
-      </Pressable>
-
-      <NewTripModal
-        visible={newTripModalVisible}
-        onClose={handleCloseNewTripModal}
-        onCreated={handleCreatedTrip}
-      />
     </View>
   );
 }
@@ -273,12 +181,8 @@ function FilterChip({
   onPress: () => void;
 }) {
   return (
-    <Pressable
-      style={({ pressed }) => [
-        styles.chip,
-        active && styles.chipActive,
-        pressed && styles.chipPressed,
-      ]}
+    <HapticPressable
+      style={[styles.chip, active && styles.chipActive]}
       onPress={onPress}
     >
       <Text
@@ -289,7 +193,7 @@ function FilterChip({
       >
         {label}
       </Text>
-    </Pressable>
+    </HapticPressable>
   );
 }
 
@@ -317,27 +221,31 @@ const styles = StyleSheet.create({
 
   tripCard: {
     marginBottom: 10,
+    backgroundColor: '#FBFBFA',
+    shadowOpacity: 0,
+    elevation: 0,
   },
 
   chip: {
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    borderRadius: 20,
-    backgroundColor: colors.card,
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 38,
+    paddingHorizontal: SPACING.md,
+    borderRadius: RADIUS.banner,
+    backgroundColor: colors.bg,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
 
   chipActive: {
     backgroundColor: colors.text,
-  },
-
-  chipPressed: {
-    opacity: 0.75,
+    borderColor: colors.text,
   },
 
   chipText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: colors.textSub,
+    fontSize: 13,
+    fontWeight: '400',
+    color: colors.text,
   },
 
   chipTextActive: {
@@ -365,23 +273,5 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     textAlign: 'center',
     color: colors.textSub,
-  },
-
-  fab: {
-    position: 'absolute',
-    right: 20,
-    bottom: 24,
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: colors.accent,
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...fabShadow,
-  },
-
-  fabPressed: {
-    opacity: 0.85,
-    transform: [{ scale: 0.96 }],
   },
 });

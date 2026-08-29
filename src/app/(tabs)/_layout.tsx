@@ -163,7 +163,7 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
 
-    height: 78,
+    height: 95,
     paddingTop: 8,
     paddingBottom: 10,
 

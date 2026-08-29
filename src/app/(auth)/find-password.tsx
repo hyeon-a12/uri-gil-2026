@@ -40,7 +40,7 @@ const styles = StyleSheet.create({
     color: '#222222',
     fontSize: 40,
     lineHeight: 42,
-    fontFamily: 'SpoqaHanSansNeo-Regular',
+    fontFamily: 'Pretendard-Regular',
   },
 
   content: {
@@ -51,14 +51,14 @@ const styles = StyleSheet.create({
   },
 
   title: {
-    fontFamily: 'SpoqaHanSansNeo-Bold',
+    fontFamily: 'Pretendard-Bold',
     color: '#222222',
     fontSize: 22,
     marginBottom: 10,
   },
 
   description: {
-    fontFamily: 'SpoqaHanSansNeo-Regular',
+    fontFamily: 'Pretendard-Regular',
     color: '#8A8A8A',
     fontSize: 15,
     lineHeight: 23,

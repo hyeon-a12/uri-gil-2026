@@ -17,7 +17,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import type { ShootingStyleId } from '@/services/folderService';
-import { COLORS as SHARED_COLORS } from '@/constants/color';
+import { COLORS as SHARED_COLORS, RADIUS, SPACING } from '@/constants/color';
 
 /**
  * ─────────────────────────────────────────────────────────────
@@ -263,7 +263,7 @@ function PrimaryButton({
             name={icon}
             size={16}
             color={COLORS.white}
-            style={{ marginRight: 6 }}
+            style={{ marginRight: SPACING.xs }}
           />
         )}
         <Text style={styles.primaryButtonText}>{label}</Text>
@@ -339,7 +339,7 @@ function SelectableChip({
           name="location"
           size={12}
           color={COLORS.white}
-          style={{ marginRight: 4 }}
+          style={{ marginRight: SPACING.xs }}
         />
       )}
       <Text style={[styles.chipText, selected && styles.chipTextSelected]}>
@@ -481,7 +481,7 @@ export default function NewTripModal({
                     <TouchableOpacity
                       onPress={handleDeletePress}
                       hitSlop={10}
-                      style={{ marginRight: 16 }}
+                      style={{ marginRight: SPACING.md }}
                     >
                       <Ionicons name="trash-outline" size={20} color={COLORS.accent} />
                     </TouchableOpacity>
@@ -748,7 +748,7 @@ export default function NewTripModal({
                 <TouchableOpacity style={styles.backButton} onPress={() => setStep(1)}>
                   <Ionicons name="chevron-back" size={20} color={COLORS.black} />
                 </TouchableOpacity>
-                <View style={{ flex: 1, marginLeft: 12 }}>
+                <View style={{ flex: 1, marginLeft: SPACING.sm }}>
                   <PrimaryButton
                     label="다음 →"
                     disabled={!isStep2Valid}
@@ -780,7 +780,7 @@ export default function NewTripModal({
                 ))}
               </View>
 
-              <Text style={[styles.fieldLabel, { marginTop: 8 }]}>여행 요약</Text>
+              <Text style={[styles.fieldLabel, { marginTop: SPACING.sm }]}>여행 요약</Text>
               <View style={styles.summaryCard}>
                 <SummaryRow icon="pencil-outline" label="여행 이름" value={form.name || '-'} />
                 <SummaryRow icon="location-outline" label="지역" value={form.region || '-'} />
@@ -808,7 +808,7 @@ export default function NewTripModal({
                 <TouchableOpacity style={styles.backButton} onPress={() => setStep(2)}>
                   <Ionicons name="chevron-back" size={20} color={COLORS.black} />
                 </TouchableOpacity>
-                <View style={{ flex: 1, marginLeft: 12 }}>
+                <View style={{ flex: 1, marginLeft: SPACING.sm }}>
                   <PrimaryButton
                     label={mode === 'edit' ? '저장' : '여행 만들기!'}
                     icon={mode === 'edit' ? undefined : 'airplane-outline'}
@@ -905,17 +905,17 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: COLORS.white,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    borderTopLeftRadius: RADIUS.sheet,
+    borderTopRightRadius: RADIUS.sheet,
     paddingHorizontal: CARD_HORIZONTAL_PADDING,
-    paddingTop: 22,
+    paddingTop: SPACING.lg,
     maxHeight: SCREEN_HEIGHT * 0.9, // 화면 높이를 넘지 않도록 90%로 상한
   },
   headerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: SPACING.md,
   },
   headerTitle: {
     fontSize: 18,
@@ -929,7 +929,7 @@ const styles = StyleSheet.create({
   stepIndicatorRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: SPACING.screenH,
   },
   stepCircle: {
     width: 22,
@@ -954,10 +954,10 @@ const styles = StyleSheet.create({
     width: 20,
     height: 1,
     backgroundColor: COLORS.gray200,
-    marginHorizontal: 4,
+    marginHorizontal: SPACING.xs,
   },
   stepLabel: {
-    marginLeft: 10,
+    marginLeft: SPACING.sm,
     fontSize: 12,
     color: COLORS.gray500,
   },
@@ -966,8 +966,8 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     color: COLORS.black,
-    marginTop: 18,
-    marginBottom: 8,
+    marginTop: SPACING.md,
+    marginBottom: SPACING.sm,
   },
   fieldLabelMuted: {
     fontWeight: '400',
@@ -978,7 +978,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: COLORS.gray400,
     marginTop: -4,
-    marginBottom: 10,
+    marginBottom: SPACING.sm,
   },
   required: {
     color: COLORS.accent,
@@ -987,9 +987,9 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     backgroundColor: COLORS.gray100,
     borderRadius: 20,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    marginBottom: 12,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    marginBottom: SPACING.sm,
   },
   dateHintText: {
     fontSize: 13,
@@ -998,9 +998,9 @@ const styles = StyleSheet.create({
   },
   textInput: {
     backgroundColor: COLORS.gray100,
-    borderRadius: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    borderRadius: RADIUS.card,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
     fontSize: 14,
     color: COLORS.black,
   },
@@ -1017,15 +1017,15 @@ const styles = StyleSheet.create({
   chipWrap: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: SPACING.sm,
   },
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: COLORS.gray100,
     borderRadius: 20,
-    paddingHorizontal: 14,
-    paddingVertical: 9,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
   },
   chipSelected: {
     backgroundColor: COLORS.accent,
@@ -1040,14 +1040,14 @@ const styles = StyleSheet.create({
   },
   monthRow: {
     flexDirection: 'row',
-    marginBottom: 14,
+    marginBottom: SPACING.md,
   },
   monthChip: {
     backgroundColor: COLORS.gray100,
     borderRadius: 20,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    marginRight: 8,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    marginRight: SPACING.sm,
   },
   monthChipSelected: {
     backgroundColor: COLORS.accent,
@@ -1062,7 +1062,7 @@ const styles = StyleSheet.create({
   },
   weekdayRow: {
     flexDirection: 'row',
-    marginBottom: 6,
+    marginBottom: SPACING.xs,
   },
   weekdayText: {
     flex: 1,
@@ -1080,7 +1080,7 @@ const styles = StyleSheet.create({
     width: CALENDAR_CELL_WIDTH,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 6,
+    paddingVertical: SPACING.xs,
   },
   dayCircle: {
     width: CALENDAR_TRACK_HEIGHT,
@@ -1123,9 +1123,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     backgroundColor: COLORS.gray100,
-    borderRadius: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    borderRadius: RADIUS.card,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
   },
   stepperLabel: {
     fontSize: 13,
@@ -1135,12 +1135,12 @@ const styles = StyleSheet.create({
   partyLabelRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: SPACING.xs,
   },
   stepper: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: SPACING.sm,
   },
   stepperButton: {
     width: 26,
@@ -1161,14 +1161,14 @@ const styles = StyleSheet.create({
 
   summaryCard: {
     backgroundColor: COLORS.gray100,
-    borderRadius: 16,
-    padding: 16,
-    gap: 12,
+    borderRadius: RADIUS.banner,
+    padding: SPACING.md,
+    gap: SPACING.sm,
   },
   summaryRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: SPACING.sm,
   },
   summaryLabel: {
     fontSize: 12,
@@ -1188,7 +1188,7 @@ const styles = StyleSheet.create({
   backButton: {
     width: 44,
     height: 48,
-    borderRadius: 14,
+    borderRadius: RADIUS.card,
     borderWidth: 1,
     borderColor: COLORS.gray200,
     alignItems: 'center',
@@ -1197,7 +1197,7 @@ const styles = StyleSheet.create({
   primaryButton: {
     flexDirection: 'row',
     height: 48,
-    borderRadius: 14,
+    borderRadius: RADIUS.card,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1216,28 +1216,28 @@ const styles = StyleSheet.create({
   },
   successBody: {
     alignItems: 'center',
-    paddingVertical: 32,
-    paddingHorizontal: 8,
+    paddingVertical: SPACING.xl,
+    paddingHorizontal: SPACING.sm,
   },
   mascotPlaceholder: {
     height: 88,
-    marginBottom: 8,
+    marginBottom: SPACING.sm,
   },
   successTitle: {
     fontSize: 19,
     fontWeight: '800',
     color: COLORS.black,
-    marginBottom: 6,
+    marginBottom: SPACING.xs,
   },
   successTripName: {
     fontSize: 15,
     fontWeight: '700',
     color: COLORS.accent,
-    marginBottom: 4,
+    marginBottom: SPACING.xs,
   },
   successMeta: {
     fontSize: 13,
     color: COLORS.gray500,
-    marginBottom: 16,
+    marginBottom: SPACING.md,
   },
 });

@@ -29,7 +29,7 @@ const COLORS = {
   card: SHARED_COLORS.background,
   white: SHARED_COLORS.background,
   accent: SHARED_COLORS.accent,
-  primarySoft: SHARED_COLORS.main, // 연한 메인테마색
+  primarySoft: '#FBFBFA', // 클립 관리 화면 카드와 같은 연한 회색
   black: SHARED_COLORS.textPrimary,
   gray500: SHARED_COLORS.textSecondary,
   gray200: SHARED_COLORS.borderIvory,
@@ -879,7 +879,7 @@ export default function VideoEditScreen() {
           onPress={handleExport}
         >
           <Text allowFontScaling={false} style={styles.exportButtonText}>
-            Export
+            생성하기
           </Text>
         </TouchableOpacity>
       </View>

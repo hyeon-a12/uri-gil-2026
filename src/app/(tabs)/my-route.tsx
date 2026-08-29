@@ -6,7 +6,8 @@ import {
   getTripScheduleStops,
   type TripScheduleStop,
 } from "@/services/trip-schedule-service";
-import { buildPlanData, type PlanStop } from "@/services/tripPlanService";
+import { getStopOrder, saveStopOrder, type StopOrderMap } from "@/services/stop-order-service";
+import { buildPlanData, getDayLabel, type PlanStop } from "@/services/tripPlanService";
 import type { RecordingData } from "@/types/recording";
 import { useTripStore } from "@/store/useTripStore";
 import {
@@ -21,14 +22,13 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { AppText as Text } from '@/components/AppText';
+import { HapticPressable } from '@/components/common';
+import KakaoMapView, { type KakaoMapPin } from '@/components/KakaoMapView';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
+import * as Location from 'expo-location';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Svg, {
-  Circle,
-  Path,
-} from 'react-native-svg';
-import { COLORS as SHARED_COLORS, MAP_COLORS } from '@/constants/color';
+import { COLORS as SHARED_COLORS, RADIUS, SPACING } from '@/constants/color';
 
 const COLORS = {
   background: SHARED_COLORS.background,
@@ -48,299 +48,27 @@ const COLORS = {
   route: "#F6784D",
   routeSoft: "#FFD2C2",
 
-  // 지도 지형 톤 — my-route 화면 전용 확장 토큰(MAP_COLORS)에서 가져옴
-  mapBlue: MAP_COLORS.mapBlue,
-  mapGreen: MAP_COLORS.mapGreen,
-  mapCream: MAP_COLORS.mapCream,
-
   shadow: SHARED_COLORS.shadow,
 
   record: SHARED_COLORS.danger,
   white: SHARED_COLORS.background,
+  surface: SHARED_COLORS.surface,
 };
 
 // 사용자 흐름을 단순화해 '일정'과 '지도' 두 가지 보기만 제공합니다.
 type RouteViewMode = "info" | "map";
 
-interface RouteStop {
-  id: string;
-  order: number;
-  name: string;
-  shortName: string;
-  sticker: string;
+// 지도 위 스톱 카드 가로 스크롤 — 부드럽게 흘러가는 대신 카드 한 장씩 딱딱
+// 걸리는(스냅) 느낌을 주기 위한 값들입니다.
+const STOP_CARD_WIDTH = 300;
+const STOP_CARD_GAP = SPACING.md;
+const STOP_CARD_SNAP_INTERVAL = STOP_CARD_WIDTH + STOP_CARD_GAP;
 
-  day: number; // 몇 박 몇 일 중 몇 일차 방문인지
-
-  x: number;
-  y: number;
-
-  clipCount: number;
-  time: string;
-
-  distanceToNext?: string; // 같은 day 안에서 다음 장소까지의 이동 거리 표시용
-
-  clips: {
-    id: string;
-    thumbnail: string;
-    duration: string;
-  }[];
-}
-
-const ROUTE_STOPS: RouteStop[] = [
-  {
-    id: "stop-1",
-    order: 1,
-    name: "협재해변",
-    shortName: "협재해변",
-    sticker: "🏖️",
-
-    day: 1,
-
-    x: 18,
-    y: 25,
-
-    clipCount: 2,
-    time: "14:35",
-
-    distanceToNext: "1.2km",
-
-    clips: [
-      {
-        id: "clip-1",
-        thumbnail:
-          "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=600",
-        duration: "00:08",
-      },
-      {
-        id: "clip-2",
-        thumbnail:
-          "https://images.unsplash.com/photo-1500534623283-312aade485b7?w=600",
-        duration: "00:05",
-      },
-    ],
-  },
-  {
-    id: "stop-2",
-    order: 2,
-    name: "카페 이연",
-    shortName: "카페 이연",
-    sticker: "☕",
-
-    day: 1,
-
-    x: 51,
-    y: 46,
-
-    clipCount: 3,
-    time: "16:10",
-
-    clips: [
-      {
-        id: "clip-3",
-        thumbnail:
-          "https://images.unsplash.com/photo-1509042239860-f550ce710b93?w=600",
-        duration: "00:12",
-      },
-      {
-        id: "clip-4",
-        thumbnail:
-          "https://images.unsplash.com/photo-1445116572660-236099ec97a0?w=600",
-        duration: "00:07",
-      },
-    ],
-  },
-  {
-    id: "stop-3",
-    order: 3,
-    name: "모슬포항",
-    shortName: "모슬포항",
-    sticker: "⛵",
-
-    day: 2,
-
-    x: 74,
-    y: 67,
-
-    clipCount: 1,
-    time: "18:20",
-
-    clips: [
-      {
-        id: "clip-5",
-        thumbnail:
-          "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=600",
-        duration: "00:09",
-      },
-    ],
-  },
-  {
-    id: "stop-4",
-    order: 4,
-    name: "동문시장",
-    shortName: "동문시장",
-    sticker: "🍜",
-
-    day: 3,
-
-    x: 86,
-    y: 40,
-
-    clipCount: 4,
-    time: "19:40",
-
-    clips: [
-      {
-        id: "clip-6",
-        thumbnail:
-          "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=600",
-        duration: "00:11",
-      },
-    ],
-  },
-];
-
-function MapDecoration() {
-  return (
-    <>
-      <View style={[styles.mapIsland, styles.mapIslandOne]} />
-      <View style={[styles.mapIsland, styles.mapIslandTwo]} />
-      <View style={[styles.mapIsland, styles.mapIslandThree]} />
-
-      <Text style={[styles.mapDecoration, styles.treeOne]}>🌲</Text>
-
-      <Text style={[styles.mapDecoration, styles.treeTwo]}>🌴</Text>
-
-      <Text style={[styles.mapDecoration, styles.treeThree]}>🌳</Text>
-
-      <Text style={[styles.mapDecoration, styles.flower]}>🌼</Text>
-
-      <View style={[styles.road, styles.roadOne]} />
-      <View style={[styles.road, styles.roadTwo]} />
-      <View style={[styles.road, styles.roadThree]} />
-      <View style={[styles.road, styles.roadFour]} />
-    </>
-  );
-}
-
-interface RouteMapProps {
-  selectedStopId: string;
-  onSelectStop: (stopId: string) => void;
-}
-
-function RouteMap({ selectedStopId, onSelectStop }: RouteMapProps) {
-  return (
-    <View style={styles.map}>
-      <MapDecoration />
-
-      <Svg
-        pointerEvents="none"
-        style={StyleSheet.absoluteFill}
-        viewBox="0 0 100 100"
-        preserveAspectRatio="none"
-      >
-        <Path
-          d="M18 25 C29 31 36 40 51 46 C60 52 66 63 74 67 C78 60 82 49 86 40"
-          stroke={COLORS.routeSoft}
-          strokeWidth={3.8}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          fill="none"
-        />
-
-        <Path
-          d="M18 25 C29 31 36 40 51 46 C60 52 66 63 74 67 C78 60 82 49 86 40"
-          stroke={COLORS.route}
-          strokeWidth={1.8}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          fill="none"
-        />
-
-        {ROUTE_STOPS.map((stop) => (
-          <Circle
-            key={stop.id}
-            cx={stop.x}
-            cy={stop.y}
-            r={1.7}
-            fill={COLORS.route}
-            stroke="#FFFFFF"
-            strokeWidth={0.8}
-          />
-        ))}
-      </Svg>
-
-      {ROUTE_STOPS.map((stop) => {
-        const selected = selectedStopId === stop.id;
-
-        return (
-          <Pressable
-            key={stop.id}
-            onPress={() => onSelectStop(stop.id)}
-            style={[
-              styles.stopContainer,
-              {
-                left: `${stop.x}%`,
-                top: `${stop.y}%`,
-              },
-            ]}
-          >
-            <View
-              style={[styles.orderBadge, selected && styles.orderBadgeSelected]}
-            >
-              <Text allowFontScaling={false} style={styles.orderBadgeText}>
-                {stop.order}
-              </Text>
-            </View>
-
-            <View
-              style={[
-                styles.stickerContainer,
-                selected && styles.stickerContainerSelected,
-              ]}
-            >
-              <Text style={styles.sticker}>{stop.sticker}</Text>
-            </View>
-
-            <View
-              style={[styles.stopLabel, selected && styles.stopLabelSelected]}
-            >
-              <Text
-                numberOfLines={1}
-                allowFontScaling={false}
-                style={[
-                  styles.stopLabelText,
-                  selected && styles.stopLabelTextSelected,
-                ]}
-              >
-                {stop.shortName}
-              </Text>
-            </View>
-          </Pressable>
-        );
-      })}
-    </View>
-  );
-}
-
-function MapControlButtons() {
+function MapControlButtons({ onPressLocate }: { onPressLocate: () => void }) {
   return (
     <View style={styles.mapControls}>
       <Pressable
-        onPress={() => {
-          Alert.alert("지도 보기", "지도 유형 선택 기능을 연결할 예정입니다.");
-        }}
-        style={({ pressed }) => [
-          styles.mapControlButton,
-          pressed && styles.mapControlButtonPressed,
-        ]}
-      >
-        <Ionicons name="layers-outline" size={23} color={COLORS.textPrimary} />
-      </Pressable>
-
-      <Pressable
-        onPress={() => {
-          Alert.alert("현재 위치", "현재 위치로 지도를 이동할 예정입니다.");
-        }}
+        onPress={onPressLocate}
         style={({ pressed }) => [
           styles.mapControlButton,
           pressed && styles.mapControlButtonPressed,
@@ -390,7 +118,7 @@ function ClipThumbnail({ thumbnail, duration }: ClipThumbnailProps) {
 }
 
 interface SelectedStopCardProps {
-  stop: RouteStop;
+  stop: PlanStop;
 }
 
 function SelectedStopCard({ stop }: SelectedStopCardProps) {
@@ -413,11 +141,11 @@ function SelectedStopCard({ stop }: SelectedStopCardProps) {
               {stop.name}
             </Text>
 
-            <Text style={styles.stopCardSticker}>{stop.sticker}</Text>
+            <Ionicons name="location" size={16} color={COLORS.primary} />
           </View>
 
           <Text allowFontScaling={false} style={styles.stopCardMeta}>
-            클립 {stop.clipCount}개 · {stop.time}
+            클립 {stop.clips.length}개 · {stop.time}
           </Text>
         </View>
 
@@ -630,6 +358,8 @@ type RoutePlanViewProps = {
   tripId?: string;
   stops: PlanStop[];
   dayNumbers: number[];
+  tripStartDate: Date | null;
+  onReorderStops: (day: number, orderedIds: string[]) => void;
 };
 
 // '루트 정보' 탭 대신 들어가는 새 화면: day별 일정 타임라인 + 장소별 메모
@@ -642,6 +372,8 @@ function RoutePlanView({
   tripId,
   stops,
   dayNumbers,
+  tripStartDate,
+  onReorderStops,
 }: RoutePlanViewProps) {
   const [selectedDay, setSelectedDay] = useState(dayNumbers[0] ?? 1);
 
@@ -660,12 +392,57 @@ function RoutePlanView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dayNumbers]);
 
-  const dayStops = useMemo(
-    () =>
+  // 드래그로 순서를 바꾸는 동안 즉시 화면에 반영되도록 로컬 상태로 들고 있고,
+  // stops/selectedDay가 바뀌면(다른 날짜로 전환, 새로고침 등) 최신 데이터로 다시 채웁니다.
+  const [dayStops, setDayStops] = useState<PlanStop[]>([]);
+
+  useEffect(() => {
+    setDayStops(
       stops
         .filter((stop) => stop.day === selectedDay)
         .sort((a, b) => a.order - b.order),
-    [stops, selectedDay],
+    );
+  }, [stops, selectedDay]);
+
+  // 스톱을 한 칸 위/아래로 옮기고, 바뀐 순서를 바로 저장합니다.
+  const moveStop = useCallback(
+    (index: number, direction: -1 | 1) => {
+      const targetIndex = index + direction;
+      if (targetIndex < 0 || targetIndex >= dayStops.length) return;
+
+      const next = [...dayStops];
+      const [moved] = next.splice(index, 1);
+      next.splice(targetIndex, 0, moved);
+
+      setDayStops(next);
+      onReorderStops(
+        selectedDay,
+        next.map((stop) => stop.id),
+      );
+    },
+    [dayStops, selectedDay, onReorderStops],
+  );
+
+  // 카드를 길게 누르면 뜨는 "위로 이동 / 아래로 이동" 메뉴.
+  const openReorderMenu = useCallback(
+    (stop: PlanStop, index: number) => {
+      const options: {
+        text: string;
+        onPress?: () => void;
+        style?: "cancel" | "destructive";
+      }[] = [];
+
+      if (index > 0) {
+        options.push({ text: "위로 이동", onPress: () => moveStop(index, -1) });
+      }
+      if (index < dayStops.length - 1) {
+        options.push({ text: "아래로 이동", onPress: () => moveStop(index, 1) });
+      }
+      options.push({ text: "취소", style: "cancel" });
+
+      Alert.alert(stop.name, "순서를 바꿀 수 있어요.", options);
+    },
+    [dayStops.length, moveStop],
   );
 
   const activeStop = useMemo(
@@ -755,7 +532,7 @@ function RoutePlanView({
             const selected = day === selectedDay;
 
             return (
-              <Pressable
+              <HapticPressable
                 key={day}
                 onPress={() => setSelectedDay(day)}
                 style={[styles.dayChip, selected && styles.dayChipSelected]}
@@ -767,9 +544,9 @@ function RoutePlanView({
                     selected && styles.dayChipTextSelected,
                   ]}
                 >
-                  Day {day}
+                  {getDayLabel(day, tripStartDate)}
                 </Text>
-              </Pressable>
+              </HapticPressable>
             );
           })}
         </ScrollView>
@@ -797,7 +574,10 @@ function RoutePlanView({
                   ) : null}
                 </View>
 
-                <View style={styles.planStopCard}>
+                <Pressable
+                  style={styles.planStopCard}
+                  onLongPress={() => openReorderMenu(stop, index)}
+                >
                   <View style={styles.planStopCardTop}>
                     <View style={styles.planStopStickerCircle}>
                       <Ionicons
@@ -830,30 +610,13 @@ function RoutePlanView({
 
                     <Pressable
                       hitSlop={8}
-                      onPress={() => openMemoEditor(stop)}
+                      onPress={() => openReorderMenu(stop, index)}
                       style={styles.planStopIconButton}
                     >
                       <Ionicons
-                        name={memo ? "chatbubble" : "chatbubble-outline"}
-                        size={16}
-                        color={memo ? COLORS.primary : COLORS.textSecondary}
-                      />
-                    </Pressable>
-
-                    <Pressable
-                      hitSlop={8}
-                      onPress={() => {
-                        Alert.alert(
-                          stop.name,
-                          "장소 상세 정보 화면으로 연결할 예정입니다.",
-                        );
-                      }}
-                      style={styles.planStopIconButton}
-                    >
-                      <Ionicons
-                        name="chevron-forward"
+                        name="ellipsis-vertical"
                         size={18}
-                        color={COLORS.textTertiary}
+                        color={COLORS.textSecondary}
                       />
                     </Pressable>
                   </View>
@@ -896,7 +659,7 @@ function RoutePlanView({
                       </Text>
                     </Pressable>
                   )}
-                </View>
+                </Pressable>
               </View>
             );
           })}
@@ -961,7 +724,7 @@ type TravelShareSheetProps = {
   tripName: string;
   tripSummary: string;
   placeCount: number;
-  selectedStopId: string;
+  mapPins: KakaoMapPin[];
   bottomInset: number;
   onClose: () => void;
   onNativeShare: () => void;
@@ -972,7 +735,7 @@ function TravelShareSheet({
   tripName,
   tripSummary,
   placeCount,
-  selectedStopId,
+  mapPins,
   bottomInset,
   onClose,
   onNativeShare,
@@ -1012,13 +775,8 @@ function TravelShareSheet({
             contentContainerStyle={styles.shareScrollContent}
           >
             <View style={styles.sharePreviewCard}>
-              <View style={styles.shareMapPreview}>
-                <View pointerEvents="none" style={styles.shareMapScaleCanvas}>
-                  <RouteMap
-                    selectedStopId={selectedStopId}
-                    onSelectStop={() => undefined}
-                  />
-                </View>
+              <View pointerEvents="none" style={styles.shareMapPreview}>
+                <KakaoMapView pins={mapPins} height={126} pathColor={COLORS.primary} />
               </View>
 
               <View style={styles.sharePreviewTextArea}>
@@ -1197,6 +955,7 @@ export default function MyRouteScreen() {
   const [savedScheduleStops, setSavedScheduleStops] = useState<
     TripScheduleStop[]
   >([]);
+  const [stopOrder, setStopOrder] = useState<StopOrderMap>({});
 
   useFocusEffect(
     useCallback(() => {
@@ -1207,18 +966,21 @@ export default function MyRouteScreen() {
           if (isActive) {
             setRecordings([]);
             setSavedScheduleStops([]);
+            setStopOrder({});
           }
           return;
         }
 
         try {
-          const [records, scheduleStops] = await Promise.all([
+          const [records, scheduleStops, order] = await Promise.all([
             getRecordingsByFolder(currentTrip.id),
             getTripScheduleStops(currentTrip.id),
+            getStopOrder(currentTrip.id),
           ]);
           if (isActive) {
             setRecordings(records);
             setSavedScheduleStops(scheduleStops);
+            setStopOrder(order);
           }
         } catch (error) {
           console.error(
@@ -1228,6 +990,7 @@ export default function MyRouteScreen() {
           if (isActive) {
             setRecordings([]);
             setSavedScheduleStops([]);
+            setStopOrder({});
           }
         }
       })();
@@ -1238,9 +1001,20 @@ export default function MyRouteScreen() {
     }, [currentTrip?.id]),
   );
 
+  // 드래그로 순서를 바꾸면 즉시 반영되도록 로컬 상태도 같이 갱신하고, 다음 방문 때도
+  // 유지되도록 AsyncStorage에 저장합니다.
+  const handleReorderStops = useCallback(
+    (day: number, orderedIds: string[]) => {
+      if (!currentTrip) return;
+      setStopOrder((prev) => ({ ...prev, [day]: orderedIds }));
+      void saveStopOrder(currentTrip.id, day, orderedIds);
+    },
+    [currentTrip],
+  );
+
   const planData = useMemo(
-    () => buildPlanData(recordings, currentTrip, savedScheduleStops),
-    [recordings, currentTrip, savedScheduleStops],
+    () => buildPlanData(recordings, currentTrip, savedScheduleStops, stopOrder),
+    [recordings, currentTrip, savedScheduleStops, stopOrder],
   );
 
   const nights = useMemo(() => {
@@ -1251,6 +1025,12 @@ export default function MyRouteScreen() {
     return Math.round(
       (range.end.getTime() - range.start.getTime()) / MS_PER_DAY,
     );
+  }, [currentTrip]);
+
+  // day 탭에 "7/7"처럼 실제 날짜를 보여주기 위한 여행 시작일.
+  const tripStartDate = useMemo(() => {
+    if (!currentTrip) return null;
+    return parseDateRange(currentTrip.dateRange)?.start ?? null;
   }, [currentTrip]);
 
   const [selectedMode, setSelectedMode] = useState<RouteViewMode>("info");
@@ -1283,19 +1063,54 @@ export default function MyRouteScreen() {
     }
   }, [tripName, tripSummary]);
 
-  const [selectedStopId, setSelectedStopId] = useState(ROUTE_STOPS[0].id);
-
-  const selectedStop = useMemo(
-    () =>
-      ROUTE_STOPS.find((stop) => stop.id === selectedStopId) ?? ROUTE_STOPS[0],
-    [selectedStopId],
-  );
-
   const mapHeight = Math.min(Math.max(width * 1.05, 430), 570);
 
-  const handleSelectStop = (stopId: string) => {
-    setSelectedStopId(stopId);
-  };
+  // 실제 GPS 위치 — "현재 위치" 버튼을 눌렀을 때도 다시 불러와 지도를 재중심합니다.
+  const [deviceLocation, setDeviceLocation] = useState<{
+    lat: number;
+    lng: number;
+  } | null>(null);
+
+  const loadDeviceLocation = useCallback(async () => {
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") return;
+
+      const position = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+      setDeviceLocation({
+        lat: position.coords.latitude,
+        lng: position.coords.longitude,
+      });
+    } catch (error) {
+      console.warn("[MyRouteScreen] 현재 위치를 가져오지 못했습니다:", error);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadDeviceLocation();
+  }, [loadDeviceLocation]);
+
+  // 지도에 찍을 핀 — 좌표가 있는 스톱만, day/순서대로 이어서 경로선을 그립니다.
+  const mapPins = useMemo<KakaoMapPin[]>(
+    () =>
+      planData.stops
+        .filter(
+          (stop): stop is PlanStop & { latitude: number; longitude: number } =>
+            typeof stop.latitude === "number" &&
+            typeof stop.longitude === "number",
+        )
+        .sort((a, b) => a.order - b.order)
+        .map((stop) => ({
+          id: stop.id,
+          lat: stop.latitude,
+          lng: stop.longitude,
+          label: String(stop.order),
+          color: COLORS.primary,
+        })),
+    [planData.stops],
+  );
 
   return (
     <View style={styles.screen}>
@@ -1303,7 +1118,7 @@ export default function MyRouteScreen() {
         style={[
           styles.header,
           {
-            paddingTop: insets.top + 8,
+            paddingTop: insets.top + 10,
           },
         ]}
       >
@@ -1360,11 +1175,7 @@ export default function MyRouteScreen() {
 
       <View style={styles.content}>
         {selectedMode === "map" ? (
-          <ScrollView
-            style={styles.mapScreen}
-            contentContainerStyle={styles.mapScreenContent}
-            showsVerticalScrollIndicator={false}
-          >
+          <View style={styles.mapScreen}>
             <View
               style={[
                 styles.mapFrame,
@@ -1373,24 +1184,44 @@ export default function MyRouteScreen() {
                 },
               ]}
             >
-              <RouteMap
-                selectedStopId={selectedStopId}
-                onSelectStop={handleSelectStop}
+              <KakaoMapView
+                pins={mapPins}
+                height={mapHeight}
+                currentLocation={deviceLocation}
+                pathColor={COLORS.primary}
               />
 
-              <MapControlButtons />
+              <MapControlButtons onPressLocate={loadDeviceLocation} />
             </View>
 
-            <View style={styles.selectedCardWrapper}>
-              <SelectedStopCard stop={selectedStop} />
-            </View>
-          </ScrollView>
+            {planData.stops.length > 0 ? (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={[styles.stopCardScroll, { top: mapHeight - 56 }]}
+                contentContainerStyle={styles.selectedCardWrapper}
+                snapToInterval={STOP_CARD_SNAP_INTERVAL}
+                snapToAlignment="start"
+                decelerationRate="fast"
+              >
+                {[...planData.stops]
+                  .sort((a, b) => a.order - b.order)
+                  .map((stop) => (
+                    <View key={stop.id} style={styles.stopCardSlide}>
+                      <SelectedStopCard stop={stop} />
+                    </View>
+                  ))}
+              </ScrollView>
+            ) : null}
+          </View>
         ) : (
           <RoutePlanView
             hasTrip={!!currentTrip}
             tripId={currentTrip?.id}
             stops={planData.stops}
             dayNumbers={planData.dayNumbers}
+            tripStartDate={tripStartDate}
+            onReorderStops={handleReorderStops}
           />
         )}
       </View>
@@ -1414,7 +1245,7 @@ export default function MyRouteScreen() {
         tripName={tripName}
         tripSummary={tripSummary}
         placeCount={planData.stops.length}
-        selectedStopId={selectedStopId}
+        mapPins={mapPins}
         bottomInset={insets.bottom}
         onClose={() => setIsShareSheetVisible(false)}
         onNativeShare={handleNativeShare}
@@ -1430,10 +1261,10 @@ const styles = StyleSheet.create({
   },
 
   header: {
-    minHeight: 94,
+    minHeight: 92,
 
-    paddingHorizontal: 14,
-    paddingBottom: 12,
+    paddingHorizontal: SPACING.md,
+    paddingBottom: SPACING.xs,
 
     flexDirection: "row",
     alignItems: "flex-end",
@@ -1450,10 +1281,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
 
-    backgroundColor: COLORS.card,
-
-    borderWidth: 1,
-    borderColor: COLORS.border,
+    backgroundColor: COLORS.surface,
   },
 
   // 뒤로가기 버튼이 있던 자리에 남겨두는 빈 공간 — headerButton과 같은 너비로
@@ -1482,7 +1310,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
 
-    gap: 4,
+    gap: SPACING.xs,
   },
 
   headerTitle: {
@@ -1490,13 +1318,13 @@ const styles = StyleSheet.create({
 
     fontSize: 19,
     lineHeight: 25,
-    fontWeight: "800",
+    fontWeight: "700",
 
     letterSpacing: -0.5,
   },
 
   headerSubtitle: {
-    marginTop: 2,
+    marginTop: SPACING.xs,
 
     color: COLORS.textSecondary,
 
@@ -1513,18 +1341,14 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 
-  mapScreenContent: {
-    paddingBottom: 190,
-  },
-
   mapFrame: {
-    marginHorizontal: 14,
+    marginHorizontal: SPACING.md,
 
     overflow: "hidden",
 
     borderRadius: 28,
 
-    backgroundColor: COLORS.mapBlue,
+    backgroundColor: COLORS.surface,
 
     borderWidth: 1,
     borderColor: "#D6E8E0",
@@ -1540,255 +1364,13 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
 
-  map: {
-    flex: 1,
-    position: "relative",
-
-    overflow: "hidden",
-
-    backgroundColor: COLORS.mapBlue,
-  },
-
-  mapIsland: {
-    position: "absolute",
-
-    backgroundColor: COLORS.mapCream,
-
-    opacity: 0.86,
-
-    transform: [{ rotate: "-8deg" }],
-  },
-
-  mapIslandOne: {
-    width: "92%",
-    height: "74%",
-
-    left: "4%",
-    top: "9%",
-
-    borderTopLeftRadius: 120,
-    borderTopRightRadius: 90,
-    borderBottomLeftRadius: 100,
-    borderBottomRightRadius: 130,
-  },
-
-  mapIslandTwo: {
-    width: 160,
-    height: 120,
-
-    left: -38,
-    bottom: 28,
-
-    borderRadius: 70,
-
-    backgroundColor: COLORS.mapGreen,
-    opacity: 0.55,
-  },
-
-  mapIslandThree: {
-    width: 170,
-    height: 140,
-
-    right: -45,
-    top: 22,
-
-    borderRadius: 80,
-
-    backgroundColor: COLORS.mapGreen,
-    opacity: 0.52,
-  },
-
-  road: {
-    position: "absolute",
-
-    height: 2,
-
-    borderRadius: 1,
-
-    backgroundColor: "rgba(255,255,255,0.82)",
-  },
-
-  roadOne: {
-    width: "70%",
-    left: "12%",
-    top: "23%",
-
-    transform: [{ rotate: "-18deg" }],
-  },
-
-  roadTwo: {
-    width: "62%",
-    left: "20%",
-    top: "55%",
-
-    transform: [{ rotate: "14deg" }],
-  },
-
-  roadThree: {
-    width: "52%",
-    left: "6%",
-    top: "73%",
-
-    transform: [{ rotate: "-26deg" }],
-  },
-
-  roadFour: {
-    width: "45%",
-    right: "5%",
-    top: "38%",
-
-    transform: [{ rotate: "70deg" }],
-  },
-
-  mapDecoration: {
-    position: "absolute",
-    zIndex: 2,
-
-    fontSize: 27,
-    opacity: 0.48,
-  },
-
-  treeOne: {
-    left: "12%",
-    top: "60%",
-  },
-
-  treeTwo: {
-    left: "31%",
-    top: "75%",
-  },
-
-  treeThree: {
-    right: "16%",
-    top: "18%",
-  },
-
-  flower: {
-    right: 9,
-    bottom: 14,
-
-    fontSize: 22,
-    opacity: 0.72,
-  },
-
-  stopContainer: {
-    position: "absolute",
-    zIndex: 8,
-
-    alignItems: "center",
-
-    transform: [{ translateX: -35 }, { translateY: -35 }],
-  },
-
-  orderBadge: {
-    position: "absolute",
-    top: -7,
-    left: -4,
-    zIndex: 10,
-
-    width: 25,
-    height: 25,
-
-    borderRadius: 13,
-
-    alignItems: "center",
-    justifyContent: "center",
-
-    backgroundColor: COLORS.primary,
-
-    borderWidth: 3,
-    borderColor: "#FFFFFF",
-  },
-
-  orderBadgeSelected: {
-    transform: [{ scale: 1.12 }],
-  },
-
-  orderBadgeText: {
-    color: "#FFFFFF",
-
-    fontSize: 11,
-    lineHeight: 14,
-    fontWeight: "800",
-  },
-
-  stickerContainer: {
-    width: 58,
-    height: 58,
-
-    borderRadius: 29,
-
-    alignItems: "center",
-    justifyContent: "center",
-
-    backgroundColor: "rgba(255,255,255,0.90)",
-
-    borderWidth: 2,
-    borderColor: "#FFFFFF",
-
-    shadowColor: COLORS.shadow,
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.14,
-    shadowRadius: 7,
-
-    elevation: 4,
-  },
-
-  stickerContainerSelected: {
-    width: 64,
-    height: 64,
-
-    borderRadius: 32,
-
-    borderWidth: 3,
-    borderColor: COLORS.primary,
-
-    transform: [{ scale: 1.04 }],
-  },
-
-  sticker: {
-    fontSize: 32,
-  },
-
-  stopLabel: {
-    maxWidth: 92,
-
-    marginTop: 3,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-
-    borderRadius: 9,
-
-    backgroundColor: "rgba(255,255,255,0.78)",
-  },
-
-  stopLabelSelected: {
-    backgroundColor: COLORS.card,
-  },
-
-  stopLabelText: {
-    color: COLORS.textSecondary,
-
-    fontSize: 10,
-    lineHeight: 14,
-    fontWeight: "700",
-  },
-
-  stopLabelTextSelected: {
-    color: COLORS.textPrimary,
-    fontWeight: "800",
-  },
-
   mapControls: {
     position: "absolute",
     right: 14,
-    top: 104,
+    bottom: 14,
     zIndex: 20,
 
-    gap: 10,
+    gap: SPACING.sm,
   },
 
   mapControlButton: {
@@ -1801,9 +1383,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
 
     backgroundColor: "rgba(255,255,255,0.93)",
-
-    borderWidth: 1,
-    borderColor: COLORS.border,
 
     shadowColor: COLORS.shadow,
     shadowOffset: {
@@ -1821,23 +1400,38 @@ const styles = StyleSheet.create({
     transform: [{ scale: 0.95 }],
   },
 
-  selectedCardWrapper: {
-    marginHorizontal: 22,
-    marginTop: -56, // 지도 프레임 아래쪽에 살짝 겹쳐 떠 보이도록 음수 여백을 줍니다.
+  // WebView(카카오맵)는 안드로이드에서 zIndex와 무관하게 다른 형제 뷰 위로
+  // 겹쳐 보이는 경우가 있어서, elevation까지 같이 줘야 이 카드 목록이 지도
+  // 위로 확실히 올라옵니다.
+  // 카드 목록을 세로 스크롤 흐름 밖으로 빼서 지도 위에 절대 위치로 고정합니다
+  // (top은 mapHeight에 따라 인라인으로 계산해서 넣습니다) — 화면을 세로로
+  // 스크롤해도 이 카드 목록은 움직이지 않고, 자기 자신만 가로로 스크롤됩니다.
+  stopCardScroll: {
+    position: "absolute",
+    left: 0,
+    right: 0,
     zIndex: 30,
+    elevation: 10,
+  },
+
+  selectedCardWrapper: {
+    paddingHorizontal: SPACING.lg,
+    gap: STOP_CARD_GAP,
+  },
+
+  // 가로 스크롤 안에서 각 스톱 카드 한 장의 너비.
+  stopCardSlide: {
+    width: STOP_CARD_WIDTH,
   },
 
   stopCard: {
-    paddingHorizontal: 16,
-    paddingTop: 15,
-    paddingBottom: 14,
+    paddingHorizontal: SPACING.md,
+    paddingTop: SPACING.md,
+    paddingBottom: SPACING.md,
 
-    borderRadius: 23,
+    borderRadius: RADIUS.sheet,
 
     backgroundColor: "rgba(255,255,255,0.96)",
-
-    borderWidth: 1,
-    borderColor: COLORS.border,
 
     shadowColor: COLORS.shadow,
     shadowOffset: {
@@ -1885,7 +1479,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
 
-    gap: 6,
+    gap: SPACING.xs,
   },
 
   stopCardTitle: {
@@ -1895,15 +1489,11 @@ const styles = StyleSheet.create({
 
     fontSize: 16,
     lineHeight: 22,
-    fontWeight: "800",
-  },
-
-  stopCardSticker: {
-    fontSize: 19,
+    fontWeight: "600",
   },
 
   stopCardMeta: {
-    marginTop: 3,
+    marginTop: SPACING.xs,
 
     color: COLORS.textSecondary,
 
@@ -1922,7 +1512,7 @@ const styles = StyleSheet.create({
 
   clipList: {
     paddingTop: 13,
-    gap: 9,
+    gap: SPACING.sm,
   },
 
   clipThumbnail: {
@@ -1933,7 +1523,7 @@ const styles = StyleSheet.create({
 
     overflow: "hidden",
 
-    borderRadius: 13,
+    borderRadius: RADIUS.card,
 
     backgroundColor: "#E8E5DF",
   },
@@ -1977,7 +1567,7 @@ const styles = StyleSheet.create({
 
     fontSize: 10,
     lineHeight: 13,
-    fontWeight: "800",
+    fontWeight: "600",
 
     textShadowColor: "rgba(0,0,0,0.5)",
     textShadowRadius: 3,
@@ -1990,16 +1580,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
 
-    borderRadius: 13,
+    borderRadius: RADIUS.card,
 
-    backgroundColor: "#FFFDFC",
-
-    borderWidth: 1,
-    borderColor: COLORS.border,
+    backgroundColor: COLORS.surface,
   },
 
   addClipText: {
-    marginTop: 4,
+    marginTop: SPACING.xs,
 
     color: COLORS.textSecondary,
 
@@ -2023,8 +1610,8 @@ const styles = StyleSheet.create({
   internalNavigation: {
     height: 58,
 
-    paddingHorizontal: 6,
-    paddingVertical: 6,
+    paddingHorizontal: SPACING.xs,
+    paddingVertical: SPACING.xs,
 
     flexDirection: "row",
     alignItems: "center",
@@ -2032,9 +1619,6 @@ const styles = StyleSheet.create({
     borderRadius: 20,
 
     backgroundColor: "rgba(255,255,255,0.97)",
-
-    borderWidth: 1,
-    borderColor: COLORS.border,
 
     shadowColor: COLORS.shadow,
     shadowOffset: {
@@ -2054,7 +1638,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
 
-    borderRadius: 15,
+    borderRadius: RADIUS.banner,
   },
 
   internalNavigationItemSelected: {
@@ -2062,7 +1646,7 @@ const styles = StyleSheet.create({
   },
 
   internalNavigationLabel: {
-    marginTop: 3,
+    marginTop: SPACING.xs,
 
     color: COLORS.textSecondary,
 
@@ -2092,15 +1676,15 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingHorizontal: 40,
     paddingBottom: 120,
-    gap: 8,
+    gap: SPACING.sm,
   },
 
   planEmptyTitle: {
-    marginTop: 6,
+    marginTop: SPACING.xs,
     color: COLORS.textPrimary,
     fontSize: 15,
     lineHeight: 21,
-    fontWeight: "800",
+    fontWeight: "700",
   },
 
   planEmptyDescription: {
@@ -2112,55 +1696,53 @@ const styles = StyleSheet.create({
   },
 
   planContent: {
-    paddingHorizontal: 20,
-    paddingTop: 18,
+    paddingHorizontal: SPACING.screenH,
+    paddingTop: SPACING.md,
     paddingBottom: 190,
   },
 
   dayChipRow: {
     flexDirection: "row",
-    gap: 8,
+    gap: SPACING.sm,
 
-    paddingBottom: 4,
+    paddingBottom: SPACING.xs,
   },
 
   dayChip: {
-    paddingHorizontal: 16,
-    paddingVertical: 9,
+    flexDirection: "row",
+    alignItems: "center",
 
-    borderRadius: 18,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
 
-    backgroundColor: COLORS.card,
+    borderRadius: RADIUS.banner,
 
-    borderWidth: 1,
-    borderColor: COLORS.border,
+    backgroundColor: COLORS.surface,
   },
 
   dayChipSelected: {
-    backgroundColor: COLORS.primarySoft,
-    borderColor: COLORS.primary,
+    backgroundColor: COLORS.primary,
   },
 
   dayChipText: {
-    color: COLORS.textSecondary,
+    color: COLORS.textPrimary,
 
-    fontSize: 12,
-    lineHeight: 16,
-    fontWeight: "700",
+    fontSize: 13,
+    fontWeight: "400",
   },
 
   dayChipTextSelected: {
-    color: COLORS.primaryDark,
-    fontWeight: "800",
+    color: COLORS.white,
   },
 
+  // 드래그 재정렬 리스트(DraggableFlatList)의 헤더로 들어가는 day 탭 줄 아래 여백.
   planTimeline: {
-    marginTop: 20,
+    marginTop: 32, // day 태그 줄과 목록 사이 간격 (px로 직접 조절)
   },
 
   planTimelineRow: {
     flexDirection: "row",
-    gap: 12,
+    gap: SPACING.sm,
   },
 
   planTimelineIndicator: {
@@ -2210,15 +1792,12 @@ const styles = StyleSheet.create({
   },
 
   planDistanceBadge: {
-    paddingHorizontal: 6,
-    paddingVertical: 3,
+    paddingHorizontal: SPACING.xs,
+    paddingVertical: SPACING.xs,
 
-    borderRadius: 8,
+    borderRadius: RADIUS.badge,
 
-    backgroundColor: COLORS.background,
-
-    borderWidth: 1,
-    borderColor: COLORS.border,
+    backgroundColor: COLORS.surface,
   },
 
   planDistanceBadgeText: {
@@ -2233,9 +1812,9 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
 
-    marginRight: 10,
+    marginRight: SPACING.sm,
 
-    borderRadius: 22,
+    borderRadius: RADIUS.sheet,
 
     alignItems: "center",
     justifyContent: "center",
@@ -2245,17 +1824,14 @@ const styles = StyleSheet.create({
 
   planStopCard: {
     flex: 1,
-    marginBottom: 12,
+    marginBottom: SPACING.sm,
 
     paddingHorizontal: 13,
-    paddingVertical: 12,
+    paddingVertical: SPACING.sm,
 
-    borderRadius: 16,
+    borderRadius: RADIUS.banner,
 
-    backgroundColor: COLORS.card,
-
-    borderWidth: 1,
-    borderColor: COLORS.border,
+    backgroundColor: '#FBFBFA',
   },
 
   planStopCardTop: {
@@ -2276,11 +1852,11 @@ const styles = StyleSheet.create({
 
     fontSize: 14,
     lineHeight: 19,
-    fontWeight: "800",
+    fontWeight: "700",
   },
 
   planStopMeta: {
-    marginTop: 2,
+    marginTop: SPACING.xs,
 
     color: COLORS.textSecondary,
 
@@ -2298,12 +1874,12 @@ const styles = StyleSheet.create({
   },
 
   planStopMemoBox: {
-    marginTop: 10,
+    marginTop: SPACING.sm,
 
     paddingHorizontal: 11,
-    paddingVertical: 9,
+    paddingVertical: SPACING.sm,
 
-    borderRadius: 12,
+    borderRadius: RADIUS.card,
 
     backgroundColor: COLORS.primarySoft,
   },
@@ -2317,16 +1893,16 @@ const styles = StyleSheet.create({
   },
 
   planStopMemoEmpty: {
-    marginTop: 10,
+    marginTop: SPACING.sm,
 
-    paddingVertical: 8,
+    paddingVertical: SPACING.sm,
 
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 4,
+    gap: SPACING.xs,
 
-    borderRadius: 12,
+    borderRadius: RADIUS.card,
 
     borderWidth: 1,
     borderColor: COLORS.border,
@@ -2343,9 +1919,9 @@ const styles = StyleSheet.create({
 
   planAddRow: {
     flexDirection: "row",
-    gap: 8,
+    gap: SPACING.sm,
 
-    marginTop: 2,
+    marginTop: SPACING.xs,
   },
 
   planAddButton: {
@@ -2354,11 +1930,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 5,
+    gap: SPACING.xs,
 
     paddingVertical: 11,
 
-    borderRadius: 14,
+    borderRadius: RADIUS.card,
 
     borderWidth: 1,
     borderColor: COLORS.border,
@@ -2387,11 +1963,11 @@ const styles = StyleSheet.create({
   memoModalCard: {
     width: "100%",
 
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 16,
+    paddingHorizontal: SPACING.screenH,
+    paddingTop: SPACING.screenH,
+    paddingBottom: SPACING.md,
 
-    borderRadius: 22,
+    borderRadius: RADIUS.sheet,
 
     backgroundColor: COLORS.card,
   },
@@ -2401,11 +1977,11 @@ const styles = StyleSheet.create({
 
     fontSize: 16,
     lineHeight: 22,
-    fontWeight: "800",
+    fontWeight: "600",
   },
 
   memoModalHint: {
-    marginTop: 4,
+    marginTop: SPACING.xs,
 
     color: COLORS.textSecondary,
 
@@ -2415,18 +1991,18 @@ const styles = StyleSheet.create({
   },
 
   memoInput: {
-    marginTop: 14,
+    marginTop: SPACING.md,
 
     minHeight: 96,
 
     paddingHorizontal: 13,
     paddingVertical: 11,
 
-    borderRadius: 14,
+    borderRadius: RADIUS.card,
 
     color: COLORS.textPrimary,
 
-    fontSize: 13,
+    fontSize: 14,
     lineHeight: 19,
     fontWeight: "500",
 
@@ -2437,9 +2013,9 @@ const styles = StyleSheet.create({
 
   memoModalButtonRow: {
     flexDirection: "row",
-    gap: 8,
+    gap: SPACING.sm,
 
-    marginTop: 16,
+    marginTop: SPACING.md,
   },
 
   memoModalButton: {
@@ -2448,9 +2024,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
 
-    paddingVertical: 12,
+    paddingVertical: SPACING.sm,
 
-    borderRadius: 14,
+    borderRadius: RADIUS.card,
   },
 
   memoModalButtonGhost: {
@@ -2493,15 +2069,15 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 30,
     borderTopRightRadius: 30,
     maxHeight: "88%",
-    paddingHorizontal: 20,
-    paddingTop: 9,
+    paddingHorizontal: SPACING.screenH,
+    paddingTop: SPACING.sm,
   },
   shareHandle: {
     alignSelf: "center",
     backgroundColor: "#D7D7D7",
     borderRadius: 4,
     height: 6,
-    marginBottom: 15,
+    marginBottom: SPACING.lg,
     width: 70,
   },
   shareHeader: {
@@ -2511,53 +2087,42 @@ const styles = StyleSheet.create({
   },
   shareHeaderText: {
     flex: 1,
-    paddingRight: 12,
+    paddingRight: SPACING.sm,
   },
   shareTitle: {
     color: COLORS.textPrimary,
-    fontSize: 25,
-    fontWeight: "800",
+    fontSize: 20,
+    fontWeight: "700",
   },
   shareDescription: {
     color: COLORS.textSecondary,
-    fontSize: 15,
-    lineHeight: 22,
-    marginTop: 8,
+    fontSize: 13,
+    lineHeight: 20,
+    marginTop: SPACING.sm,
   },
   shareScrollContent: {
-    paddingBottom: 2,
+    paddingBottom: SPACING.xs,
   },
   sharePreviewCard: {
     alignItems: "center",
-    borderColor: "#EAEAEA",
+    backgroundColor: '#FBFBFA',
     borderRadius: 20,
-    borderWidth: 1,
     flexDirection: "row",
-    marginTop: 22,
+    marginTop: SPACING.lg,
     padding: 13,
   },
   shareMapPreview: {
-    backgroundColor: COLORS.mapBlue,
-    borderRadius: 14,
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.card,
     height: 126,
     overflow: "hidden",
     position: "relative",
     width: 126,
   },
-  // RouteMap의 330 × 330 캔버스를 공유 카드 안에서 126 × 126으로 축소합니다.
-  // 즉, 임시로 그린 경로가 아니라 지도 화면과 같은 컴포넌트를 그대로 재사용합니다.
-  shareMapScaleCanvas: {
-    height: 330,
-    left: -102,
-    position: "absolute",
-    top: -102,
-    transform: [{ scale: 0.382 }],
-    width: 330,
-  },
   shareMapRoute: {
     backgroundColor: COLORS.route,
     borderColor: COLORS.routeSoft,
-    borderRadius: 7,
+    borderRadius: RADIUS.badge,
     borderWidth: 2,
     height: 9,
     position: "absolute",
@@ -2598,18 +2163,18 @@ const styles = StyleSheet.create({
   },
   sharePreviewTextArea: {
     flex: 1,
-    marginLeft: 14,
+    marginLeft: SPACING.md,
   },
   sharePreviewTitle: {
     color: COLORS.textPrimary,
-    fontSize: 19,
-    fontWeight: "800",
+    fontSize: 17,
+    fontWeight: "700",
   },
   sharePreviewMeta: {
     color: COLORS.textSecondary,
-    fontSize: 13,
+    fontSize: 11,
     lineHeight: 19,
-    marginTop: 4,
+    marginTop: SPACING.xs,
   },
   shareInlineButton: {
     alignItems: "center",
@@ -2618,10 +2183,10 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     borderWidth: 1,
     flexDirection: "row",
-    gap: 7,
-    marginTop: 10,
+    gap: SPACING.sm,
+    marginTop: SPACING.sm,
     paddingHorizontal: 13,
-    paddingVertical: 8,
+    paddingVertical: SPACING.sm,
   },
   shareInlineButtonText: {
     color: "#555555",
@@ -2631,7 +2196,7 @@ const styles = StyleSheet.create({
   shareAppsRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginBottom: 25,
+    marginBottom: SPACING.lg,
     marginTop: 28,
   },
   shareAppButton: {
@@ -2640,7 +2205,7 @@ const styles = StyleSheet.create({
   },
   shareAppIcon: {
     alignItems: "center",
-    borderRadius: 18,
+    borderRadius: RADIUS.banner,
     height: 55,
     justifyContent: "center",
     width: 55,
@@ -2648,19 +2213,18 @@ const styles = StyleSheet.create({
   shareAppLabel: {
     color: "#5C5C5C",
     fontSize: 11,
-    marginTop: 8,
+    marginTop: SPACING.sm,
   },
   shareActionList: {
-    borderColor: "#E8E8E8",
-    borderRadius: 18,
-    borderWidth: 1,
+    backgroundColor: '#FBFBFA',
+    borderRadius: RADIUS.banner,
     overflow: "hidden",
   },
   shareActionRow: {
     alignItems: "center",
     flexDirection: "row",
     height: 62,
-    paddingHorizontal: 19,
+    paddingHorizontal: SPACING.screenH,
   },
   shareActionDivider: {
     borderBottomColor: "#EEEEEE",
@@ -2669,8 +2233,8 @@ const styles = StyleSheet.create({
   shareActionLabel: {
     color: "#555555",
     flex: 1,
-    fontSize: 16,
-    marginLeft: 17,
+    fontSize: 14,
+    marginLeft: SPACING.md,
   },
   sharePressed: {
     opacity: 0.6,

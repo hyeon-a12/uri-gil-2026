@@ -7,6 +7,7 @@
 
 import { parseDateRange, type FolderItem } from '@/services/folderService';
 import type { TripScheduleStop } from '@/services/trip-schedule-service';
+import { applyStopOrder, type StopOrderMap } from '@/services/stop-order-service';
 import type { RecordingData } from '@/types/recording';
 
 export interface PlanStop {
@@ -17,6 +18,9 @@ export interface PlanStop {
   time: string;
   /** AI 추천을 확정해서 추가된 스톱인지, 직접 검색해서 추가한 스톱인지, 실제 촬영 기록에서 만들어진 스톱인지 구분합니다. */
   source?: 'ai-recommendation' | 'manual' | 'recording';
+  /** 지도에 핀을 찍기 위한 좌표. 좌표를 알 수 없는 스톱은 null. */
+  latitude: number | null;
+  longitude: number | null;
   clips: {
     id: string;
     thumbnail: string;
@@ -43,6 +47,14 @@ export function formatClipTime(recordedAt: string): string {
   return `${String(date.getHours()).padStart(2, '0')}:${String(
     date.getMinutes(),
   ).padStart(2, '0')}`;
+}
+
+/** day 탭/제목 라벨: 여행 시작일을 알면 "7/7"처럼 실제 날짜로, 모르면 "1일차"로 대체합니다. */
+export function getDayLabel(day: number, tripStartDate: Date | null): string {
+  if (!tripStartDate) return `${day}일차`;
+  const date = new Date(tripStartDate);
+  date.setDate(date.getDate() + (day - 1));
+  return `${date.getMonth() + 1}/${date.getDate()}`;
 }
 
 /** 여행 시작일 기준 며칠째인지 (1부터 시작). 기간을 못 읽으면 항상 1일차로 취급. */
@@ -74,6 +86,7 @@ export function buildPlanData(
   recordings: RecordingData[],
   trip: FolderItem | null,
   savedScheduleStops: TripScheduleStop[] = [],
+  stopOrderOverrides: StopOrderMap = {},
 ): { stops: PlanStop[]; travelLogs: PlanTravelLog[]; dayNumbers: number[] } {
   const tripStart = trip ? parseDateRange(trip.dateRange)?.start ?? null : null;
 
@@ -119,6 +132,8 @@ export function buildPlanData(
       name: placeName,
       day,
       time: formatClipTime(recording.recordedAt),
+      latitude: recording.location.latitude,
+      longitude: recording.location.longitude,
       clips: [clip],
     });
   }
@@ -131,20 +146,50 @@ export function buildPlanData(
     day: stop.day ?? 1,
     time: stop.source === 'manual' ? '직접 추가' : 'AI 추천',
     source: stop.source,
+    latitude: stop.latitude,
+    longitude: stop.longitude,
     clips: [],
   }));
 
-  // 같은 day 안에서는 확정된 장소(AI 추천/직접 추가)가 먼저, 실제 촬영 기록이 뒤에 오도록
-  // day별로 묶은 뒤 전체 순번을 다시 매깁니다.
-  const stops = [...aiStops, ...recordedStops]
-    .sort((a, b) => a.day - b.day)
+  // 같은 day 안에서는 기본적으로 확정된 장소(AI 추천/직접 추가)가 먼저, 실제 촬영
+  // 기록이 뒤에 오지만, 사용자가 드래그로 순서를 바꿔서 저장해뒀다면(stopOrderOverrides)
+  // 그 순서를 day별로 우선 적용한 뒤 전체 순번을 다시 매깁니다.
+  const byDay = new Map<number, PlanStop[]>();
+  for (const stop of [...aiStops, ...recordedStops]) {
+    const list = byDay.get(stop.day) ?? [];
+    list.push(stop);
+    byDay.set(stop.day, list);
+  }
+
+  const stops = Array.from(byDay.keys())
+    .sort((a, b) => a - b)
+    .flatMap((day) => applyStopOrder(byDay.get(day)!, stopOrderOverrides[day]))
     .map((stop, index) => ({
       ...stop,
       order: index + 1,
     }));
-  const dayNumbers = Array.from(
-    new Set([...stops.map((s) => s.day), ...travelLogs.map((l) => l.day)]),
-  ).sort((a, b) => a - b);
+
+  const actualDayNumbers = new Set([
+    ...stops.map((s) => s.day),
+    ...travelLogs.map((l) => l.day),
+  ]);
+
+  // 아직 클립이 없는 날짜도 "N박 M일" 전체 기간만큼 day 탭이 미리 보이도록,
+  // 여행 기간(dateRange)으로 전체 day 범위를 채워 넣습니다. 촬영 기록이 기간
+  // 밖의 날짜에 찍혀 있는 경우를 대비해 실제 day 값도 함께 합쳐줍니다.
+  const tripEnd = trip ? parseDateRange(trip.dateRange)?.end ?? null : null;
+  if (tripStart && tripEnd) {
+    const MS_PER_DAY = 24 * 60 * 60 * 1000;
+    const totalDays = Math.max(
+      1,
+      Math.round((tripEnd.getTime() - tripStart.getTime()) / MS_PER_DAY) + 1,
+    );
+    for (let day = 1; day <= totalDays; day++) {
+      actualDayNumbers.add(day);
+    }
+  }
+
+  const dayNumbers = Array.from(actualDayNumbers).sort((a, b) => a - b);
 
   return { stops, travelLogs, dayNumbers };
 }

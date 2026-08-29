@@ -23,6 +23,7 @@ import KakaoMapView, {
 } from '@/components/KakaoMapView';
 import { ClipPreviewModal } from '@/components/ClipPreview/ClipPreviewModal'
 import MyLocationIcon from '@/assets/images/my-location.svg';
+import NoPlaceIcon from '@/assets/images/no_place.svg';
 import { AppText as Text } from '@/components/AppText';
 import { HapticPressable, TripSelector } from '@/components/common';
 import { useTripStore } from '@/store/useTripStore';
@@ -31,7 +32,7 @@ import type { FolderItem } from '@/services/folderService';
 import { appendTripScheduleStops } from '@/services/trip-schedule-service';
 import type { RecordingData } from '@/types/recording';
 import { ClipItem } from '@/types/home';
-import { COLORS as SHARED_COLORS } from '@/constants/color';
+import { COLORS as SHARED_COLORS, RADIUS, SPACING } from '@/constants/color';
 
 const COLORS = {
   accent: SHARED_COLORS.accent, // Point/Accent — 메인 CTA, 강조 액션
@@ -109,10 +110,7 @@ interface RecommendedPlace {
   name: string;
 }
 
-const RECOMMENDED_PLACES: RecommendedPlace[] = [
-  { id: "1", name: "객리단길" },
-  { id: "2", name: "팔복예술공장" },
-];
+const RECOMMENDED_PLACES: RecommendedPlace[] = [];
 
 /** "오늘의 순간들" 가로 스크롤에 들어가는 클립 하나. 실제 썸네일 이미지가
  * 없어서 지금은 색상 placeholder로 대체했어요 — 나중에
@@ -693,30 +691,6 @@ function PullUpSheet({
           scrollEventThrottle={16}
         >
           <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionTitle}>오늘의 순간들</Text>
-          </View>
-
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.momentRow}
-          >
-            {moments.length > 0 ? (
-              moments.map((moment) => (
-                <MomentThumbnail
-                  key={moment.id}
-                  moment={moment}
-                  onSelect={() => setPreviewClip(moment)}
-                />
-              ))
-            ) : (
-              <Text style={styles.emptyMomentsText}>
-                오늘 촬영한 클립이 아직 없어요
-              </Text>
-            )}
-          </ScrollView>
-
-          <View style={[styles.sectionHeaderRow, { marginTop: 24 }]}>
             <Text style={styles.sectionTitle}>추천 장소</Text>
           </View>
 
@@ -795,9 +769,17 @@ function PullUpSheet({
                   </View>
                 ))
               ) : (
-                <Text style={styles.emptyMomentsText}>
-                  주변에 추천할 장소가 없어요
-                </Text>
+                <View style={styles.emptyPlaceContainer}>
+                  <NoPlaceIcon
+                    width={40}
+                    height={40}
+                    fill={COLORS.textSecondary}
+                    style={styles.emptyPlaceIcon}
+                  />
+                  <Text style={styles.emptyMomentsText}>
+                    주변에 추천할 장소가 없어요
+                  </Text>
+                </View>
               )}
             </View>
           ) : null}
@@ -807,6 +789,30 @@ function PullUpSheet({
               <RecommendedPlaceCard key={place.id} place={place} />
             ))}
           </View>
+
+          <View style={[styles.sectionHeaderRow, { marginTop: SPACING.xl }]}>
+            <Text style={styles.sectionTitle}>오늘의 순간들</Text>
+          </View>
+
+          {moments.length > 0 ? (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.momentRow}
+            >
+              {moments.map((moment) => (
+                <MomentThumbnail
+                  key={moment.id}
+                  moment={moment}
+                  onSelect={() => setPreviewClip(moment)}
+                />
+              ))}
+            </ScrollView>
+          ) : (
+            <Text style={[styles.emptyMomentsText, styles.emptyMomentsTextCentered]}>
+              오늘 촬영한 클립이 아직 없어요
+            </Text>
+          )}
 
           <View style={{ height: 40 }} />
         </ScrollView>
@@ -1202,7 +1208,7 @@ function AiRecommendationScreen({
             {filters.map((item) => {
               const selected = filter === item.id;
               return (
-                <Pressable
+                <HapticPressable
                   key={item.id}
                   onPress={() => setFilter(item.id)}
                   style={[
@@ -1218,7 +1224,7 @@ function AiRecommendationScreen({
                   >
                     {item.label}
                   </Text>
-                </Pressable>
+                </HapticPressable>
               );
             })}
           </ScrollView>
@@ -1347,7 +1353,7 @@ function AiRecommendationScreen({
                 size={35}
                 color={COLORS.textSecondary}
               />
-              <Text style={styles.aiEmptyTitle}>추천할 장소가 없어요</Text>
+              <Text style={styles.aiEmptyTitle}>추천 장소가 없어요</Text>
               <Text style={styles.aiEmptyText}>
                 다시 검색해 주변 장소를 불러와 주세요.
               </Text>
@@ -1906,12 +1912,12 @@ const styles = StyleSheet.create({
     height: 60,
     flexDirection: "row",
     alignItems: "center",
-    paddingLeft: 17,
-    paddingRight: 15,
-    gap: 10,
+    paddingLeft: SPACING.md,
+    paddingRight: SPACING.md,
+    gap: SPACING.sm,
     // 여행 버튼과 동일한 흰색 표면과 스트로크 규칙을 사용합니다.
     backgroundColor: "#FFFFFF",
-    borderRadius: 22,
+    borderRadius: RADIUS.sheet,
     borderWidth: 1,
     borderColor: "#D8DCE3",
     shadowOpacity: 0,
@@ -1949,11 +1955,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 14,
-    gap: 6,
+    paddingHorizontal: SPACING.md,
+    gap: SPACING.xs,
     // 검색창과 동일한 표면·모서리·스트로크 규칙을 적용합니다.
     backgroundColor: "#FFFFFF",
-    borderRadius: 22,
+    borderRadius: RADIUS.sheet,
     borderWidth: 1,
     borderColor: "#D8DCE3",
     shadowOpacity: 0,
@@ -1962,32 +1968,32 @@ const styles = StyleSheet.create({
   },
   myTripText: {
     fontSize: 14,
-    fontWeight: "800",
+    fontWeight: "500",
     color: "#252A34",
   },
   categoryAnimatedWrapper: {
     overflow: "hidden",
   },
   categoryScroll: {
-    marginTop: 10,
+    marginTop: SPACING.sm,
   },
   categoryRow: {
     alignItems: "center",
-    gap: 8,
+    gap: SPACING.sm,
     paddingHorizontal: 1,
-    paddingRight: 18,
+    paddingRight: SPACING.md,
   },
   // 각 항목을 독립된 흰색 칩으로 만들어 복잡한 지도 위에서도 구분합니다.
   categoryButton: {
     height: 36,
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 12,
+    gap: SPACING.xs,
+    paddingHorizontal: SPACING.sm,
     backgroundColor: "rgba(255,255,255,0.96)",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.98)",
-    borderRadius: 18,
+    borderRadius: RADIUS.banner,
     shadowColor: "#172033",
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.14,
@@ -2015,11 +2021,11 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFB13B",
   },
   searchResultPanel: {
-    marginTop: 8,
+    marginTop: SPACING.sm,
     maxHeight: 410,
     overflow: "hidden",
     backgroundColor: COLORS.white,
-    borderRadius: 18,
+    borderRadius: RADIUS.banner,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.12,
@@ -2033,8 +2039,8 @@ const styles = StyleSheet.create({
     minHeight: 72,
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
   },
   searchResultItemBorder: {
     borderBottomWidth: StyleSheet.hairlineWidth,
@@ -2054,7 +2060,7 @@ const styles = StyleSheet.create({
   },
   searchResultTextArea: {
     flex: 1,
-    marginRight: 8,
+    marginRight: SPACING.sm,
   },
   searchResultTitle: {
     fontSize: 14,
@@ -2062,12 +2068,12 @@ const styles = StyleSheet.create({
     color: COLORS.textPrimary,
   },
   searchResultSubtitle: {
-    marginTop: 3,
+    marginTop: SPACING.xs,
     fontSize: 11,
     color: COLORS.textSecondary,
   },
   searchResultMeta: {
-    marginTop: 3,
+    marginTop: SPACING.xs,
     fontSize: 10,
     fontWeight: "600",
     color: COLORS.accent,
@@ -2077,8 +2083,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
-    paddingHorizontal: 14,
+    gap: SPACING.sm,
+    paddingHorizontal: SPACING.md,
   },
   searchEmptyText: {
     fontSize: 13,
@@ -2092,11 +2098,11 @@ const styles = StyleSheet.create({
     right: 20,
     zIndex: 25,
     maxHeight: 320,
-    paddingHorizontal: 16,
-    paddingTop: 14,
-    paddingBottom: 10,
+    paddingHorizontal: SPACING.md,
+    paddingTop: SPACING.md,
+    paddingBottom: SPACING.sm,
     backgroundColor: COLORS.white,
-    borderRadius: 18,
+    borderRadius: RADIUS.banner,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.12,
@@ -2107,8 +2113,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "flex-start",
     justifyContent: "space-between",
-    gap: 12,
-    marginBottom: 10,
+    gap: SPACING.sm,
+    marginBottom: SPACING.sm,
   },
   nearbyHeaderTextArea: {
     flex: 1,
@@ -2119,12 +2125,12 @@ const styles = StyleSheet.create({
     color: COLORS.textPrimary,
   },
   nearbySubtitle: {
-    marginTop: 3,
+    marginTop: SPACING.xs,
     fontSize: 11,
     color: COLORS.textSecondary,
   },
   nearbySectionLabel: {
-    marginBottom: 6,
+    marginBottom: SPACING.xs,
     fontSize: 13,
     fontWeight: "700",
     color: COLORS.textPrimary,
@@ -2136,7 +2142,7 @@ const styles = StyleSheet.create({
     minHeight: 58,
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 8,
+    paddingVertical: SPACING.sm,
   },
   nearbyItemBorder: {
     borderBottomWidth: StyleSheet.hairlineWidth,
@@ -2145,7 +2151,7 @@ const styles = StyleSheet.create({
   nearbyIcon: {
     width: 34,
     height: 34,
-    marginRight: 10,
+    marginRight: SPACING.sm,
     borderRadius: 17,
     alignItems: "center",
     justifyContent: "center",
@@ -2160,12 +2166,12 @@ const styles = StyleSheet.create({
     color: COLORS.textPrimary,
   },
   nearbyItemSubtitle: {
-    marginTop: 2,
+    marginTop: SPACING.xs,
     fontSize: 11,
     color: COLORS.textSecondary,
   },
   nearbyEmptyText: {
-    paddingVertical: 14,
+    paddingVertical: SPACING.md,
     fontSize: 12,
     color: COLORS.textSecondary,
   },
@@ -2194,7 +2200,7 @@ const styles = StyleSheet.create({
   compassButton: {
     width: 44,
     height: 44,
-    borderRadius: 22,
+    borderRadius: RADIUS.sheet,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: COLORS.white,
@@ -2211,8 +2217,8 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     backgroundColor: COLORS.white,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    borderTopLeftRadius: RADIUS.sheet,
+    borderTopRightRadius: RADIUS.sheet,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: -4 },
     shadowOpacity: 0.06,
@@ -2220,7 +2226,7 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   sheetHandleArea: {
-    paddingVertical: 12,
+    paddingVertical: SPACING.sm,
     alignItems: "center",
   },
   sheetHandle: {
@@ -2236,17 +2242,18 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   sheetContent: {
-    paddingHorizontal: 20,
+    paddingHorizontal: SPACING.screenH,
+    paddingTop: 17,
   },
   sectionHeaderRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 12,
+    marginBottom: SPACING.sm,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: "800",
+    fontSize: 17,
+    fontWeight: "600",
     color: COLORS.textPrimary,
   },
   sectionLink: {
@@ -2256,21 +2263,21 @@ const styles = StyleSheet.create({
 
   // 오늘의 순간들
   momentRow: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 16,
+    gap: SPACING.md,
   },
   cardContainer: {
     alignItems: 'center',
     width: 80,
   },
   momentThumb: {
-    width: 81,
-    height: 81,
+    width: 78,
+    height: 78,
     borderRadius: 40.5,
-    borderWidth: 2.7,
+    borderWidth: 1.9,
     borderColor: COLORS.accent,
     position: 'relative',
     overflow: 'hidden',
@@ -2305,8 +2312,8 @@ const styles = StyleSheet.create({
     left: 18,
     zIndex: 2,
     backgroundColor: COLORS.record,
-    borderRadius: 6,
-    paddingHorizontal: 5,
+    borderRadius: RADIUS.badge,
+    paddingHorizontal: SPACING.xs,
     paddingVertical: 1,
   },
   recBadgeText: {
@@ -2319,8 +2326,8 @@ const styles = StyleSheet.create({
     bottom: 6,
     alignSelf: "center",
     backgroundColor: "rgba(0,0,0,0.5)",
-    borderRadius: 8,
-    paddingHorizontal: 6,
+    borderRadius: RADIUS.badge,
+    paddingHorizontal: SPACING.xs,
     paddingVertical: 1,
     zIndex: 2,
   },
@@ -2330,30 +2337,46 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   momentCaption: {
-    marginTop: 6,
+    marginTop: SPACING.xs,
     fontSize: 11,
     color: COLORS.textSecondary,
     textAlign: "center",
     width: 84,
   },
   emptyMomentsText: {
-    fontSize: 12,
+    fontSize: 14,
     color: COLORS.textSecondary,
-    paddingVertical: 20,
+    paddingVertical: SPACING.screenH,
+  },
+  // "오늘 촬영한 클립이 아직 없어요"만 가로 스크롤 밖으로 빼서 화면 너비 기준
+  // 가운데 정렬합니다(가로 ScrollView 안에서는 콘텐츠 너비만큼만 차지해 중앙에
+  // 오지 않았습니다).
+  emptyMomentsTextCentered: {
+    width: '100%',
+    textAlign: 'center',
+  },
+  emptyPlaceContainer: {
+    width: '100%',
+    alignItems: 'center',
+    paddingTop: 40, // 섹션 위쪽 여백 (px로 직접 조절)
+    paddingBottom: 20, // 섹션 아래쪽 여백 (px로 직접 조절)
+  },
+  emptyPlaceIcon: {
+    marginBottom: SPACING.sm,
   },
 
   // 추천 장소
   placeRow: {
-    marginTop: 16,
+    marginTop: SPACING.md,
     flexDirection: "row",
-    gap: 12,
+    gap: SPACING.sm,
   },
   placeCard: {
     flex: 1,
   },
   placeImagePlaceholder: {
     height: 90,
-    borderRadius: 14,
+    borderRadius: RADIUS.card,
     backgroundColor: COLORS.surface,
     alignItems: "center",
     justifyContent: "center",
@@ -2370,26 +2393,26 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   placeName: {
-    marginTop: 8,
+    marginTop: SPACING.sm,
     fontSize: 13,
-    fontWeight: "700",
+    fontWeight: "300",
     color: COLORS.textPrimary,
   },
 
   // 추천 장소 아래 카테고리 태그(주유소/음식점/카페/편의점) — 원래 검색창
   // 포커스 시에만 보이던 태그들을 바텀시트 쪽으로 옮겨왔습니다.
   categoryTagRow: {
-    marginTop: 5,
+    marginTop: SPACING.xs,
     flexDirection: "row",
-    gap: 8,
+    gap: SPACING.sm,
   },
   categoryTagButton: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-    borderRadius: 18,
+    gap: SPACING.xs,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    borderRadius: RADIUS.banner,
     backgroundColor: COLORS.surface,
   },
   categoryTagButtonSelected: {
@@ -2397,20 +2420,20 @@ const styles = StyleSheet.create({
   },
   categoryTagText: {
     fontSize: 13,
-    fontWeight: "600",
+    fontWeight: "300",
     color: COLORS.textPrimary,
   },
   categoryTagTextSelected: {
     color: COLORS.white,
   },
   categoryResultList: {
-    marginTop: 12,
+    marginTop: SPACING.sm,
   },
   categoryResultItem: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
-    paddingVertical: 12,
+    gap: SPACING.sm,
+    paddingVertical: SPACING.sm,
   },
   categoryResultItemBorder: {
     borderBottomWidth: 1,
@@ -2419,7 +2442,7 @@ const styles = StyleSheet.create({
   categoryResultIcon: {
     width: 36,
     height: 36,
-    borderRadius: 18,
+    borderRadius: RADIUS.banner,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: COLORS.accentTint,
@@ -2433,7 +2456,7 @@ const styles = StyleSheet.create({
     color: COLORS.textPrimary,
   },
   categoryResultSubtitle: {
-    marginTop: 2,
+    marginTop: SPACING.xs,
     fontSize: 12,
     color: COLORS.textSecondary,
   },
@@ -2448,7 +2471,7 @@ const styles = StyleSheet.create({
     maxHeight: "68%",
     minHeight: 280,
     paddingHorizontal: 28,
-    paddingTop: 12,
+    paddingTop: SPACING.sm,
     paddingBottom: 28,
     backgroundColor: COLORS.white,
     borderTopLeftRadius: 28,
@@ -2458,7 +2481,7 @@ const styles = StyleSheet.create({
     alignSelf: "center",
     width: 62,
     height: 6,
-    marginBottom: 24,
+    marginBottom: SPACING.lg,
     borderRadius: 3,
     backgroundColor: COLORS.border,
   },
@@ -2466,7 +2489,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "flex-start",
     justifyContent: "space-between",
-    marginBottom: 18,
+    marginBottom: SPACING.md,
   },
   tripModalTitle: {
     fontSize: 23,
@@ -2474,7 +2497,7 @@ const styles = StyleSheet.create({
     color: COLORS.textPrimary,
   },
   tripModalSubtitle: {
-    marginTop: 6,
+    marginTop: SPACING.xs,
     fontSize: 14,
     color: COLORS.textSecondary,
   },
@@ -2491,9 +2514,9 @@ const styles = StyleSheet.create({
     minHeight: 72,
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 10,
-    paddingHorizontal: 8,
-    borderRadius: 16,
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.sm,
+    borderRadius: RADIUS.banner,
   },
   tripOptionSelected: {
     backgroundColor: COLORS.accentTint,
@@ -2504,8 +2527,8 @@ const styles = StyleSheet.create({
   tripOptionIcon: {
     width: 48,
     height: 48,
-    marginRight: 14,
-    borderRadius: 16,
+    marginRight: SPACING.md,
+    borderRadius: RADIUS.banner,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: COLORS.surface,
@@ -2525,7 +2548,7 @@ const styles = StyleSheet.create({
     color: COLORS.accent,
   },
   tripOptionSubtitle: {
-    marginTop: 4,
+    marginTop: SPACING.xs,
     fontSize: 12,
     color: COLORS.textSecondary,
   },
@@ -2533,16 +2556,16 @@ const styles = StyleSheet.create({
     minHeight: 72,
     flexDirection: "row",
     alignItems: "center",
-    marginTop: 10,
-    paddingHorizontal: 8,
+    marginTop: SPACING.sm,
+    paddingHorizontal: SPACING.sm,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: COLORS.border,
   },
   newTripIcon: {
     width: 48,
     height: 48,
-    marginRight: 14,
-    borderRadius: 16,
+    marginRight: SPACING.md,
+    borderRadius: RADIUS.banner,
     borderWidth: 1,
     borderStyle: "dashed",
     borderColor: COLORS.border,
@@ -2573,12 +2596,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: "#FFFFFF",
     borderColor: "#D8DCE3",
-    borderRadius: 22,
+    borderRadius: RADIUS.sheet,
     borderWidth: 1,
     flexDirection: "row",
     height: 60,
     left: 16,
-    paddingHorizontal: 12,
+    paddingHorizontal: SPACING.sm,
     position: "absolute",
     right: 16,
     top: 54,
@@ -2595,7 +2618,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
     height: "100%",
-    marginLeft: 4,
+    marginLeft: SPACING.xs,
   },
   aiSearchActionButton: {
     alignItems: "center",
@@ -2607,11 +2630,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     alignSelf: "center",
     backgroundColor: "rgba(34,34,34,0.88)",
-    borderRadius: 18,
+    borderRadius: RADIUS.banner,
     bottom: 26,
     flexDirection: "row",
     paddingHorizontal: 13,
-    paddingVertical: 9,
+    paddingVertical: SPACING.sm,
     position: "absolute",
   },
   aiLocationDot: {
@@ -2620,7 +2643,7 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     borderWidth: 2,
     height: 10,
-    marginRight: 7,
+    marginRight: SPACING.sm,
     width: 10,
   },
   aiLocationPillText: {
@@ -2638,7 +2661,7 @@ const styles = StyleSheet.create({
   },
   aiSheetHandleArea: {
     alignItems: "center",
-    paddingVertical: 12,
+    paddingVertical: SPACING.sm,
   },
   aiSheetHandle: {
     backgroundColor: "#D9D9D9",
@@ -2653,12 +2676,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     flexDirection: "row",
     justifyContent: "space-between",
-    marginTop: 15,
-    paddingHorizontal: 20,
+    marginTop: SPACING.md,
+    paddingHorizontal: SPACING.screenH,
   },
   aiSheetTitleArea: {
     flex: 1,
-    paddingRight: 12,
+    paddingRight: SPACING.sm,
   },
   aiSheetTitle: {
     color: COLORS.textPrimary,
@@ -2668,16 +2691,16 @@ const styles = StyleSheet.create({
   aiSheetDescription: {
     color: COLORS.textSecondary,
     fontSize: 12,
-    marginTop: 5,
+    marginTop: SPACING.xs,
   },
   aiRouteSummary: {
     alignItems: "center",
     backgroundColor: "#F1EEFF",
-    borderRadius: 15,
+    borderRadius: RADIUS.banner,
     flexDirection: "row",
-    gap: 5,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
+    gap: SPACING.xs,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: SPACING.sm,
   },
   aiRouteSummaryText: {
     color: "#6047E6",
@@ -2686,20 +2709,20 @@ const styles = StyleSheet.create({
   },
   aiFilterScroll: {
     flexGrow: 0,
-    marginTop: 16,
+    marginTop: SPACING.md,
   },
   aiFilterRow: {
-    gap: 8,
-    paddingHorizontal: 20,
-    paddingRight: 30,
+    gap: SPACING.sm,
+    paddingHorizontal: SPACING.screenH,
+    paddingRight: SPACING.xl,
   },
   aiFilterChip: {
     backgroundColor: "#FFFFFF",
     borderColor: "#E3E5E8",
-    borderRadius: 18,
+    borderRadius: RADIUS.banner,
     borderWidth: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 9,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
   },
   aiFilterChipSelected: {
     backgroundColor: "#F1EEFF",
@@ -2717,23 +2740,23 @@ const styles = StyleSheet.create({
     // 기본 시트 위치에서도 확정 버튼이 화면 안에 바로 보이도록 목록 높이를 제한합니다.
     flexGrow: 0,
     flexShrink: 1,
-    marginTop: 14,
+    marginTop: SPACING.md,
     maxHeight: 330,
   },
   aiPlaceListContent: {
-    gap: 10,
-    paddingBottom: 12,
-    paddingHorizontal: 20,
+    gap: SPACING.sm,
+    paddingBottom: SPACING.sm,
+    paddingHorizontal: SPACING.screenH,
   },
   aiPlaceCard: {
     alignItems: "center",
     backgroundColor: "#FFFFFF",
     borderColor: "#E9EAED",
-    borderRadius: 18,
+    borderRadius: RADIUS.banner,
     borderWidth: 1,
     flexDirection: "row",
     minHeight: 91,
-    paddingHorizontal: 12,
+    paddingHorizontal: SPACING.sm,
     paddingVertical: 11,
   },
   aiPlaceCardSelected: {
@@ -2749,7 +2772,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     height: 24,
     justifyContent: "center",
-    marginRight: 9,
+    marginRight: SPACING.sm,
     width: 24,
   },
   aiPlaceOrderSelected: {
@@ -2765,7 +2788,7 @@ const styles = StyleSheet.create({
   },
   aiPlaceTypeIcon: {
     alignItems: "center",
-    borderRadius: 16,
+    borderRadius: RADIUS.banner,
     height: 48,
     justifyContent: "center",
     marginRight: 11,
@@ -2786,10 +2809,10 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
   aiPlaceKindTag: {
-    borderRadius: 9,
-    marginLeft: 6,
-    paddingHorizontal: 6,
-    paddingVertical: 3,
+    borderRadius: RADIUS.badge,
+    marginLeft: SPACING.xs,
+    paddingHorizontal: SPACING.xs,
+    paddingVertical: SPACING.xs,
   },
   aiPlaceKindText: {
     fontSize: 9,
@@ -2798,27 +2821,27 @@ const styles = StyleSheet.create({
   aiPlaceSubtitle: {
     color: COLORS.textSecondary,
     fontSize: 11,
-    marginTop: 4,
+    marginTop: SPACING.xs,
   },
   aiPlaceMetaRow: {
     alignItems: "center",
     flexDirection: "row",
-    marginTop: 6,
+    marginTop: SPACING.xs,
   },
   aiPlaceMetaText: {
     color: "#747881",
     fontSize: 11,
-    marginLeft: 4,
+    marginLeft: SPACING.xs,
   },
   aiSelectButton: {
     alignItems: "center",
     backgroundColor: "#F4F4F5",
-    borderRadius: 15,
+    borderRadius: RADIUS.banner,
     justifyContent: "center",
-    marginLeft: 8,
+    marginLeft: SPACING.sm,
     minWidth: 48,
-    paddingHorizontal: 9,
-    paddingVertical: 8,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: SPACING.sm,
   },
   aiSelectButtonSelected: {
     backgroundColor: "#7B61FF",
@@ -2835,7 +2858,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     flex: 1,
     justifyContent: "center",
-    paddingHorizontal: 32,
+    paddingHorizontal: SPACING.xl,
   },
   aiLoadingPulse: {
     backgroundColor: "#EDE9FF",
@@ -2843,7 +2866,7 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     borderWidth: 7,
     height: 48,
-    marginBottom: 15,
+    marginBottom: SPACING.md,
     width: 48,
   },
   aiLoadingTitle: {
@@ -2855,47 +2878,47 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     fontSize: 12,
     lineHeight: 19,
-    marginTop: 7,
+    marginTop: SPACING.sm,
     textAlign: "center",
   },
   aiEmptyState: {
     alignItems: "center",
     flex: 1,
     justifyContent: "center",
-    paddingHorizontal: 32,
+    paddingHorizontal: SPACING.xl,
   },
   aiEmptyTitle: {
     color: COLORS.textPrimary,
     fontSize: 16,
     fontWeight: "800",
-    marginTop: 10,
+    marginTop: SPACING.sm,
   },
   aiEmptyText: {
     color: COLORS.textSecondary,
     fontSize: 12,
-    marginTop: 6,
+    marginTop: SPACING.xs,
   },
   aiPlannerFooter: {
     backgroundColor: "#FFFFFF",
     borderTopColor: "#EEF0F2",
     borderTopWidth: 1,
     flexShrink: 0,
-    paddingBottom: 18,
-    paddingHorizontal: 20,
-    paddingTop: 12,
+    paddingBottom: SPACING.md,
+    paddingHorizontal: SPACING.screenH,
+    paddingTop: SPACING.sm,
   },
   aiSelectionCaption: {
     color: COLORS.textSecondary,
     fontSize: 11,
-    marginBottom: 9,
+    marginBottom: SPACING.sm,
     textAlign: "center",
   },
   aiApplyButton: {
     alignItems: "center",
     backgroundColor: "#7B61FF",
-    borderRadius: 15,
+    borderRadius: RADIUS.banner,
     flexDirection: "row",
-    gap: 7,
+    gap: SPACING.sm,
     height: 50,
     justifyContent: "center",
   },
@@ -2917,15 +2940,15 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(20, 20, 24, 0.36)",
     flex: 1,
     justifyContent: "flex-end",
-    padding: 16,
+    padding: SPACING.md,
   },
   aiConfirmSheet: {
     backgroundColor: "#FFFFFF",
     borderRadius: 28,
     maxWidth: 520,
-    paddingBottom: 20,
-    paddingHorizontal: 20,
-    paddingTop: 10,
+    paddingBottom: SPACING.screenH,
+    paddingHorizontal: SPACING.screenH,
+    paddingTop: SPACING.sm,
     width: "100%",
   },
   aiConfirmHandle: {
@@ -2938,32 +2961,32 @@ const styles = StyleSheet.create({
   aiConfirmIcon: {
     alignItems: "center",
     backgroundColor: "#F1EEFF",
-    borderRadius: 22,
+    borderRadius: RADIUS.sheet,
     height: 44,
     justifyContent: "center",
-    marginTop: 16,
+    marginTop: SPACING.md,
     width: 44,
   },
   aiConfirmTitle: {
     color: COLORS.textPrimary,
     fontSize: 22,
     fontWeight: "800",
-    marginTop: 12,
+    marginTop: SPACING.sm,
   },
   aiConfirmDescription: {
     color: COLORS.textSecondary,
     fontSize: 13,
     lineHeight: 20,
-    marginTop: 6,
+    marginTop: SPACING.xs,
   },
   aiConfirmList: {
     backgroundColor: "#FAFAFC",
     borderColor: "#ECECF1",
-    borderRadius: 16,
+    borderRadius: RADIUS.banner,
     borderWidth: 1,
-    marginTop: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 4,
+    marginTop: SPACING.md,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: SPACING.xs,
   },
   aiConfirmPlaceRow: {
     alignItems: "center",
@@ -2978,7 +3001,7 @@ const styles = StyleSheet.create({
     borderRadius: 11,
     height: 22,
     justifyContent: "center",
-    marginRight: 10,
+    marginRight: SPACING.sm,
     width: 22,
   },
   aiConfirmOrderText: {
@@ -2998,17 +3021,17 @@ const styles = StyleSheet.create({
   aiConfirmPlaceSubtitle: {
     color: COLORS.textSecondary,
     fontSize: 11,
-    marginTop: 3,
+    marginTop: SPACING.xs,
   },
   aiConfirmActionRow: {
     flexDirection: "row",
-    gap: 10,
-    marginTop: 18,
+    gap: SPACING.sm,
+    marginTop: SPACING.md,
   },
   aiConfirmCancelButton: {
     alignItems: "center",
     backgroundColor: "#F3F3F5",
-    borderRadius: 14,
+    borderRadius: RADIUS.card,
     flex: 1,
     height: 50,
     justifyContent: "center",
@@ -3021,10 +3044,10 @@ const styles = StyleSheet.create({
   aiConfirmSaveButton: {
     alignItems: "center",
     backgroundColor: "#7B61FF",
-    borderRadius: 14,
+    borderRadius: RADIUS.card,
     flex: 1.35,
     flexDirection: "row",
-    gap: 7, 
+    gap: SPACING.sm, 
     height: 50,
     justifyContent: "center",
   },

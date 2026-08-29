@@ -91,33 +91,36 @@ export default function ProfileEditScreen() {
       <ScreenHeader title="나의 정보 관리" />
 
       <View style={styles.body}>
-        <View style={styles.profileCard}>
-          <Pressable style={styles.avatar} onPress={pickAvatar}>
-            {avatarUri ? (
-              <Image source={{ uri: avatarUri }} style={styles.avatarImage} />
-            ) : (
-              <Feather name="user" size={28} color={colors.accent} />
-            )}
-            <View style={styles.editDot}>
-              <Feather name="edit-2" size={12} color="#fff" />
-            </View>
-          </Pressable>
-          <Text style={styles.name}>{nickname}</Text>
-          <Text style={styles.joinDate}>가입일 2026.03.02</Text>
+        <View>
+          <View style={styles.profileCard}>
+            <Pressable style={styles.avatar} onPress={pickAvatar}>
+              {avatarUri ? (
+                <Image source={{ uri: avatarUri }} style={styles.avatarImage} />
+              ) : (
+                <Feather name="user" size={28} color={colors.accent} />
+              )}
+              <View style={styles.editDot}>
+                <Feather name="edit-2" size={12} color="#fff" />
+              </View>
+            </Pressable>
+            <Text style={styles.name}>{nickname}</Text>
+            <Text style={styles.joinDate}>가입일 2026.03.02</Text>
+          </View>
+
+          <Field label="닉네임" value={nickname} onChangeText={setNickname} />
+          <Field label="한줄 소개" value={bio} onChangeText={setBio} />
+
+          <PrimaryButton label="저장" onPress={handleSave} style={styles.saveButton} />
         </View>
 
-        <Field label="닉네임" value={nickname} onChangeText={setNickname} />
-        <Field label="한줄 소개" value={bio} onChangeText={setBio} />
-
-        <PrimaryButton label="저장" onPress={handleSave} style={styles.saveButton} />
-
-        <Pressable style={styles.outlineBtn} onPress={handleLogout}>
-          <Text style={styles.outlineBtnText}>로그아웃</Text>
-        </Pressable>
-
-        <Pressable onPress={handleWithdraw}>
-          <Text style={styles.footNote}>회원 탈퇴를 원하시나요?</Text>
-        </Pressable>
+        <View style={styles.bottomButtons}>
+          <Pressable style={styles.logoutButton} onPress={handleLogout}>
+            <Text style={styles.logoutButtonText}>로그아웃</Text>
+          </Pressable>
+          <Pressable style={styles.withdrawButton} onPress={handleWithdraw}>
+            <Text style={styles.withdrawButtonText}>회원 탈퇴</Text>
+          </Pressable>
+        </View>
       </View>
     </View>
   );
@@ -145,7 +148,12 @@ function Field({
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
-  body: { flex: 1, paddingHorizontal: 16 },
+  body: {
+    flex: 1,
+    paddingHorizontal: 16,
+    paddingBottom: 24,
+    justifyContent: 'space-between',
+  },
   profileCard: {
     backgroundColor: colors.card,
     borderRadius: 18,
@@ -184,9 +192,9 @@ const styles = StyleSheet.create({
   name: { fontSize: 15, fontWeight: '700', color: colors.text },
   joinDate: { fontSize: 12, color: colors.textSub, marginTop: 2 },
   fieldWrap: { marginBottom: 14 },
-  fieldLabel: { fontSize: 12, color: colors.textSub, fontWeight: '600', marginBottom: 6 },
+  fieldLabel: { fontSize: 12, color: colors.text, fontWeight: '600', marginBottom: 6 },
   fieldBox: {
-    backgroundColor: colors.card,
+    backgroundColor: colors.surface,
     borderRadius: 12,
     paddingHorizontal: 14,
     paddingVertical: 4,
@@ -196,14 +204,21 @@ const styles = StyleSheet.create({
   },
   fieldInput: { flex: 1, fontSize: 14, color: colors.text, paddingVertical: 10 },
   saveButton: { marginTop: 6, marginBottom: 12 },
-  outlineBtn: {
-    padding: 13,
+  bottomButtons: { flexDirection: 'row', gap: 10 },
+  logoutButton: {
+    flex: 1,
+    paddingVertical: 14,
     borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.card,
+    backgroundColor: colors.surface,
     alignItems: 'center',
   },
-  outlineBtnText: { fontSize: 13, fontWeight: '700', color: colors.textSub },
-  footNote: { fontSize: 11, color: colors.textTertiary, textAlign: 'center', marginTop: 18 },
+  logoutButtonText: { fontSize: 15, fontWeight: '700', color: colors.text },
+  withdrawButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: colors.danger,
+    alignItems: 'center',
+  },
+  withdrawButtonText: { fontSize: 15, fontWeight: '700', color: '#FFFFFF' },
 });
