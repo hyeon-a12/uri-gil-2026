@@ -26,6 +26,10 @@ export function AppText({ style, ...props }: TextProps) {
 
   return (
     <RNText
+      // 기기의 "글꼴 크기" 설정(제조사별 기본값도 서로 다름)을 따라가면 같은 화면이
+      // 폰마다 다르게 보이므로, 디자인한 크기 그대로 고정합니다. 필요한 곳에서만
+      // props로 allowFontScaling을 다시 켤 수 있도록 기본값 자리에 둡니다.
+      allowFontScaling={false}
       {...props}
       style={[{ fontFamily }, style, { fontWeight: 'normal' }]}
       // fontWeight는 이미 fontFamily 선택에 반영했으므로, 폰트가 두 번 굵어지는(가짜 볼드) 걸 막기 위해 마지막에 초기화합니다.
