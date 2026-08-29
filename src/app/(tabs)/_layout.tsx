@@ -1,7 +1,8 @@
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { router, Tabs } from 'expo-router';
 import { Image } from 'expo-image';
-import { Alert, Pressable, StyleSheet, View } from 'react-native';
+import { Alert, Platform, Pressable, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppText as Text } from '@/components/AppText';
 import { useTripStore } from '@/store/useTripStore';
 import { COLORS as SHARED_COLORS } from '@/constants/color';
@@ -97,6 +98,14 @@ function CameraTabButton() {
 }
 
 export default function TabLayout() {
+  // 안드로이드 엣지투엣지 환경에서는 이 탭바가 화면 물리적 맨 아래까지 깔리고
+  // 그 위를 기기 시스템 내비게이션 바(제스처 바/3버튼 바)가 덮어버립니다.
+  // 기기별 내비게이션 바 높이(insets.bottom)만큼 탭바 자체를 더 키워서 피합니다.
+  // iOS는 홈 인디케이터 영역이 시스템 바처럼 화면을 덮어버리는 게 아니라서
+  // 기존 고정 높이(105)로도 이미 안 가려졌음 — 안드로이드에서만 더해줍니다.
+  const insets = useSafeAreaInsets();
+  const extraBottom = Platform.OS === 'android' ? insets.bottom : 0;
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <Tabs
@@ -104,7 +113,13 @@ export default function TabLayout() {
         screenOptions={{
           headerShown: false,
           tabBarShowLabel: false,
-          tabBarStyle: styles.tabBar,
+          tabBarStyle: [
+            styles.tabBar,
+            {
+              height: 105 + extraBottom,
+              paddingBottom: 10 + extraBottom,
+            },
+          ],
           tabBarHideOnKeyboard: true,
         }}>
         <Tabs.Screen
@@ -163,7 +178,7 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
 
-    height: 95,
+    height: 105,
     paddingTop: 8,
     paddingBottom: 10,
 

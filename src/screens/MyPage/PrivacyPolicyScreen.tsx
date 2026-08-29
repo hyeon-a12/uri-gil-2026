@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { ScrollView, Linking, StyleSheet, View } from 'react-native';
+import { router } from 'expo-router';
 import { AppText as Text } from '@/components/AppText';
 import { colors } from '@/constants/menu-theme';
 import { Card, ListRow, SectionLabel, Toggle, ScreenHeader } from '@/components/common';
@@ -49,7 +50,7 @@ export default function PrivacyPolicyScreen() {
         <Card style={styles.cardLarge}>
           <ListRow title="개인정보 처리방침" onPress={() => openUrl(URLS.privacyPolicy)} />
           <ListRow title="서비스 이용약관" onPress={() => openUrl(URLS.serviceTerms)} />
-          <ListRow isLast title="오픈소스 라이선스" onPress={() => openUrl(URLS.openSourceLicense)} />
+          <ListRow isLast title="오픈소스 라이선스" onPress={() => router.push('/open-source-license')} />
         </Card>
 
         <Text style={styles.footNote}>우리길 v3.5.1{'\n'}ⓒ 2026 우리길팀</Text>

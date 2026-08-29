@@ -6,6 +6,8 @@ import { AppText as Text } from '@/components/AppText';
 
 import { useTripStore } from '@/store/useTripStore';
 import { TripSwitchSheet } from './TripSwitchSheet';
+import NewTripModal from '@/components/NewTripModal';
+import { useCreateTripModal } from '@/hooks/useCreateTripModal';
 import { COLORS as SHARED_COLORS } from '@/constants/color';
 
 const COLORS = {
@@ -26,6 +28,9 @@ export function TripSelector() {
   const insets = useSafeAreaInsets();
   const currentTrip = useTripStore((state) => state.currentTrip);
   const [sheetVisible, setSheetVisible] = useState(false);
+
+  const { visible: createModalVisible, openCreateModal, closeCreateModal, handleCreatedTrip } =
+    useCreateTripModal();
 
   return (
     <>
@@ -52,9 +57,23 @@ export function TripSelector() {
             <Ionicons name="chevron-down" size={16} color={COLORS.textSecondary} />
           </View>
         </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.addButton}
+          activeOpacity={0.85}
+          onPress={openCreateModal}
+        >
+          <Ionicons name="add" size={22} color={COLORS.accent} />
+        </TouchableOpacity>
       </View>
 
       <TripSwitchSheet visible={sheetVisible} onClose={() => setSheetVisible(false)} />
+
+      <NewTripModal
+        visible={createModalVisible}
+        onClose={closeCreateModal}
+        onCreated={handleCreatedTrip}
+      />
     </>
   );
 }
@@ -65,8 +84,12 @@ const styles = StyleSheet.create({
     left: 20,
     right: 20,
     zIndex: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
   },
   bar: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
@@ -74,6 +97,19 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     paddingHorizontal: 14,
     height: 60,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    elevation: 4,
+  },
+  addButton: {
+    width: 60,
+    height: 60,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.white,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.08,

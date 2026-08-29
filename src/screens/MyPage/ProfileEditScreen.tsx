@@ -202,7 +202,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  fieldInput: { flex: 1, fontSize: 14, color: colors.text, paddingVertical: 10 },
+  fieldInput: { flex: 1, fontSize: 14, fontFamily: 'Pretendard-Regular', color: colors.text, paddingVertical: 10 },
   saveButton: { marginTop: 6, marginBottom: 12 },
   bottomButtons: { flexDirection: 'row', gap: 10 },
   logoutButton: {

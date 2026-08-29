@@ -1929,7 +1929,7 @@ const styles = StyleSheet.create({
     height: "100%",
     paddingVertical: 0,
     fontSize: 16,
-    fontWeight: "500",
+    fontFamily: "Pretendard-Medium",
     color: COLORS.textPrimary,
   },
   searchClearButton: {

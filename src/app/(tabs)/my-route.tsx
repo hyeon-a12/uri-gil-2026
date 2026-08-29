@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
+import { useFocusEffect, useLocalSearchParams } from "expo-router";
 import { parseDateRange, type FolderItem } from "@/services/folderService";
 import { getRecordingsByFolder } from "@/services/recordingService";
 import {
@@ -7,7 +7,7 @@ import {
   type TripScheduleStop,
 } from "@/services/trip-schedule-service";
 import { getStopOrder, saveStopOrder, type StopOrderMap } from "@/services/stop-order-service";
-import { buildPlanData, getDayLabel, type PlanStop } from "@/services/tripPlanService";
+import { buildPlanData, type PlanStop } from "@/services/tripPlanService";
 import type { RecordingData } from "@/types/recording";
 import { useTripStore } from "@/store/useTripStore";
 import {
@@ -17,12 +17,11 @@ import {
   ScrollView,
   Share,
   StyleSheet,
-  TextInput,
   View,
   useWindowDimensions,
 } from 'react-native';
 import { AppText as Text } from '@/components/AppText';
-import { HapticPressable } from '@/components/common';
+import { RoutePlanView } from '@/components/RoutePlanView';
 import KakaoMapView, { type KakaoMapPin } from '@/components/KakaoMapView';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -269,436 +268,6 @@ function InternalNavigation({
   );
 }
 
-interface MemoEditorModalProps {
-  visible: boolean;
-  stopName: string | null;
-  draft: string;
-  onChangeDraft: (text: string) => void;
-  onSave: () => void;
-  onClose: () => void;
-}
-
-// 장소에 남기는 메모(좋았던 점, 먹은 음식 등)를 쓰고 수정하는 모달
-function MemoEditorModal({
-  visible,
-  stopName,
-  draft,
-  onChangeDraft,
-  onSave,
-  onClose,
-}: MemoEditorModalProps) {
-  return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="fade"
-      onRequestClose={onClose}
-    >
-      <View style={styles.memoModalBackdrop}>
-        <View style={styles.memoModalCard}>
-          <Text allowFontScaling={false} style={styles.memoModalTitle}>
-            {stopName ?? ""} 메모
-          </Text>
-
-          <Text allowFontScaling={false} style={styles.memoModalHint}>
-            좋았던 점, 먹은 음식처럼 남기고 싶은 걸 적어보세요.
-          </Text>
-
-          <TextInput
-            value={draft}
-            onChangeText={onChangeDraft}
-            placeholder="예: 노을이 예뻤고, 옆 포차에서 먹은 딱새우회가 최고였다."
-            placeholderTextColor={COLORS.textTertiary}
-            multiline
-            autoFocus
-            style={styles.memoInput}
-          />
-
-          <View style={styles.memoModalButtonRow}>
-            <Pressable
-              onPress={onClose}
-              style={({ pressed }) => [
-                styles.memoModalButton,
-                styles.memoModalButtonGhost,
-                pressed && styles.cardPressed,
-              ]}
-            >
-              <Text
-                allowFontScaling={false}
-                style={styles.memoModalButtonGhostText}
-              >
-                취소
-              </Text>
-            </Pressable>
-
-            <Pressable
-              onPress={onSave}
-              style={({ pressed }) => [
-                styles.memoModalButton,
-                styles.memoModalButtonPrimary,
-                pressed && styles.cardPressed,
-              ]}
-            >
-              <Text
-                allowFontScaling={false}
-                style={styles.memoModalButtonPrimaryText}
-              >
-                저장
-              </Text>
-            </Pressable>
-          </View>
-        </View>
-      </View>
-    </Modal>
-  );
-}
-
-type RoutePlanViewProps = {
-  hasTrip: boolean;
-  tripId?: string;
-  stops: PlanStop[];
-  dayNumbers: number[];
-  tripStartDate: Date | null;
-  onReorderStops: (day: number, orderedIds: string[]) => void;
-};
-
-// '루트 정보' 탭 대신 들어가는 새 화면: day별 일정 타임라인 + 장소별 메모
-//
-// stops/dayNumbers는 활성 여행의 실제 클립(recordingService)에서
-// 파생된 데이터입니다(부모인 MyRouteScreen이 buildPlanData()로 만들어 내려줌).
-// 메모는 아직 별도 저장소가 없어서 이전과 동일하게 화면 안에서만 유지됩니다.
-function RoutePlanView({
-  hasTrip,
-  tripId,
-  stops,
-  dayNumbers,
-  tripStartDate,
-  onReorderStops,
-}: RoutePlanViewProps) {
-  const [selectedDay, setSelectedDay] = useState(dayNumbers[0] ?? 1);
-
-  const [stopMemos, setStopMemos] = useState<Record<string, string>>({});
-
-  const [memoModalVisible, setMemoModalVisible] = useState(false);
-  const [activeStopId, setActiveStopId] = useState<string | null>(null);
-  const [memoDraft, setMemoDraft] = useState("");
-
-  // 여행을 전환해서 날짜 목록 자체가 바뀌면, 이전 여행의 day 선택이 남아있지
-  // 않도록 첫 번째 날로 되돌립니다.
-  useEffect(() => {
-    if (!dayNumbers.includes(selectedDay)) {
-      setSelectedDay(dayNumbers[0] ?? 1);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dayNumbers]);
-
-  // 드래그로 순서를 바꾸는 동안 즉시 화면에 반영되도록 로컬 상태로 들고 있고,
-  // stops/selectedDay가 바뀌면(다른 날짜로 전환, 새로고침 등) 최신 데이터로 다시 채웁니다.
-  const [dayStops, setDayStops] = useState<PlanStop[]>([]);
-
-  useEffect(() => {
-    setDayStops(
-      stops
-        .filter((stop) => stop.day === selectedDay)
-        .sort((a, b) => a.order - b.order),
-    );
-  }, [stops, selectedDay]);
-
-  // 스톱을 한 칸 위/아래로 옮기고, 바뀐 순서를 바로 저장합니다.
-  const moveStop = useCallback(
-    (index: number, direction: -1 | 1) => {
-      const targetIndex = index + direction;
-      if (targetIndex < 0 || targetIndex >= dayStops.length) return;
-
-      const next = [...dayStops];
-      const [moved] = next.splice(index, 1);
-      next.splice(targetIndex, 0, moved);
-
-      setDayStops(next);
-      onReorderStops(
-        selectedDay,
-        next.map((stop) => stop.id),
-      );
-    },
-    [dayStops, selectedDay, onReorderStops],
-  );
-
-  // 카드를 길게 누르면 뜨는 "위로 이동 / 아래로 이동" 메뉴.
-  const openReorderMenu = useCallback(
-    (stop: PlanStop, index: number) => {
-      const options: {
-        text: string;
-        onPress?: () => void;
-        style?: "cancel" | "destructive";
-      }[] = [];
-
-      if (index > 0) {
-        options.push({ text: "위로 이동", onPress: () => moveStop(index, -1) });
-      }
-      if (index < dayStops.length - 1) {
-        options.push({ text: "아래로 이동", onPress: () => moveStop(index, 1) });
-      }
-      options.push({ text: "취소", style: "cancel" });
-
-      Alert.alert(stop.name, "순서를 바꿀 수 있어요.", options);
-    },
-    [dayStops.length, moveStop],
-  );
-
-  const activeStop = useMemo(
-    () => stops.find((stop) => stop.id === activeStopId) ?? null,
-    [stops, activeStopId],
-  );
-
-  const openMemoEditor = (stop: PlanStop) => {
-    setActiveStopId(stop.id);
-    setMemoDraft(stopMemos[stop.id] ?? "");
-    setMemoModalVisible(true);
-  };
-
-  const closeMemoEditor = () => {
-    setMemoModalVisible(false);
-  };
-
-  const saveMemo = () => {
-    if (activeStopId) {
-      const trimmed = memoDraft.trim();
-
-      setStopMemos((prev) => {
-        const next = { ...prev };
-
-        if (trimmed.length > 0) {
-          next[activeStopId] = trimmed;
-        } else {
-          delete next[activeStopId];
-        }
-
-        return next;
-      });
-    }
-
-    setMemoModalVisible(false);
-  };
-
-  if (!hasTrip) {
-    return (
-      <View style={styles.planEmptyState}>
-        <Ionicons
-          name="airplane-outline"
-          size={32}
-          color={COLORS.textTertiary}
-        />
-        <Text allowFontScaling={false} style={styles.planEmptyTitle}>
-          선택된 여행이 없어요
-        </Text>
-        <Text allowFontScaling={false} style={styles.planEmptyDescription}>
-          홈 화면 상단에서 여행을 선택하거나 새로 만들어주세요.
-        </Text>
-      </View>
-    );
-  }
-
-  if (stops.length === 0) {
-    return (
-      <View style={styles.planEmptyState}>
-        <Ionicons
-          name="videocam-outline"
-          size={32}
-          color={COLORS.textTertiary}
-        />
-        <Text allowFontScaling={false} style={styles.planEmptyTitle}>
-          아직 촬영한 클립이 없어요
-        </Text>
-        <Text allowFontScaling={false} style={styles.planEmptyDescription}>
-          카메라로 이 여행의 첫 순간을 기록해보세요.
-        </Text>
-      </View>
-    );
-  }
-
-  return (
-    <View style={styles.planScreen}>
-      <ScrollView
-        style={styles.alternativeView}
-        contentContainerStyle={styles.planContent}
-        showsVerticalScrollIndicator={false}
-      >
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.dayChipRow}
-        >
-          {dayNumbers.map((day) => {
-            const selected = day === selectedDay;
-
-            return (
-              <HapticPressable
-                key={day}
-                onPress={() => setSelectedDay(day)}
-                style={[styles.dayChip, selected && styles.dayChipSelected]}
-              >
-                <Text
-                  allowFontScaling={false}
-                  style={[
-                    styles.dayChipText,
-                    selected && styles.dayChipTextSelected,
-                  ]}
-                >
-                  {getDayLabel(day, tripStartDate)}
-                </Text>
-              </HapticPressable>
-            );
-          })}
-        </ScrollView>
-
-        <View style={styles.planTimeline}>
-          {dayStops.map((stop, index) => {
-            const memo = stopMemos[stop.id];
-
-            return (
-              <View key={stop.id} style={styles.planTimelineRow}>
-                <View style={styles.planTimelineIndicator}>
-                  <View style={styles.planTimelineDot}>
-                    <Text
-                      allowFontScaling={false}
-                      style={styles.planTimelineDotText}
-                    >
-                      {stop.order}
-                    </Text>
-                  </View>
-
-                  {index < dayStops.length - 1 ? (
-                    <View style={styles.planTimelineLineArea}>
-                      <View style={styles.planTimelineLine} />
-                    </View>
-                  ) : null}
-                </View>
-
-                <Pressable
-                  style={styles.planStopCard}
-                  onLongPress={() => openReorderMenu(stop, index)}
-                >
-                  <View style={styles.planStopCardTop}>
-                    <View style={styles.planStopStickerCircle}>
-                      <Ionicons
-                        name="location"
-                        size={18}
-                        color={COLORS.primary}
-                      />
-                    </View>
-
-                    <View style={styles.planStopTextArea}>
-                      <Text
-                        numberOfLines={1}
-                        allowFontScaling={false}
-                        style={styles.planStopName}
-                      >
-                        {stop.name}
-                      </Text>
-
-                      <Text
-                        allowFontScaling={false}
-                        style={styles.planStopMeta}
-                      >
-                        {stop.source === "ai-recommendation"
-                          ? "AI 추천으로 추가됨"
-                          : stop.source === "manual"
-                          ? "직접 추가한 장소"
-                          : `${stop.time} · 클립 ${stop.clips.length}개`}
-                      </Text>
-                    </View>
-
-                    <Pressable
-                      hitSlop={8}
-                      onPress={() => openReorderMenu(stop, index)}
-                      style={styles.planStopIconButton}
-                    >
-                      <Ionicons
-                        name="ellipsis-vertical"
-                        size={18}
-                        color={COLORS.textSecondary}
-                      />
-                    </Pressable>
-                  </View>
-
-                  {memo ? (
-                    <Pressable
-                      onPress={() => openMemoEditor(stop)}
-                      style={({ pressed }) => [
-                        styles.planStopMemoBox,
-                        pressed && styles.cardPressed,
-                      ]}
-                    >
-                      <Text
-                        numberOfLines={3}
-                        allowFontScaling={false}
-                        style={styles.planStopMemoText}
-                      >
-                        {memo}
-                      </Text>
-                    </Pressable>
-                  ) : (
-                    <Pressable
-                      onPress={() => openMemoEditor(stop)}
-                      style={({ pressed }) => [
-                        styles.planStopMemoEmpty,
-                        pressed && styles.cardPressed,
-                      ]}
-                    >
-                      <Ionicons
-                        name="add"
-                        size={13}
-                        color={COLORS.textTertiary}
-                      />
-
-                      <Text
-                        allowFontScaling={false}
-                        style={styles.planStopMemoEmptyText}
-                      >
-                        메모 남기기
-                      </Text>
-                    </Pressable>
-                  )}
-                </Pressable>
-              </View>
-            );
-          })}
-
-          <View style={styles.planAddRow}>
-            <Pressable
-              onPress={() => {
-                if (!tripId) return;
-                router.push({
-                  pathname: "/add-place",
-                  params: { tripId, day: String(selectedDay) },
-                });
-              }}
-              style={({ pressed }) => [
-                styles.planAddButton,
-                pressed && styles.cardPressed,
-              ]}
-            >
-              <Ionicons name="add" size={16} color={COLORS.textSecondary} />
-
-              <Text allowFontScaling={false} style={styles.planAddButtonText}>
-                장소 추가
-              </Text>
-            </Pressable>
-          </View>
-        </View>
-      </ScrollView>
-
-      <MemoEditorModal
-        visible={memoModalVisible}
-        stopName={activeStop?.name ?? null}
-        draft={memoDraft}
-        onChangeDraft={setMemoDraft}
-        onSave={saveMemo}
-        onClose={closeMemoEditor}
-      />
-    </View>
-  );
-}
 
 function getTripDisplayName(trip: FolderItem | null): string {
   if (!trip) {
@@ -1022,7 +591,10 @@ export default function MyRouteScreen() {
     const range = parseDateRange(currentTrip.dateRange);
     if (!range) return null;
     const MS_PER_DAY = 24 * 60 * 60 * 1000;
-    return Math.round(
+    // range.end는 종료일 23:59:59로 저장돼 있어서(getFolderStatus가 종료일
+    // 당일까지 '여행중'으로 보기 위함), 그대로 나눈 뒤 Math.round를 쓰면
+    // 1박이 항상 1일 더 많게 반올림됩니다. Math.floor로 그 끝자락을 버립니다.
+    return Math.floor(
       (range.end.getTime() - range.start.getTime()) / MS_PER_DAY,
     );
   }, [currentTrip]);
@@ -1063,7 +635,7 @@ export default function MyRouteScreen() {
     }
   }, [tripName, tripSummary]);
 
-  const mapHeight = Math.min(Math.max(width * 1.05, 430), 570);
+  const mapHeight = Math.min(Math.max(width * 0.95, 400), 540);
 
   // 실제 GPS 위치 — "현재 위치" 버튼을 눌렀을 때도 다시 불러와 지도를 재중심합니다.
   const [deviceLocation, setDeviceLocation] = useState<{
@@ -1261,10 +833,10 @@ const styles = StyleSheet.create({
   },
 
   header: {
-    minHeight: 92,
+    minHeight: 84,
 
     paddingHorizontal: SPACING.md,
-    paddingBottom: SPACING.xs,
+    paddingBottom: 0,
 
     flexDirection: "row",
     alignItems: "flex-end",
@@ -1339,6 +911,7 @@ const styles = StyleSheet.create({
 
   mapScreen: {
     flex: 1,
+    backgroundColor: COLORS.background,
   },
 
   mapFrame: {
@@ -1352,22 +925,12 @@ const styles = StyleSheet.create({
 
     borderWidth: 1,
     borderColor: "#D6E8E0",
-
-    shadowColor: COLORS.shadow,
-    shadowOffset: {
-      width: 0,
-      height: 5,
-    },
-    shadowOpacity: 0.08,
-    shadowRadius: 13,
-
-    elevation: 3,
   },
 
   mapControls: {
     position: "absolute",
     right: 14,
-    bottom: 14,
+    bottom: 54,
     zIndex: 20,
 
     gap: SPACING.sm,
@@ -1383,16 +946,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
 
     backgroundColor: "rgba(255,255,255,0.93)",
-
-    shadowColor: COLORS.shadow,
-    shadowOffset: {
-      width: 0,
-      height: 3,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 6,
-
-    elevation: 4,
   },
 
   mapControlButtonPressed: {
@@ -1431,17 +984,7 @@ const styles = StyleSheet.create({
 
     borderRadius: RADIUS.sheet,
 
-    backgroundColor: "rgba(255,255,255,0.96)",
-
-    shadowColor: COLORS.shadow,
-    shadowOffset: {
-      width: 0,
-      height: 7,
-    },
-    shadowOpacity: 0.14,
-    shadowRadius: 16,
-
-    elevation: 10,
+    backgroundColor: "#FFFFFF",
   },
 
   stopCardHeader: {
@@ -1608,7 +1151,7 @@ const styles = StyleSheet.create({
   },
 
   internalNavigation: {
-    height: 58,
+    height: 60,
 
     paddingHorizontal: SPACING.xs,
     paddingVertical: SPACING.xs,
@@ -2004,7 +1547,7 @@ const styles = StyleSheet.create({
 
     fontSize: 14,
     lineHeight: 19,
-    fontWeight: "500",
+    fontFamily: "Pretendard-Medium",
 
     textAlignVertical: "top",
 

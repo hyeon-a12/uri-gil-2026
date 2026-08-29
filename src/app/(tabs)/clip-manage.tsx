@@ -61,12 +61,14 @@ function StatusChip({
   count,
   selected,
   emphasize,
+  countColor,
   onPress,
 }: {
   label: string;
   count?: number;
   selected: boolean;
   emphasize?: boolean;
+  countColor?: string;
   onPress: () => void;
 }) {
   return (
@@ -83,6 +85,7 @@ function StatusChip({
             styles.filterChipCount,
             selected && styles.filterChipTextSelected,
             !selected && emphasize && styles.filterChipCountEmphasize,
+            !selected && countColor && { color: countColor },
           ]}
         >
           {' '}
@@ -338,7 +341,7 @@ export default function ClipManageScreen() {
           />
           <TextInput
             style={styles.searchInput}
-            placeholder='여행 · 장소 · 날짜 검색'
+            placeholder='여행 검색'
             placeholderTextColor={COLORS.textSecondary}
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -375,6 +378,7 @@ export default function ClipManageScreen() {
           count={statusCounts.done}
           selected={statusFilter === 'done'}
           onPress={() => setStatusFilter('done')}
+          countColor={COLORS.success}
         />
       </ScrollView>
 
@@ -535,6 +539,7 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     fontSize: 14,
+    fontFamily: 'Pretendard-Regular',
     color: COLORS.textPrimary,
     padding: 0,
   },

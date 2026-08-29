@@ -479,7 +479,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     backgroundColor: COLORS.surface,
   },
-  searchInput: { flex: 1, color: COLORS.textPrimary, fontSize: 15, fontWeight: '600', padding: 0 },
+  searchInput: { flex: 1, color: COLORS.textPrimary, fontSize: 15, fontFamily: 'Pretendard-SemiBold', padding: 0 },
   listScroll: { flex: 1, marginTop: 12 },
   listContent: { gap: 9, paddingBottom: 20 },
   statusRow: {
@@ -540,7 +540,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     color: COLORS.textPrimary,
     fontSize: 14,
-    fontWeight: '600',
+    fontFamily: 'Pretendard-SemiBold',
     backgroundColor: COLORS.surface,
   },
   manualNotice: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 3 },

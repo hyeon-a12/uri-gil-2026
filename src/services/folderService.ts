@@ -64,7 +64,13 @@ export async function getAllFolders(): Promise<FolderItem[]> {
         const raw = await AsyncStorage.getItem(FOLDERS_KEY);
         if (!raw) return [];
         const parsed = JSON.parse(raw) as StoredFolder[];
-        return parsed.sort((a, b) => b.createdAt - a.createdAt);
+        // 여행 목록은 만든 순서가 아니라 실제 여행 날짜(dateRange 시작일) 기준
+        // 최신순으로 정렬합니다. 날짜를 못 읽는 오래된 데이터는 생성 시각으로 대체합니다.
+        return parsed.sort((a, b) => {
+            const aTime = parseDateRange(a.dateRange)?.start.getTime() ?? a.createdAt;
+            const bTime = parseDateRange(b.dateRange)?.start.getTime() ?? b.createdAt;
+            return bTime - aTime;
+        });
     } catch (err) {
         console.warn('[FolderService.getAllFolders] failed:', err);
         return [];

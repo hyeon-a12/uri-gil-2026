@@ -50,11 +50,8 @@ export function formatClipTime(recordedAt: string): string {
 }
 
 /** day 탭/제목 라벨: 여행 시작일을 알면 "7/7"처럼 실제 날짜로, 모르면 "1일차"로 대체합니다. */
-export function getDayLabel(day: number, tripStartDate: Date | null): string {
-  if (!tripStartDate) return `${day}일차`;
-  const date = new Date(tripStartDate);
-  date.setDate(date.getDate() + (day - 1));
-  return `${date.getMonth() + 1}/${date.getDate()}`;
+export function getDayLabel(day: number, _tripStartDate: Date | null): string {
+  return `DAY ${day}`;
 }
 
 /** 여행 시작일 기준 며칠째인지 (1부터 시작). 기간을 못 읽으면 항상 1일차로 취급. */
@@ -180,9 +177,11 @@ export function buildPlanData(
   const tripEnd = trip ? parseDateRange(trip.dateRange)?.end ?? null : null;
   if (tripStart && tripEnd) {
     const MS_PER_DAY = 24 * 60 * 60 * 1000;
+    // tripEnd는 종료일 23:59:59라서 Math.round를 쓰면 하루가 더 잡힙니다.
+    // Math.floor로 정확한 박 수를 구한 뒤 +1(일수)을 더합니다.
     const totalDays = Math.max(
       1,
-      Math.round((tripEnd.getTime() - tripStart.getTime()) / MS_PER_DAY) + 1,
+      Math.floor((tripEnd.getTime() - tripStart.getTime()) / MS_PER_DAY) + 1,
     );
     for (let day = 1; day <= totalDays; day++) {
       actualDayNumbers.add(day);

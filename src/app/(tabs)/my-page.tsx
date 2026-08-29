@@ -189,6 +189,9 @@ const styles = StyleSheet.create({
   },
   orderCard: {
     padding: 20,
+    backgroundColor: '#FBFBFA',
+    shadowOpacity: 0,
+    elevation: 0,
   },
   orderCardHeader: {
     flexDirection: 'row',
@@ -227,15 +230,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    backgroundColor: colors.card,
+    backgroundColor: '#FBFBFA',
     borderRadius: 20,
     paddingVertical: 16,
     paddingHorizontal: 16,
-    shadowColor: colors.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
   },
   activityCardPressed: {
     opacity: 0.85,
@@ -256,6 +254,9 @@ const styles = StyleSheet.create({
   },
   menuCard: {
     padding: 16,
+    backgroundColor: '#FBFBFA',
+    shadowOpacity: 0,
+    elevation: 0,
   },
   menuRow: {
     paddingVertical: 20,

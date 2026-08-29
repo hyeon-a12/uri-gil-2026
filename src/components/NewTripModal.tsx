@@ -10,24 +10,14 @@ import {
   Dimensions,
   StyleProp,
   ViewStyle,
-  KeyboardAvoidingView,
-  Platform,
+  TextStyle,
   Alert,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
 import type { ShootingStyleId } from '@/services/folderService';
 import { COLORS as SHARED_COLORS, RADIUS, SPACING } from '@/constants/color';
 
-/**
- * ─────────────────────────────────────────────────────────────
- * ⚠️ 색상 관련 참고
- * ─────────────────────────────────────────────────────────────
- * 단색 #FF7F5C 버튼으로 통일하고 싶으시면
- * GRADIENT 배열을 안 쓰고 backgroundColor: COLORS.accent 하나로 바꾸시면 됩니다
- * (아래 PrimaryButton 컴포넌트 안에 분기 처리해뒀어요).
- * 팔레트 v1에서 이 그라데이션은 공식적으로 사용 허용됐습니다.
- */
 const COLORS = {
   accent: SHARED_COLORS.accent,
   accentDark: SHARED_COLORS.accentPressed,
@@ -39,7 +29,6 @@ const COLORS = {
   gray100: SHARED_COLORS.surface,
   white: SHARED_COLORS.background,
 };
-const GRADIENT: [string, string] = [SHARED_COLORS.gradientStart, SHARED_COLORS.accent];
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -240,7 +229,8 @@ function PrimaryButton({
   label: string;
   onPress: () => void;
   disabled?: boolean;
-  icon?: keyof typeof Ionicons.glyphMap;
+  /** true면 버튼 텍스트 왼쪽에 한옥 아이콘을 붙입니다. */
+  icon?: boolean;
   style?: StyleProp<ViewStyle>;
 }) {
   if (disabled) {
@@ -252,22 +242,10 @@ function PrimaryButton({
   }
   return (
     <TouchableOpacity activeOpacity={0.85} onPress={onPress} style={style}>
-      <LinearGradient
-        colors={GRADIENT}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 0 }}
-        style={styles.primaryButton}
-      >
-        {icon && (
-          <Ionicons
-            name={icon}
-            size={16}
-            color={COLORS.white}
-            style={{ marginRight: SPACING.xs }}
-          />
-        )}
+      <View style={[styles.primaryButton, { backgroundColor: COLORS.accent }]}>
+
         <Text style={styles.primaryButtonText}>{label}</Text>
-      </LinearGradient>
+      </View>
     </TouchableOpacity>
   );
 }
@@ -322,15 +300,19 @@ function SelectableChip({
   selected,
   onPress,
   showPinIcon,
+  style,
+  textStyle,
 }: {
   label: string;
   selected: boolean;
   onPress: () => void;
   showPinIcon?: boolean;
+  style?: StyleProp<ViewStyle>;
+  textStyle?: StyleProp<TextStyle>;
 }) {
   return (
     <TouchableOpacity
-      style={[styles.chip, selected && styles.chipSelected]}
+      style={[styles.chip, selected && styles.chipSelected, style]}
       onPress={onPress}
       activeOpacity={0.8}
     >
@@ -342,7 +324,7 @@ function SelectableChip({
           style={{ marginRight: SPACING.xs }}
         />
       )}
-      <Text style={[styles.chipText, selected && styles.chipTextSelected]}>
+      <Text style={[styles.chipText, selected && styles.chipTextSelected, textStyle]}>
         {label}
       </Text>
     </TouchableOpacity>
@@ -465,10 +447,7 @@ export default function NewTripModal({
       animationType="slide"
       onRequestClose={handleClose}
     >
-      <KeyboardAvoidingView
-        style={styles.overlay}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      >
+      <View style={styles.overlay}>
         <View style={styles.card}>
           {step !== 'success' && (
             <>
@@ -529,20 +508,10 @@ export default function NewTripModal({
                     selected={form.region === region}
                     onPress={() => toggleRegion(region)}
                     showPinIcon
+                    style={styles.regionChip}
                   />
                 ))}
               </View>
-
-              <Text style={styles.fieldLabel}>한 줄 메모 (선택)</Text>
-              <TextInput
-                style={styles.textInput}
-                placeholder="예) 친구들과 전주 맛집 탐방"
-                placeholderTextColor={COLORS.gray400}
-                value={form.memo}
-                onChangeText={(text) =>
-                  setForm((prev) => ({ ...prev, memo: text }))
-                }
-              />
 
               <View style={{ height: 24 }} />
               <PrimaryButton
@@ -776,11 +745,13 @@ export default function NewTripModal({
                     label={theme}
                     selected={form.themes.includes(theme)}
                     onPress={() => toggleTheme(theme)}
+                    style={styles.themeChip}
+                    textStyle={styles.themeChipText}
                   />
                 ))}
               </View>
 
-              <Text style={[styles.fieldLabel, { marginTop: SPACING.sm }]}>여행 요약</Text>
+              <Text style={[styles.fieldLabel, { marginTop: SPACING.lg }]}>여행 요약</Text>
               <View style={styles.summaryCard}>
                 <SummaryRow icon="pencil-outline" label="여행 이름" value={form.name || '-'} />
                 <SummaryRow icon="location-outline" label="지역" value={form.region || '-'} />
@@ -810,8 +781,8 @@ export default function NewTripModal({
                 </TouchableOpacity>
                 <View style={{ flex: 1, marginLeft: SPACING.sm }}>
                   <PrimaryButton
-                    label={mode === 'edit' ? '저장' : '여행 만들기!'}
-                    icon={mode === 'edit' ? undefined : 'airplane-outline'}
+                    label={mode === 'edit' ? '저장' : '여행 만들기'}
+                    icon={mode !== 'edit'}
                     onPress={mode === 'edit' ? handleSave : handleCreate}
                   />
                 </View>
@@ -842,7 +813,7 @@ export default function NewTripModal({
             </View>
           )}
         </View>
-      </KeyboardAvoidingView>
+      </View>
     </Modal>
   );
 }
@@ -909,6 +880,7 @@ const styles = StyleSheet.create({
     borderTopRightRadius: RADIUS.sheet,
     paddingHorizontal: CARD_HORIZONTAL_PADDING,
     paddingTop: SPACING.lg,
+    minHeight: SCREEN_HEIGHT * 0.75,
     maxHeight: SCREEN_HEIGHT * 0.9, // 화면 높이를 넘지 않도록 90%로 상한
   },
   headerRow: {
@@ -958,13 +930,13 @@ const styles = StyleSheet.create({
   },
   stepLabel: {
     marginLeft: SPACING.sm,
-    fontSize: 12,
+    fontSize: 13,
     color: COLORS.gray500,
   },
   body: {},
   fieldLabel: {
-    fontSize: 14,
-    fontWeight: '700',
+    fontSize: 15,
+    fontWeight: '600',
     color: COLORS.black,
     marginTop: SPACING.md,
     marginBottom: SPACING.sm,
@@ -1000,7 +972,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.gray100,
     borderRadius: RADIUS.card,
     paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
+    paddingVertical: SPACING.sm * 1.8,
     fontSize: 14,
     color: COLORS.black,
   },
@@ -1029,6 +1001,18 @@ const styles = StyleSheet.create({
   },
   chipSelected: {
     backgroundColor: COLORS.accent,
+  },
+  // 여행 이름 입력창(textInput)과 높이를 맞추기 위한 '여행 지역' 칩 전용 여백.
+  regionChip: {
+    paddingVertical: SPACING.sm * 1.8,
+  },
+  // '여행 테마' 칩만 기본 크기의 1.5배로.
+  themeChip: {
+    paddingHorizontal: SPACING.md * 1.1,
+    paddingVertical: SPACING.sm * 1.1,
+  },
+  themeChipText: {
+    fontSize: 14,
   },
   chipText: {
     fontSize: 13,
@@ -1125,7 +1109,8 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.gray100,
     borderRadius: RADIUS.card,
     paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
+    // 여행 이름 입력창(textInput)과 세로 크기를 맞춥니다.
+    paddingVertical: SPACING.sm * 1.8,
   },
   stepperLabel: {
     fontSize: 13,
