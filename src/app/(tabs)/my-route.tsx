@@ -643,10 +643,17 @@ export default function MyRouteScreen() {
     lng: number;
   } | null>(null);
 
-  const loadDeviceLocation = useCallback(async () => {
+  // notifyOnFailure: 최초 진입 시 조용히 시도할 때는 false, 사용자가 직접
+  // "내 위치로" 버튼을 눌렀을 때는 true로 넘겨 실패 사유를 알려줍니다.
+  const loadDeviceLocation = useCallback(async (notifyOnFailure = false) => {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== "granted") return;
+      if (status !== "granted") {
+        if (notifyOnFailure) {
+          Alert.alert("위치 권한이 필요해요", "설정에서 위치 접근을 허용해주세요.");
+        }
+        return;
+      }
 
       const position = await Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.Balanced,
@@ -657,11 +664,25 @@ export default function MyRouteScreen() {
       });
     } catch (error) {
       console.warn("[MyRouteScreen] 현재 위치를 가져오지 못했습니다:", error);
+      if (notifyOnFailure) {
+        Alert.alert("위치를 가져오지 못했어요", "잠시 후 다시 시도해주세요.");
+      }
     }
   }, []);
 
   useEffect(() => {
     void loadDeviceLocation();
+  }, [loadDeviceLocation]);
+
+  // 좌표가 이전과 완전히 같으면(제자리에서 다시 누른 경우) 지도 URL 문자열이
+  // 안 바뀌어서 WebView가 재로드를 건너뛰고, "내 위치로" 버튼이 아무 반응도
+  // 없는 것처럼 보였습니다. 누를 때마다 이 값을 증가시켜 항상 재중심이
+  // 일어나게 합니다.
+  const [locateToken, setLocateToken] = useState(0);
+
+  const handlePressLocate = useCallback(async () => {
+    await loadDeviceLocation(true);
+    setLocateToken((prev) => prev + 1);
   }, [loadDeviceLocation]);
 
   // 지도에 찍을 핀 — 좌표가 있는 스톱만, day/순서대로 이어서 경로선을 그립니다.
@@ -761,9 +782,10 @@ export default function MyRouteScreen() {
                 height={mapHeight}
                 currentLocation={deviceLocation}
                 pathColor={COLORS.primary}
+                focusOnLocationToken={locateToken || undefined}
               />
 
-              <MapControlButtons onPressLocate={loadDeviceLocation} />
+              <MapControlButtons onPressLocate={handlePressLocate} />
             </View>
 
             {planData.stops.length > 0 ? (

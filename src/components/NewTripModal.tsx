@@ -890,8 +890,8 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.md,
   },
   headerTitle: {
-    fontSize: 18,
-    fontWeight: '800',
+    fontSize: 17,
+    fontWeight: '700',
     color: COLORS.black,
   },
   headerActions: {
@@ -930,12 +930,12 @@ const styles = StyleSheet.create({
   },
   stepLabel: {
     marginLeft: SPACING.sm,
-    fontSize: 13,
+    fontSize: 12,
     color: COLORS.gray500,
   },
   body: {},
   fieldLabel: {
-    fontSize: 15,
+    fontSize: 13,
     fontWeight: '600',
     color: COLORS.black,
     marginTop: SPACING.md,
@@ -972,8 +972,8 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.gray100,
     borderRadius: RADIUS.card,
     paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm * 1.8,
-    fontSize: 14,
+    paddingVertical: SPACING.sm * 1.5,
+    fontSize: 13,
     color: COLORS.black,
   },
   inputWithCounter: {

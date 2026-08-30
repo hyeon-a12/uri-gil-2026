@@ -61,6 +61,14 @@ type KakaoMapViewProps = {
   level?: number;
   /** 방문 경로 점선 색상 */
   pathColor?: string;
+  /**
+   * "내 위치로" 버튼을 누를 때마다 값을 증가시켜서 넘겨주세요. 위치 좌표가
+   * 이전과 완전히 같으면(제자리에서 다시 누른 경우) URL 문자열도 바뀌지
+   * 않아서 WebView가 재로드를 건너뛰는데, 이 토큰이 매번 URL을 바꿔줘서
+   * 항상 재중심(recenter)이 실제로 일어나게 만듭니다. 또한 지도 페이지에
+   * "핀 전체를 감싸지 말고 내 위치로만 중심을 옮겨라"라는 신호도 됩니다.
+   */
+  focusOnLocationToken?: number;
   onError?: (message: string) => void;
 };
 
@@ -71,6 +79,7 @@ function buildMapUrl(
   currentLocation: KakaoMapCurrentLocation | null | undefined,
   level: number,
   pathColor: string,
+  focusOnLocationToken: number | undefined,
 ): string {
   const jsKey = process.env.EXPO_PUBLIC_KAKAO_JS_KEY ?? '';
 
@@ -85,6 +94,11 @@ function buildMapUrl(
     params.set('currentLocation', JSON.stringify(currentLocation));
   }
 
+  if (focusOnLocationToken !== undefined) {
+    params.set('centerMode', 'me');
+    params.set('focusToken', String(focusOnLocationToken));
+  }
+
   return `${MAP_PAGE_URL}?${params.toString()}`;
 }
 
@@ -94,13 +108,14 @@ export default function KakaoMapView({
   currentLocation,
   level = 4,
   pathColor = DEFAULT_ACCENT,
+  focusOnLocationToken,
   onError,
 }: KakaoMapViewProps) {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const mapUrl = useMemo(
-    () => buildMapUrl(pins, currentLocation, level, pathColor),
-    [pins, currentLocation, level, pathColor],
+    () => buildMapUrl(pins, currentLocation, level, pathColor, focusOnLocationToken),
+    [pins, currentLocation, level, pathColor, focusOnLocationToken],
   );
 
   const handleMessage = (event: WebViewMessageEvent) => {

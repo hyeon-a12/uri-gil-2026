@@ -531,14 +531,14 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.surface,
     borderRadius: RADIUS.card,
     paddingHorizontal: SPACING.md,
-    height: 42,
+    height: 40,
   },
   searchIcon: {
     marginRight: SPACING.sm,
   },
   searchInput: {
     flex: 1,
-    fontSize: 14,
+    fontSize: 12,
     fontFamily: 'Pretendard-Regular',
     color: COLORS.textPrimary,
     padding: 0,

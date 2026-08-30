@@ -82,6 +82,9 @@
     var currentLocation = getJsonParam('currentLocation', null);
     var level = Number(getParam('level', '4'));
     var pathColor = getParam('pathColor', '#FFB134');
+    // "내 위치로" 버튼을 눌렀을 때만 'me'로 넘어옵니다 — 이때는 핀 전체를
+    // 감싸는 setBounds 대신 내 위치 하나로만 중심을 옮겨야 합니다.
+    var centerMode = getParam('centerMode', 'fit');
 
     var DEFAULT_ACCENT = '#FFB134';
     var CURRENT_LOCATION_COLOR = '#4285F4';
@@ -187,7 +190,11 @@
           });
         }
 
-        if (pins.length >= 2 || (pins.length >= 1 && currentLocation)) {
+        if (centerMode === 'me' && currentLocation) {
+          // "내 위치로" 버튼: 핀들과 상관없이 내 위치 하나로만 중심을 옮깁니다.
+          map.setCenter(new kakao.maps.LatLng(currentLocation.lat, currentLocation.lng));
+          map.setLevel(level);
+        } else if (pins.length >= 2 || (pins.length >= 1 && currentLocation)) {
           map.setBounds(bounds, 60);
         }
 

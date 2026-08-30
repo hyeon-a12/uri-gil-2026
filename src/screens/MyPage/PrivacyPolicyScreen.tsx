@@ -38,7 +38,7 @@ export default function PrivacyPolicyScreen() {
             style={styles.locationRow}
             right={
               <View style={styles.toggleWrapper}>
-                <Toggle value={locationConsent} onValueChange={setLocationConsent} />
+                <Toggle value={locationConsent} onValueChange={setLocationConsent} scale={1.3} />
               </View>
             }
           />

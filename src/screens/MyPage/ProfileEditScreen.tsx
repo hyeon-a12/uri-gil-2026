@@ -192,7 +192,7 @@ const styles = StyleSheet.create({
   name: { fontSize: 15, fontWeight: '700', color: colors.text },
   joinDate: { fontSize: 12, color: colors.textSub, marginTop: 2 },
   fieldWrap: { marginBottom: 14 },
-  fieldLabel: { fontSize: 12, color: colors.text, fontWeight: '600', marginBottom: 6 },
+  fieldLabel: { fontSize: 13, color: colors.text, fontWeight: '600', marginBottom: 6 },
   fieldBox: {
     backgroundColor: colors.surface,
     borderRadius: 12,
@@ -202,9 +202,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  fieldInput: { flex: 1, fontSize: 14, fontFamily: 'Pretendard-Regular', color: colors.text, paddingVertical: 10 },
+  fieldInput: { flex: 1, fontSize: 12, fontFamily: 'Pretendard-Regular', color: colors.text, paddingVertical: 10 },
   saveButton: { marginTop: 6, marginBottom: 12 },
-  bottomButtons: { flexDirection: 'row', gap: 10 },
+  bottomButtons: { flexDirection: 'row', gap: 10, marginBottom: 32 },
   logoutButton: {
     flex: 1,
     paddingVertical: 14,
@@ -212,7 +212,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     alignItems: 'center',
   },
-  logoutButtonText: { fontSize: 15, fontWeight: '700', color: colors.text },
+  logoutButtonText: { fontSize: 14, fontWeight: '700', color: colors.text },
   withdrawButton: {
     flex: 1,
     paddingVertical: 14,
@@ -220,5 +220,5 @@ const styles = StyleSheet.create({
     backgroundColor: colors.danger,
     alignItems: 'center',
   },
-  withdrawButtonText: { fontSize: 15, fontWeight: '700', color: '#FFFFFF' },
+  withdrawButtonText: { fontSize: 14, fontWeight: '700', color: '#FFFFFF' },
 });

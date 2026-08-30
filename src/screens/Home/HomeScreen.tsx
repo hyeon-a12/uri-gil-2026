@@ -22,7 +22,6 @@ import KakaoMapView, {
   KakaoMapCurrentLocation,
 } from '@/components/KakaoMapView';
 import { ClipPreviewModal } from '@/components/ClipPreview/ClipPreviewModal'
-import MyLocationIcon from '@/assets/images/my-location.svg';
 import NoPlaceIcon from '@/assets/images/no_place.svg';
 import { AppText as Text } from '@/components/AppText';
 import { HapticPressable, TripSelector } from '@/components/common';
@@ -655,7 +654,7 @@ function PullUpSheet({
         ]}
       >
         <HapticPressable style={styles.compassButton} onPress={onPressCompass}>
-          <MyLocationIcon width={22} height={22} fill="#000000" />
+          <Ionicons name="navigate-outline" size={23} color={COLORS.textPrimary} />
         </HapticPressable>
       </Animated.View>
 
@@ -1492,6 +1491,11 @@ export default function TripHomeScreen() {
 
   const [currentLocation, setCurrentLocation] =
     useState<KakaoMapCurrentLocation | null>(null);
+  // 내 위치 좌표가 이전과 완전히 같으면(제자리에서 다시 누른 경우) 지도
+  // URL 문자열이 안 바뀌어서 WebView가 재로드를 건너뛰고, 나침반 버튼이
+  // 아무 반응도 없는 것처럼 보였습니다. 누를 때마다 이 값을 증가시켜
+  // 항상 재중심이 일어나게 합니다.
+  const [locateToken, setLocateToken] = useState(0);
   const [recordings, setRecordings] = useState<RecordingData[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [selectedCategory, setSelectedCategory] =
@@ -1835,6 +1839,11 @@ export default function TripHomeScreen() {
     void fetchCurrentLocation();
   }, [fetchCurrentLocation]);
 
+  const handlePressCompass = useCallback(async () => {
+    await fetchCurrentLocation();
+    setLocateToken((prev) => prev + 1);
+  }, [fetchCurrentLocation]);
+
   return (
     <View style={styles.screen}>
       {/* 지도는 네모 박스 안에 갇히지 않고 화면 전체 폭을 그대로 채웁니다.
@@ -1845,6 +1854,7 @@ export default function TripHomeScreen() {
           currentLocation={currentLocation}
           height={SCREEN_HEIGHT}
           pathColor={COLORS.accent}
+          focusOnLocationToken={locateToken || undefined}
         />
       </View>
 
@@ -1856,7 +1866,7 @@ export default function TripHomeScreen() {
         categoryResults={categoryResults}
         isSearchingCategory={isSearching}
         onPressCategory={(category) => void handleCategorySearch(category)}
-        onPressCompass={() => void fetchCurrentLocation()}
+        onPressCompass={() => void handlePressCompass()}
       />
 
       <AiRecommendationScreen
@@ -2197,18 +2207,14 @@ const styles = StyleSheet.create({
     top: SHEET_EXPANDED_TOP_OFFSET - 44 - 16,
     zIndex: 5,
   },
+  // 경로 탭바(my-route.tsx)의 내 위치 버튼(mapControlButton)과 동일한 디자인.
   compassButton: {
-    width: 44,
-    height: 44,
-    borderRadius: RADIUS.sheet,
+    width: 46,
+    height: 46,
+    borderRadius: 23,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: COLORS.white,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.15,
-    shadowRadius: 6,
-    elevation: 4,
+    backgroundColor: "rgba(255,255,255,0.93)",
   },
 
   // 바텀시트
