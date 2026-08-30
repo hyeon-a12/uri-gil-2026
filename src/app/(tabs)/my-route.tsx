@@ -954,6 +954,10 @@ const styles = StyleSheet.create({
     right: 14,
     bottom: 54,
     zIndex: 20,
+    // WebView(카카오맵)는 안드로이드에서 zIndex와 무관하게 형제 뷰 위로 겹쳐
+    // 보일 수 있어서, elevation까지 같이 줘야 이 버튼이 지도 위로 확실히
+    // 올라옵니다(stopCardScroll과 동일한 이유).
+    elevation: 20,
 
     gap: SPACING.sm,
   },

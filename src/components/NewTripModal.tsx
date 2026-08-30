@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { ShootingStyleId } from '@/services/folderService';
 import { COLORS as SHARED_COLORS, RADIUS, SPACING } from '@/constants/color';
 
@@ -344,6 +345,13 @@ export default function NewTripModal({
   const [step, setStep] = useState<Step>(1);
   const [form, setForm] = useState<TripForm>(INITIAL_FORM);
 
+  // 이 모달은 탭 화면(홈/내 루트) 위에 뜨는데, 안드로이드 하단 탭바가
+  // position:'absolute' + elevation으로 떠 있어서 모달의 마지막 버튼과
+  // z-order가 꼬여 탭바에 가려 보일 수 있습니다. 버튼을 탭바 높이만큼
+  // 더 스크롤해서 위로 끌어올릴 수 있도록 콘텐츠 하단에 여유 공간을 둡니다.
+  const insets = useSafeAreaInsets();
+  const bottomScrollClearance = 130 + insets.bottom;
+
   // 수정 모드로 열릴 때마다 기존 여행 값으로 폼을 채우고 1단계부터 보여줍니다.
   useEffect(() => {
     if (!visible) return;
@@ -448,7 +456,7 @@ export default function NewTripModal({
       onRequestClose={handleClose}
     >
       <View style={styles.overlay}>
-        <View style={styles.card}>
+        <View style={[styles.card, step === 'success' && styles.cardSuccess]}>
           {step !== 'success' && (
             <>
               <View style={styles.headerRow}>
@@ -479,7 +487,11 @@ export default function NewTripModal({
 
           {/* ── STEP 1: 기본 정보 ─────────────────────────── */}
           {step === 1 && (
-            <ScrollView style={styles.body} showsVerticalScrollIndicator={false}>
+            <ScrollView
+              style={styles.body}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={{ paddingBottom: bottomScrollClearance }}
+            >
               <Text style={styles.fieldLabel}>
                 여행 이름 <Text style={styles.required}>*</Text>
               </Text>
@@ -525,7 +537,11 @@ export default function NewTripModal({
 
           {/* ── STEP 2: 일정 ──────────────────────────────── */}
           {step === 2 && (
-            <ScrollView style={styles.body} showsVerticalScrollIndicator={false}>
+            <ScrollView
+              style={styles.body}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={{ paddingBottom: bottomScrollClearance }}
+            >
               <Text style={styles.fieldLabel}>출발일</Text>
 
               {(!form.startDate || !form.endDate) && (
@@ -731,7 +747,11 @@ export default function NewTripModal({
 
           {/* ── STEP 3: 테마 + 요약 ───────────────────────── */}
           {step === 3 && (
-            <ScrollView style={styles.body} showsVerticalScrollIndicator={false}>
+            <ScrollView
+              style={styles.body}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={{ paddingBottom: bottomScrollClearance }}
+            >
               <Text style={styles.fieldLabel}>
                 여행 테마 <Text style={styles.fieldLabelMuted}>(중복 선택 가능)</Text>
               </Text>
@@ -880,8 +900,20 @@ const styles = StyleSheet.create({
     borderTopRightRadius: RADIUS.sheet,
     paddingHorizontal: CARD_HORIZONTAL_PADDING,
     paddingTop: SPACING.lg,
-    minHeight: SCREEN_HEIGHT * 0.75,
-    maxHeight: SCREEN_HEIGHT * 0.9, // 화면 높이를 넘지 않도록 90%로 상한
+    // minHeight/maxHeight(범위)만 있으면 카드 자체 높이가 콘텐츠에 따라
+    // 유동적으로 정해져서, 그 안의 ScrollView(styles.body)가 flex:1로
+    // 기준 삼을 "확정된 높이"가 없었습니다 — 그래서 스크롤 뷰가 자기 콘텐츠
+    // 크기만큼 그냥 늘어나 버려 실제로는 스크롤이 안 되고, 화면 밖(안드로이드
+    // 하단 탭바 영역)으로 버튼이 그냥 넘쳐 흘렀습니다. 고정 height로 바꿔서
+    // ScrollView가 진짜 스크롤 가능한 영역을 갖게 합니다.
+    height: SCREEN_HEIGHT * 0.88,
+  },
+  // 성공 화면은 내용이 짧아서 위 고정 height를 그대로 쓰면 카드 아래쪽에
+  // 빈 공간이 많이 남아 UI가 불필요하게 길어 보였습니다. height를 다시
+  // undefined로 되돌려서(스텝 1~3과 달리 스크롤이 필요 없으니) 카드가
+  // 콘텐츠 높이만큼만 짧게 잡히도록 합니다.
+  cardSuccess: {
+    height: undefined,
   },
   headerRow: {
     flexDirection: 'row',
@@ -933,7 +965,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: COLORS.gray500,
   },
-  body: {},
+  body: { flex: 1 },
   fieldLabel: {
     fontSize: 13,
     fontWeight: '600',

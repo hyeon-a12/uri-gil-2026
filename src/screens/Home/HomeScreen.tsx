@@ -2117,7 +2117,9 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.12,
     shadowRadius: 16,
-    elevation: 9,
+    // 지도 WebView보다 항상 위에 떠 있어야 해서(안드로이드에서 zIndex만으로는
+    // 안 됨) 기존 그림자용 elevation을 zIndex와 같은 값으로 올렸습니다.
+    elevation: 25,
   },
   nearbyHeader: {
     flexDirection: "row",
@@ -2206,6 +2208,7 @@ const styles = StyleSheet.create({
     right: 16,
     top: SHEET_EXPANDED_TOP_OFFSET - 44 - 16,
     zIndex: 5,
+    elevation: 5,
   },
   // 경로 탭바(my-route.tsx)의 내 위치 버튼(mapControlButton)과 동일한 디자인.
   compassButton: {
@@ -2222,6 +2225,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: 0,
     right: 0,
+    zIndex: 8,
     backgroundColor: COLORS.white,
     borderTopLeftRadius: RADIUS.sheet,
     borderTopRightRadius: RADIUS.sheet,

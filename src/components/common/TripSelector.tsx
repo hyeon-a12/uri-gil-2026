@@ -84,6 +84,9 @@ const styles = StyleSheet.create({
     left: 20,
     right: 20,
     zIndex: 10,
+    // 안드로이드에서 카카오맵 WebView가 zIndex와 무관하게 위로 겹쳐 보일 수
+    // 있어서 elevation도 같이 줍니다.
+    elevation: 10,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
