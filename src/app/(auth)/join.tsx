@@ -27,29 +27,16 @@ export default function JoinScreen() {
   const [agreeService, setAgreeService] = useState(false);
   const [agreePrivacy, setAgreePrivacy] = useState(false);
   const [agreeAge, setAgreeAge] = useState(false);
-  const [agreeMarketing, setAgreeMarketing] = useState(false);
-  const [agreeSms, setAgreeSms] = useState(false);
-  const [agreeEmail, setAgreeEmail] = useState(false);
-  const [termsModal, setTermsModal] = useState<'service' | 'privacy' | 'marketing' | null>(null);
+  const [termsModal, setTermsModal] = useState<'service' | 'privacy' | null>(null);
 
   const requiredAgreed = agreeService && agreePrivacy && agreeAge;
-  const allAgreed = requiredAgreed && agreeMarketing && agreeSms && agreeEmail;
+  const allAgreed = requiredAgreed;
 
   const toggleAll = () => {
     const next = !allAgreed;
     setAgreeService(next);
     setAgreePrivacy(next);
     setAgreeAge(next);
-    setAgreeMarketing(next);
-    setAgreeSms(next);
-    setAgreeEmail(next);
-  };
-
-  const toggleMarketing = () => {
-    const next = !agreeMarketing;
-    setAgreeMarketing(next);
-    setAgreeSms(next);
-    setAgreeEmail(next);
   };
 
   const handleJoin = async () => {
@@ -111,9 +98,6 @@ export default function JoinScreen() {
           nickname: trimmedNickname,
           email: trimmedEmail,
           password,
-          marketing_consent: agreeMarketing,
-          sms_consent: agreeSms,
-          email_consent: agreeEmail,
         }),
       });
 
@@ -180,10 +164,6 @@ export default function JoinScreen() {
               autoCorrect={false}
               returnKeyType="next"
             />
-
-            <Text style={styles.helperText}>
-              앱에서 다른 사용자에게 표시되는 이름이에요.
-            </Text>
 
             <Text style={styles.label}>이메일</Text>
 
@@ -261,7 +241,7 @@ export default function JoinScreen() {
                 </View>
                 <View style={styles.termsTextWrap}>
                   <Text style={styles.allAgreeText}>전체 동의</Text>
-                  <Text style={styles.allAgreeHelper}>필수 및 선택 항목에 모두 동의합니다.</Text>
+                  <Text style={styles.allAgreeHelper}>필수 항목에 모두 동의합니다.</Text>
                 </View>
               </TouchableOpacity>
 
@@ -270,18 +250,6 @@ export default function JoinScreen() {
               <TermRow checked={agreeService} onToggle={() => setAgreeService(!agreeService)} label="[필수] 이용약관 동의" onView={() => setTermsModal('service')} />
               <TermRow checked={agreePrivacy} onToggle={() => setAgreePrivacy(!agreePrivacy)} label="[필수] 개인정보 수집 및 이용 동의" onView={() => setTermsModal('privacy')} />
               <TermRow checked={agreeAge} onToggle={() => setAgreeAge(!agreeAge)} label="[필수] 만 14세 이상입니다." />
-              <TermRow checked={agreeMarketing} onToggle={toggleMarketing} label="[선택] 광고성 정보 수신 동의" onView={() => setTermsModal('marketing')} />
-
-              <View style={styles.channelRow}>
-                <TouchableOpacity style={styles.channelItem} onPress={() => { const next = !agreeSms; setAgreeSms(next); if (next) setAgreeMarketing(true); }}>
-                  <View style={[styles.smallCheckbox, agreeSms && styles.checkboxChecked]}>{agreeSms && <Text style={styles.smallCheckText}>✓</Text>}</View>
-                  <Text style={styles.channelText}>SMS</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.channelItem} onPress={() => { const next = !agreeEmail; setAgreeEmail(next); if (next) setAgreeMarketing(true); }}>
-                  <View style={[styles.smallCheckbox, agreeEmail && styles.checkboxChecked]}>{agreeEmail && <Text style={styles.smallCheckText}>✓</Text>}</View>
-                  <Text style={styles.channelText}>이메일</Text>
-                </TouchableOpacity>
-              </View>
             </View>
 
             <TouchableOpacity
@@ -311,11 +279,11 @@ export default function JoinScreen() {
           <View style={styles.bottomSheet}>
             <View style={styles.sheetHandle} />
             <View style={styles.sheetHeader}>
-              <Text style={styles.sheetTitle}>{termsModal === 'service' ? '이용약관' : termsModal === 'privacy' ? '개인정보 수집 및 이용 동의' : '광고성 정보 수신 동의'}</Text>
+              <Text style={styles.sheetTitle}>{termsModal === 'service' ? '이용약관' : '개인정보 수집 및 이용 동의'}</Text>
               <TouchableOpacity onPress={() => setTermsModal(null)}><Text style={styles.closeText}>×</Text></TouchableOpacity>
             </View>
             <ScrollView style={styles.termsContent} showsVerticalScrollIndicator={false}>
-              <Text style={styles.termsBody}>{termsModal === 'service' ? '서비스 이용약관 내용을 여기에 연결해주세요.' : termsModal === 'privacy' ? '개인정보 수집·이용 목적, 수집 항목, 보유 및 이용 기간 등의 내용을 여기에 연결해주세요.' : '광고성 정보 수신 및 마케팅 활용에 관한 내용을 여기에 연결해주세요.'}</Text>
+              <Text style={styles.termsBody}>{termsModal === 'service' ? '서비스 이용약관 내용을 여기에 연결해주세요.' : '개인정보 수집·이용 목적, 수집 항목, 보유 및 이용 기간 등의 내용을 여기에 연결해주세요.'}</Text>
             </ScrollView>
             <TouchableOpacity style={styles.sheetButton} onPress={() => setTermsModal(null)}><Text style={styles.sheetButtonText}>확인</Text></TouchableOpacity>
           </View>
@@ -539,11 +507,6 @@ const styles = StyleSheet.create({
   termText: { flex: 1, color: '#555555', fontSize: 13, fontFamily: 'Pretendard-Regular' },
   viewTermsButton: { paddingVertical: 10, paddingLeft: 12 },
   viewTermsText: { color: '#8A8A8A', fontSize: 12, fontFamily: 'Pretendard-Medium', textDecorationLine: 'underline' },
-  channelRow: { flexDirection: 'row', paddingLeft: 32, gap: 24, marginTop: 2, marginBottom: 4 },
-  channelItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6 },
-  smallCheckbox: { width: 18, height: 18, borderRadius: 5, borderWidth: 1, borderColor: '#DDDDDD', alignItems: 'center', justifyContent: 'center', marginRight: 7 },
-  smallCheckText: { color: '#FFFFFF', fontSize: 11, fontWeight: '700' },
-  channelText: { color: '#666666', fontSize: 13, fontFamily: 'Pretendard-Regular' },
   modalBackdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.35)' },
   modalDismissArea: { flex: 1 },
   bottomSheet: { maxHeight: '72%', minHeight: 420, backgroundColor: '#FFFFFF', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 24, paddingTop: 10, paddingBottom: 24 },

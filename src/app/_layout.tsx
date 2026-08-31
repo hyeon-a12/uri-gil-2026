@@ -4,10 +4,13 @@ import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import { hydrateCurrentTrip } from '@/store/useTripStore';
 import { hydrateProfile } from '@/store/useProfileStore';
+import { hydrateAuth, useAuthStore } from '@/store/useAuthStore';
 
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
+  const authChecked = useAuthStore((state) => state.checked);
+
   const [fontsLoaded] = useFonts({
     'Pretendard-Thin': require('../../assets/fonts/Pretendard-Thin.ttf'),
     'Pretendard-ExtraLight': require('../../assets/fonts/Pretendard-ExtraLight.ttf'),
@@ -29,19 +32,22 @@ export default function RootLayout() {
   });
 
   useEffect(() => {
-    if (fontsLoaded) {
+    if (fontsLoaded && authChecked) {
       SplashScreen.hideAsync();
     }
-  }, [fontsLoaded]);
+  }, [fontsLoaded, authChecked]);
 
   // useTripStore는 메모리 캐시라 앱을 새로 켜면 비어있는 상태로 시작합니다.
   // AsyncStorage에 저장돼 있던 활성 폴더로 한 번 채워둡니다.
   useEffect(() => {
     void hydrateCurrentTrip();
     void hydrateProfile();
+    // "로그인 유지": SecureStore에 토큰이 남아있으면 로그인 화면을 건너뛸 수 있도록
+    // 앱 시작 시 한 번 확인해둡니다. index.tsx가 이 값을 보고 첫 화면을 정합니다.
+    void hydrateAuth();
   }, []);
 
-  if (!fontsLoaded) {
+  if (!fontsLoaded || !authChecked) {
     return null;
   }
 

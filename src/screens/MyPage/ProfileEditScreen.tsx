@@ -9,6 +9,7 @@ import { AppText as Text } from '@/components/AppText';
 import { colors } from '@/constants/menu-theme';
 import { cardShadow, ScreenHeader, PrimaryButton } from '@/components/common';
 import { useProfileStore, updateProfile } from '@/store/useProfileStore';
+import { useAuthStore } from '@/store/useAuthStore';
 import { apiFetch } from '@/services/api';
 
 export default function ProfileEditScreen() {
@@ -58,6 +59,7 @@ export default function ProfileEditScreen() {
           await SecureStore.deleteItemAsync('access_token');
           await SecureStore.deleteItemAsync('user_id');
           await SecureStore.deleteItemAsync('nickname');
+          useAuthStore.getState().setLoggedIn(false);
           router.replace('/login');
         },
       },
@@ -76,6 +78,7 @@ export default function ProfileEditScreen() {
             await SecureStore.deleteItemAsync('access_token');
             await SecureStore.deleteItemAsync('user_id');
             await SecureStore.deleteItemAsync('nickname');
+            useAuthStore.getState().setLoggedIn(false);
             router.replace('/login');
           } catch (error) {
             console.error('[handleWithdraw] 탈퇴 실패:', error);

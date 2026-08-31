@@ -1,5 +1,6 @@
-import { getProfile } from '@/services/profileService'; 
+import { getProfile } from '@/services/profileService';
 import { updateProfile } from '@/store/useProfileStore';
+import { useAuthStore } from '@/store/useAuthStore';
 import * as SecureStore from 'expo-secure-store';
 import { router } from 'expo-router';
 import { useState } from 'react';
@@ -72,6 +73,7 @@ export default function LoginScreen() {
         nickname: data.nickname,
       });
 
+      useAuthStore.getState().setLoggedIn(true);
 
       router.replace('/(tabs)/home');
     } catch (error) {
@@ -145,12 +147,7 @@ export default function LoginScreen() {
 
             <TouchableOpacity
               style={styles.findPasswordButton}
-              onPress={() => {
-                Alert.alert(
-                  '비밀번호 찾기',
-                  '비밀번호 찾기 화면은 추후 연결하면 됩니다.',
-                );
-              }}
+              onPress={() => router.push('/find-password')}
             >
               <Text style={styles.findPasswordText}>
                 비밀번호를 잊으셨나요?
