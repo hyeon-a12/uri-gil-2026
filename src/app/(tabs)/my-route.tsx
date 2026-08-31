@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useFocusEffect, useLocalSearchParams } from "expo-router";
 import { parseDateRange, type FolderItem } from "@/services/folderService";
 import { getRecordingsByFolder } from "@/services/recordingService";
@@ -10,6 +10,7 @@ import { getStopOrder, saveStopOrder, type StopOrderMap } from "@/services/stop-
 import { buildPlanData, type PlanStop } from "@/services/tripPlanService";
 import type { RecordingData } from "@/types/recording";
 import { useTripStore } from "@/store/useTripStore";
+import TravelIllustratedMap from '@/components/TravelIllustratedMap';
 import {
   Alert,
   Modal,
@@ -22,10 +23,11 @@ import {
 } from 'react-native';
 import { AppText as Text } from '@/components/AppText';
 import { RoutePlanView } from '@/components/RoutePlanView';
-import KakaoMapView, { type KakaoMapPin } from '@/components/KakaoMapView';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
+import * as MediaLibrary from 'expo-media-library';
+import { captureRef } from 'react-native-view-shot';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS as SHARED_COLORS, RADIUS, SPACING } from '@/constants/color';
 
@@ -59,29 +61,9 @@ type RouteViewMode = "info" | "map";
 
 // 지도 위 스톱 카드 가로 스크롤 — 부드럽게 흘러가는 대신 카드 한 장씩 딱딱
 // 걸리는(스냅) 느낌을 주기 위한 값들입니다.
-const STOP_CARD_WIDTH = 300;
-const STOP_CARD_GAP = SPACING.md;
+const STOP_CARD_WIDTH = 286;
+const STOP_CARD_GAP = 12;
 const STOP_CARD_SNAP_INTERVAL = STOP_CARD_WIDTH + STOP_CARD_GAP;
-
-function MapControlButtons({ onPressLocate }: { onPressLocate: () => void }) {
-  return (
-    <View style={styles.mapControls}>
-      <Pressable
-        onPress={onPressLocate}
-        style={({ pressed }) => [
-          styles.mapControlButton,
-          pressed && styles.mapControlButtonPressed,
-        ]}
-      >
-        <Ionicons
-          name="navigate-outline"
-          size={23}
-          color={COLORS.textPrimary}
-        />
-      </Pressable>
-    </View>
-  );
-}
 
 interface ClipThumbnailProps {
   thumbnail: string;
@@ -121,6 +103,13 @@ interface SelectedStopCardProps {
 }
 
 function SelectedStopCard({ stop }: SelectedStopCardProps) {
+  const sourceLabel =
+    stop.source === "manual"
+      ? "직접 추가"
+      : stop.source === "ai-recommendation"
+        ? "AI 추천"
+        : stop.time;
+
   return (
     <View style={styles.stopCard}>
       <View style={styles.stopCardHeader}>
@@ -140,11 +129,11 @@ function SelectedStopCard({ stop }: SelectedStopCardProps) {
               {stop.name}
             </Text>
 
-            <Ionicons name="location" size={16} color={COLORS.primary} />
+            <Ionicons name="location" size={15} color={COLORS.primary} />
           </View>
 
           <Text allowFontScaling={false} style={styles.stopCardMeta}>
-            클립 {stop.clips.length}개 · {stop.time}
+            클립 {stop.clips.length}개 · {sourceLabel}
           </Text>
         </View>
 
@@ -153,15 +142,18 @@ function SelectedStopCard({ stop }: SelectedStopCardProps) {
           onPress={() => {
             Alert.alert(
               stop.name,
-              "장소 상세 정보 화면으로 연결할 예정입니다.",
+              "장소 상세 화면을 연결할 수 있어요.",
             );
           }}
-          style={styles.stopCardMoreButton}
+          style={({ pressed }) => [
+            styles.stopCardMoreButton,
+            pressed && styles.cardPressed,
+          ]}
         >
           <Ionicons
             name="chevron-forward"
-            size={22}
-            color={COLORS.textTertiary}
+            size={21}
+            color={COLORS.textSecondary}
           />
         </Pressable>
       </View>
@@ -183,7 +175,7 @@ function SelectedStopCard({ stop }: SelectedStopCardProps) {
           onPress={() => {
             Alert.alert(
               "클립 추가",
-              `${stop.name}에 새 클립을 추가할 예정입니다.`,
+              `${stop.name}에 새로운 클립을 추가할 예정입니다.`,
             );
           }}
           style={({ pressed }) => [
@@ -191,7 +183,7 @@ function SelectedStopCard({ stop }: SelectedStopCardProps) {
             pressed && styles.cardPressed,
           ]}
         >
-          <Ionicons name="add" size={29} color={COLORS.textSecondary} />
+          <Ionicons name="add" size={28} color={COLORS.textSecondary} />
 
           <Text allowFontScaling={false} style={styles.addClipText}>
             클립 추가
@@ -217,19 +209,19 @@ function InternalNavigation({
     icon: React.ComponentProps<typeof Ionicons>["name"];
     activeIcon: React.ComponentProps<typeof Ionicons>["name"];
   }[] = [
-    {
-      mode: "info",
-      label: "일정",
-      icon: "calendar-outline",
-      activeIcon: "calendar",
-    },
-    {
-      mode: "map",
-      label: "지도",
-      icon: "map-outline",
-      activeIcon: "map",
-    },
-  ];
+      {
+        mode: "info",
+        label: "일정",
+        icon: "calendar-outline",
+        activeIcon: "calendar",
+      },
+      {
+        mode: "map",
+        label: "지도",
+        icon: "map-outline",
+        activeIcon: "map",
+      },
+    ];
 
   return (
     <View style={styles.internalNavigation}>
@@ -288,12 +280,56 @@ function getTripDisplayName(trip: FolderItem | null): string {
     : `여행 ${trip.id}`;
 }
 
+type TravelSavePosterProps = {
+  tripName: string;
+  tripSummary: string;
+  placeCount: number;
+  stops: PlanStop[];
+};
+
+function TravelSavePoster({
+  tripName,
+  tripSummary,
+  placeCount,
+  stops,
+}: TravelSavePosterProps) {
+  return (
+    <View style={styles.savePoster}>
+      <View style={styles.savePosterHeader}>
+        <Text allowFontScaling={false} style={styles.savePosterTitle}>
+          {tripName}에서 남긴 길
+        </Text>
+        <Text allowFontScaling={false} style={styles.savePosterMeta}>
+          {tripSummary} · 장소 {placeCount}곳
+        </Text>
+      </View>
+
+      <View style={styles.savePosterMap}>
+        <TravelIllustratedMap
+          stops={stops}
+          height={620}
+          exportMode
+        />
+      </View>
+
+      <View style={styles.savePosterFooter}>
+        <Text allowFontScaling={false} style={styles.savePosterMessage}>
+          {placeCount}개의 장소, 하나의 여행
+        </Text>
+        <Text allowFontScaling={false} style={styles.savePosterBrand}>
+          우리길
+        </Text>
+      </View>
+    </View>
+  );
+}
+
 type TravelShareSheetProps = {
   visible: boolean;
   tripName: string;
   tripSummary: string;
   placeCount: number;
-  mapPins: KakaoMapPin[];
+  stops: PlanStop[];
   bottomInset: number;
   onClose: () => void;
   onNativeShare: () => void;
@@ -304,11 +340,51 @@ function TravelShareSheet({
   tripName,
   tripSummary,
   placeCount,
-  mapPins,
+  stops,
   bottomInset,
   onClose,
   onNativeShare,
 }: TravelShareSheetProps) {
+  const savePosterRef = useRef<View>(null);
+  const [isSavingImage, setIsSavingImage] = useState(false);
+
+  const handleSaveImage = useCallback(async () => {
+    if (isSavingImage) return;
+
+    try {
+      setIsSavingImage(true);
+
+      const permission = await MediaLibrary.requestPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert(
+          '사진 접근 권한이 필요해요',
+          '여행 지도를 사진으로 저장하려면 사진 접근 권한을 허용해주세요.',
+        );
+        return;
+      }
+
+      if (!savePosterRef.current) {
+        Alert.alert('저장 준비 중이에요', '잠시 후 다시 시도해주세요.');
+        return;
+      }
+
+      const uri = await captureRef(savePosterRef.current, {
+        format: 'png',
+        quality: 1,
+        result: 'tmpfile',
+      });
+
+      await MediaLibrary.saveToLibraryAsync(uri);
+
+      Alert.alert('저장 완료', '여행 지도가 사진에 저장되었습니다.');
+    } catch (error) {
+      console.error('[TravelShareSheet] 이미지 저장 실패:', error);
+      Alert.alert('저장하지 못했어요', '잠시 후 다시 시도해주세요.');
+    } finally {
+      setIsSavingImage(false);
+    }
+  }, [isSavingImage]);
+
   return (
     <Modal
       animationType="slide"
@@ -345,7 +421,11 @@ function TravelShareSheet({
           >
             <View style={styles.sharePreviewCard}>
               <View pointerEvents="none" style={styles.shareMapPreview}>
-                <KakaoMapView pins={mapPins} height={126} pathColor={COLORS.primary} />
+                <TravelIllustratedMap
+                  stops={stops}
+                  height={126}
+                  exportMode
+                />
               </View>
 
               <View style={styles.sharePreviewTextArea}>
@@ -356,7 +436,7 @@ function TravelShareSheet({
                   {tripSummary} · 장소 {placeCount}곳
                 </Text>
                 <Text style={styles.sharePreviewMeta}>
-                  여행 경로를 친구들과 함께 확인해보세요
+                  {placeCount}개의 장소, 하나의 여행
                 </Text>
 
                 <Pressable
@@ -423,24 +503,30 @@ function TravelShareSheet({
                 label="QR 코드로 공유"
                 onPress={() =>
                   Alert.alert(
-                    "QR 코드 공유",
-                    "QR 코드 기능을 연결할 수 있습니다.",
+                    'QR 코드 공유',
+                    'QR 코드 기능을 연결할 수 있습니다.',
                   )
                 }
               />
               <ShareActionRow
                 icon="download-outline"
-                label="이미지로 저장"
-                onPress={() =>
-                  Alert.alert(
-                    "이미지로 저장",
-                    "이미지 저장 기능을 연결할 수 있습니다.",
-                  )
-                }
+                label={isSavingImage ? '이미지 저장 중...' : '이미지로 저장'}
+                onPress={handleSaveImage}
                 isLast
               />
             </View>
           </ScrollView>
+
+          <View pointerEvents="none" style={styles.hiddenSavePoster}>
+            <View ref={savePosterRef} collapsable={false}>
+              <TravelSavePoster
+                tripName={tripName}
+                tripSummary={tripSummary}
+                placeCount={placeCount}
+                stops={stops}
+              />
+            </View>
+          </View>
         </View>
       </View>
     </Modal>
@@ -586,6 +672,67 @@ export default function MyRouteScreen() {
     [recordings, currentTrip, savedScheduleStops, stopOrder],
   );
 
+  // 지도와 하단 장소 카드를 같은 순서로 사용합니다.
+  const sortedMapStops = useMemo(
+    () => [...planData.stops].sort((a, b) => a.order - b.order),
+    [planData.stops],
+  );
+
+  // 지도에서 현재 선택된 장소입니다.
+  // 처음에는 1번 장소를 자동 선택하고, 카드 스와이프/마커 탭에 따라 같이 바뀝니다.
+  const [selectedMapStopId, setSelectedMapStopId] = useState<string | null>(null);
+  const stopCardScrollRef = useRef<ScrollView>(null);
+
+  useEffect(() => {
+    if (sortedMapStops.length === 0) {
+      setSelectedMapStopId(null);
+      return;
+    }
+
+    setSelectedMapStopId((current) => {
+      const stillExists =
+        current !== null && sortedMapStops.some((stop) => stop.id === current);
+
+      if (stillExists) {
+        return current;
+      }
+
+      return sortedMapStops[0]?.id ?? null;
+    });
+  }, [sortedMapStops]);
+
+  // 지도 마커를 누르면 아래 카드도 같은 장소로 이동합니다.
+  const handleSelectMapStop = useCallback(
+    (stopId: string) => {
+      setSelectedMapStopId(stopId);
+
+      const index = sortedMapStops.findIndex((stop) => stop.id === stopId);
+      if (index < 0) return;
+
+      stopCardScrollRef.current?.scrollTo({
+        x: index * STOP_CARD_SNAP_INTERVAL,
+        animated: true,
+      });
+    },
+    [sortedMapStops],
+  );
+
+  // 아래 카드를 넘기면 지도에서도 같은 장소를 선택합니다.
+  const handleStopCardMomentumEnd = useCallback(
+    (offsetX: number) => {
+      if (sortedMapStops.length === 0) return;
+
+      const rawIndex = Math.round(offsetX / STOP_CARD_SNAP_INTERVAL);
+      const index = Math.min(Math.max(rawIndex, 0), sortedMapStops.length - 1);
+      const stop = sortedMapStops[index];
+
+      if (stop) {
+        setSelectedMapStopId(stop.id);
+      }
+    },
+    [sortedMapStops],
+  );
+
   const nights = useMemo(() => {
     if (!currentTrip) return null;
     const range = parseDateRange(currentTrip.dateRange);
@@ -635,7 +782,10 @@ export default function MyRouteScreen() {
     }
   }, [tripName, tripSummary]);
 
-  const mapHeight = Math.min(Math.max(width * 0.95, 400), 540);
+  const mapHeight = Math.min(
+    Math.max(width * 0.9, 320),
+    370,
+  );
 
   // 실제 GPS 위치 — "현재 위치" 버튼을 눌렀을 때도 다시 불러와 지도를 재중심합니다.
   const [deviceLocation, setDeviceLocation] = useState<{
@@ -684,26 +834,6 @@ export default function MyRouteScreen() {
     await loadDeviceLocation(true);
     setLocateToken((prev) => prev + 1);
   }, [loadDeviceLocation]);
-
-  // 지도에 찍을 핀 — 좌표가 있는 스톱만, day/순서대로 이어서 경로선을 그립니다.
-  const mapPins = useMemo<KakaoMapPin[]>(
-    () =>
-      planData.stops
-        .filter(
-          (stop): stop is PlanStop & { latitude: number; longitude: number } =>
-            typeof stop.latitude === "number" &&
-            typeof stop.longitude === "number",
-        )
-        .sort((a, b) => a.order - b.order)
-        .map((stop) => ({
-          id: stop.id,
-          lat: stop.latitude,
-          lng: stop.longitude,
-          label: String(stop.order),
-          color: COLORS.primary,
-        })),
-    [planData.stops],
-  );
 
   return (
     <View style={styles.screen}>
@@ -761,7 +891,6 @@ export default function MyRouteScreen() {
             />
           </Pressable>
         ) : (
-          // 일정 탭에서는 제목을 정확히 중앙에 두기 위한 빈 공간만 유지합니다.
           <View style={styles.headerButtonSpacer} />
         )}
       </View>
@@ -777,36 +906,72 @@ export default function MyRouteScreen() {
                 },
               ]}
             >
-              <KakaoMapView
-                pins={mapPins}
+              <TravelIllustratedMap
+                stops={sortedMapStops}
                 height={mapHeight}
-                currentLocation={deviceLocation}
-                pathColor={COLORS.primary}
-                focusOnLocationToken={locateToken || undefined}
+                selectedStopId={selectedMapStopId}
+                onSelectStop={handleSelectMapStop}
+                onPressLocate={handlePressLocate}
+                onPressLayers={() => {
+                  Alert.alert(
+                    '지도 보기',
+                    '지도 표시 옵션을 연결할 수 있어요.',
+                  );
+                }}
               />
-
-              <MapControlButtons onPressLocate={handlePressLocate} />
             </View>
 
-            {planData.stops.length > 0 ? (
+            {sortedMapStops.length > 0 ? (
               <ScrollView
+                ref={stopCardScrollRef}
                 horizontal
                 showsHorizontalScrollIndicator={false}
-                style={[styles.stopCardScroll, { top: mapHeight - 56 }]}
+                style={styles.stopCardScroll}
                 contentContainerStyle={styles.selectedCardWrapper}
                 snapToInterval={STOP_CARD_SNAP_INTERVAL}
                 snapToAlignment="start"
                 decelerationRate="fast"
+                onMomentumScrollEnd={(event) => {
+                  handleStopCardMomentumEnd(event.nativeEvent.contentOffset.x);
+                }}
               >
-                {[...planData.stops]
-                  .sort((a, b) => a.order - b.order)
-                  .map((stop) => (
-                    <View key={stop.id} style={styles.stopCardSlide}>
+                {sortedMapStops.map((stop) => {
+                  const selected = selectedMapStopId === stop.id;
+
+                  return (
+                    <View
+                      key={stop.id}
+                      style={[
+                        styles.stopCardSlide,
+                        selected && styles.stopCardSlideSelected,
+                      ]}
+                    >
                       <SelectedStopCard stop={stop} />
                     </View>
-                  ))}
+                  );
+                })}
               </ScrollView>
-            ) : null}
+            ) : (
+              <View style={styles.mapEmptyCard}>
+                <View style={styles.mapEmptyIcon}>
+                  <Ionicons
+                    name="location-outline"
+                    size={22}
+                    color={COLORS.primary}
+                  />
+                </View>
+
+                <View style={styles.mapEmptyTextArea}>
+                  <Text allowFontScaling={false} style={styles.mapEmptyTitle}>
+                    아직 등록된 장소가 없어요
+                  </Text>
+
+                  <Text allowFontScaling={false} style={styles.mapEmptyDescription}>
+                    장소를 추가하거나 영상을 촬영해보세요.
+                  </Text>
+                </View>
+              </View>
+            )}
           </View>
         ) : (
           <RoutePlanView
@@ -839,7 +1004,7 @@ export default function MyRouteScreen() {
         tripName={tripName}
         tripSummary={tripSummary}
         placeCount={planData.stops.length}
-        mapPins={mapPins}
+        stops={sortedMapStops}
         bottomInset={insets.bottom}
         onClose={() => setIsShareSheetVisible(false)}
         onNativeShare={handleNativeShare}
@@ -933,84 +1098,161 @@ const styles = StyleSheet.create({
 
   mapScreen: {
     flex: 1,
+    position: 'relative',
+
+    paddingTop: 16,
+
     backgroundColor: COLORS.background,
   },
 
   mapFrame: {
-    marginHorizontal: SPACING.md,
-
+    position: "relative",
+    marginHorizontal: 14,
     overflow: "hidden",
-
     borderRadius: 28,
-
-    backgroundColor: COLORS.surface,
-
+    backgroundColor: "#FAF4E9",
     borderWidth: 1,
-    borderColor: "#D6E8E0",
+    borderColor: "#EEE6DB",
+    shadowColor: "#3B342E",
+    shadowOffset: {
+      width: 0,
+      height: 5,
+    },
+    shadowOpacity: 0.06,
+    shadowRadius: 14,
+    elevation: 3,
   },
 
   mapControls: {
     position: "absolute",
     right: 14,
-    bottom: 54,
-    zIndex: 20,
-    // WebView(카카오맵)는 안드로이드에서 zIndex와 무관하게 형제 뷰 위로 겹쳐
-    // 보일 수 있어서, elevation까지 같이 줘야 이 버튼이 지도 위로 확실히
-    // 올라옵니다(stopCardScroll과 동일한 이유).
-    elevation: 20,
-
-    gap: SPACING.sm,
+    top: 18,
+    zIndex: 30,
+    elevation: 30,
+    gap: 10,
   },
 
   mapControlButton: {
-    width: 46,
-    height: 46,
-
-    borderRadius: 23,
-
+    width: 42,
+    height: 42,
+    borderRadius: 13,
     alignItems: "center",
     justifyContent: "center",
-
-    backgroundColor: "rgba(255,255,255,0.93)",
+    backgroundColor: "rgba(255,255,255,0.96)",
+    borderWidth: 1,
+    borderColor: "rgba(20,20,20,0.06)",
+    shadowColor: "#000000",
+    shadowOffset: {
+      width: 0,
+      height: 3,
+    },
+    shadowOpacity: 0.12,
+    shadowRadius: 7,
+    elevation: 5,
   },
 
   mapControlButtonPressed: {
-    opacity: 0.74,
-    transform: [{ scale: 0.95 }],
+    opacity: 0.72,
+    transform: [{ scale: 0.94 }],
   },
 
-  // WebView(카카오맵)는 안드로이드에서 zIndex와 무관하게 다른 형제 뷰 위로
-  // 겹쳐 보이는 경우가 있어서, elevation까지 같이 줘야 이 카드 목록이 지도
-  // 위로 확실히 올라옵니다.
-  // 카드 목록을 세로 스크롤 흐름 밖으로 빼서 지도 위에 절대 위치로 고정합니다
-  // (top은 mapHeight에 따라 인라인으로 계산해서 넣습니다) — 화면을 세로로
-  // 스크롤해도 이 카드 목록은 움직이지 않고, 자기 자신만 가로로 스크롤됩니다.
-  stopCardScroll: {
+  mapRouteInfo: {
+    position: "absolute",
+    left: 14,
+    top: 18,
+    zIndex: 25,
+    elevation: 25,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 11,
+    paddingVertical: 8,
+    borderRadius: 15,
+    backgroundColor: "rgba(255,255,255,0.95)",
+    borderWidth: 1,
+    borderColor: "rgba(20,20,20,0.05)",
+    shadowColor: "#332C27",
+    shadowOffset: {
+      width: 0,
+      height: 3,
+    },
+    shadowOpacity: 0.09,
+    shadowRadius: 8,
+
+  },
+
+  mapRouteInfoIcon: {
+    width: 28,
+    height: 28,
+    marginRight: 8,
+    borderRadius: 9,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: COLORS.primary,
+  },
+
+  mapRouteInfoTitle: {
+    color: COLORS.textPrimary,
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: "800",
+  },
+
+  mapRouteInfoSubtitle: {
+    marginTop: 1,
+    color: COLORS.textSecondary,
+    fontSize: 9,
+    lineHeight: 12,
+    fontWeight: "500",
+  },
+
+  mapBottomFade: {
     position: "absolute",
     left: 0,
     right: 0,
-    zIndex: 30,
+    bottom: 0,
+    height: 75,
+    backgroundColor: "rgba(255,255,255,0.05)",
+  },
+
+  stopCardScroll: {
+    marginTop: 0,
+    zIndex: 40,
     elevation: 10,
   },
 
   selectedCardWrapper: {
-    paddingHorizontal: SPACING.lg,
+    paddingHorizontal: 20,
+    paddingRight: 50,
     gap: STOP_CARD_GAP,
+    paddingTop: 16,
   },
-
-  // 가로 스크롤 안에서 각 스톱 카드 한 장의 너비.
   stopCardSlide: {
     width: STOP_CARD_WIDTH,
+    opacity: 0.86,
+    transform: [{ scale: 0.98 }],
+  },
+
+  stopCardSlideSelected: {
+    opacity: 1,
+    transform: [{ scale: 1 }],
   },
 
   stopCard: {
-    paddingHorizontal: SPACING.md,
-    paddingTop: SPACING.md,
-    paddingBottom: SPACING.md,
-
-    borderRadius: RADIUS.sheet,
-
-    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 15,
+    paddingTop: 13,
+    paddingBottom: 13,
+    borderRadius: 22,
+    backgroundColor: "rgba(255,255,255,0.98)",
+    borderWidth: 1,
+    borderColor: "rgba(30,30,30,0.04)",
+    shadowColor: "#332B25",
+    shadowOffset: {
+      width: 0,
+      height: 6,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 13,
+    elevation: 7,
   },
 
   stopCardHeader: {
@@ -1019,20 +1261,16 @@ const styles = StyleSheet.create({
   },
 
   stopCardOrder: {
-    width: 32,
-    height: 32,
-
-    borderRadius: 16,
-
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     alignItems: "center",
     justifyContent: "center",
-
     backgroundColor: COLORS.primary,
   },
 
   stopCardOrderText: {
     color: "#FFFFFF",
-
     fontSize: 13,
     lineHeight: 17,
     fontWeight: "800",
@@ -1040,60 +1278,49 @@ const styles = StyleSheet.create({
 
   stopCardTitleArea: {
     flex: 1,
-
     marginLeft: 11,
   },
 
   stopCardTitleRow: {
     flexDirection: "row",
     alignItems: "center",
-
-    gap: SPACING.xs,
+    gap: 5,
   },
 
   stopCardTitle: {
     maxWidth: "82%",
-
     color: COLORS.textPrimary,
-
-    fontSize: 16,
-    lineHeight: 22,
-    fontWeight: "600",
+    fontSize: 15,
+    lineHeight: 20,
+    fontWeight: "700",
   },
 
   stopCardMeta: {
-    marginTop: SPACING.xs,
-
+    marginTop: 3,
     color: COLORS.textSecondary,
-
-    fontSize: 12,
-    lineHeight: 17,
+    fontSize: 11,
+    lineHeight: 15,
     fontWeight: "500",
   },
 
   stopCardMoreButton: {
     width: 34,
     height: 42,
-
     alignItems: "center",
     justifyContent: "center",
   },
 
   clipList: {
-    paddingTop: 13,
-    gap: SPACING.sm,
+    paddingTop: 14,
+    gap: 8,
   },
 
   clipThumbnail: {
     position: "relative",
-
-    width: 104,
-    height: 82,
-
+    width: 76,
+    height: 62,
     overflow: "hidden",
-
-    borderRadius: RADIUS.card,
-
+    borderRadius: 12,
     backgroundColor: "#E8E5DF",
   },
 
@@ -1104,64 +1331,101 @@ const styles = StyleSheet.create({
 
   clipDim: {
     ...StyleSheet.absoluteFillObject,
-
-    backgroundColor: "rgba(20,20,18,0.10)",
+    backgroundColor: "rgba(20,20,18,0.08)",
   },
 
   clipPlayButton: {
     position: "absolute",
     top: "50%",
     left: "50%",
-
-    width: 30,
-    height: 30,
-
-    marginLeft: -15,
-    marginTop: -15,
-
-    borderRadius: 15,
-
+    width: 25,
+    height: 25,
+    marginLeft: -12.5,
+    marginTop: -12.5,
+    borderRadius: 13,
     alignItems: "center",
     justifyContent: "center",
-
-    backgroundColor: "rgba(28,28,25,0.52)",
+    backgroundColor: "rgba(25,25,22,0.48)",
   },
 
   clipDuration: {
     position: "absolute",
-    right: 6,
-    bottom: 5,
-
+    right: 5,
+    bottom: 4,
     color: "#FFFFFF",
-
-    fontSize: 10,
-    lineHeight: 13,
+    fontSize: 9,
+    lineHeight: 12,
     fontWeight: "600",
-
-    textShadowColor: "rgba(0,0,0,0.5)",
+    textShadowColor: "rgba(0,0,0,0.55)",
     textShadowRadius: 3,
   },
 
   addClipButton: {
-    width: 88,
-    height: 82,
-
+    width: 76,
+    height: 62,
     alignItems: "center",
     justifyContent: "center",
-
-    borderRadius: RADIUS.card,
-
-    backgroundColor: COLORS.surface,
+    borderRadius: 12,
+    backgroundColor: "#FFF6EF",
+    borderWidth: 1,
+    borderColor: "#F6E8DB",
   },
 
   addClipText: {
-    marginTop: SPACING.xs,
-
+    marginTop: 2,
     color: COLORS.textSecondary,
+    fontSize: 9,
+    lineHeight: 12,
+    fontWeight: "700",
+  },
 
+  mapEmptyCard: {
+    marginHorizontal: 22,
+    marginTop: -40,
+    zIndex: 40,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 15,
+    borderRadius: 22,
+    backgroundColor: "#FFFFFF",
+    shadowColor: COLORS.shadow,
+    shadowOffset: {
+      width: 0,
+      height: 5,
+    },
+    shadowOpacity: 0.09,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+
+  mapEmptyIcon: {
+    width: 40,
+    height: 40,
+    marginRight: 11,
+    borderRadius: 13,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: COLORS.primarySoft,
+  },
+
+  mapEmptyTextArea: {
+    flex: 1,
+  },
+
+  mapEmptyTitle: {
+    color: COLORS.textPrimary,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: "700",
+  },
+
+  mapEmptyDescription: {
+    marginTop: 2,
+    color: COLORS.textSecondary,
     fontSize: 10,
     lineHeight: 14,
-    fontWeight: "700",
+    fontWeight: "500",
   },
 
   cardPressed: {
@@ -1810,6 +2074,67 @@ const styles = StyleSheet.create({
   },
   shareActionPressed: {
     backgroundColor: "#F7F7F7",
+  },
+
+  hiddenSavePoster: {
+    position: 'absolute',
+    left: -1400,
+    top: 0,
+    width: 1080,
+  },
+
+  savePoster: {
+    width: 1080,
+    paddingTop: 96,
+    paddingHorizontal: 72,
+    paddingBottom: 72,
+    backgroundColor: '#FFFFFF',
+  },
+
+  savePosterHeader: {
+    marginBottom: 38,
+  },
+
+  savePosterTitle: {
+    color: COLORS.textPrimary,
+    fontSize: 52,
+    lineHeight: 66,
+    fontWeight: '800',
+    letterSpacing: -1.2,
+  },
+
+  savePosterMeta: {
+    marginTop: 12,
+    color: COLORS.textSecondary,
+    fontSize: 28,
+    lineHeight: 38,
+    fontWeight: '600',
+  },
+
+  savePosterMap: {
+    overflow: 'hidden',
+    borderRadius: 42,
+  },
+
+  savePosterFooter: {
+    marginTop: 38,
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+  },
+
+  savePosterMessage: {
+    color: COLORS.textPrimary,
+    fontSize: 30,
+    lineHeight: 42,
+    fontWeight: '700',
+  },
+
+  savePosterBrand: {
+    color: COLORS.primary,
+    fontSize: 27,
+    lineHeight: 34,
+    fontWeight: '800',
   },
 
   // === '일정' 탭 스타일 끝 ===

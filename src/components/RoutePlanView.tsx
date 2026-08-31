@@ -1,4 +1,10 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react';
+
 import {
   Alert,
   Modal,
@@ -8,18 +14,38 @@ import {
   TextInput,
   View,
 } from 'react-native';
+
 import { router } from 'expo-router';
+
 import { AppText as Text } from '@/components/AppText';
 import { HapticPressable } from '@/components/common';
+
+import KakaoMapView, {
+  type KakaoMapPin,
+} from '@/components/KakaoMapView';
+
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS as SHARED_COLORS, RADIUS, SPACING } from '@/constants/color';
-import { getDayLabel, type PlanStop } from '@/services/tripPlanService';
-import { getStopMemos, saveStopMemo } from '@/services/stop-memo-service';
 
-// my-route.tsx '일정' 탭에서 쓰던 UI를 그대로 뽑아낸 컴포넌트입니다.
-// 여행 상세 화면(trip-detail/[tripId].tsx)에서도 똑같은 모양을 써야 해서
-// 한 곳에만 두고 두 화면이 같이 씁니다 — 여기 스타일을 고치면 두 화면 모두 바뀝니다.
+import {
+  COLORS as SHARED_COLORS,
+  RADIUS,
+  SPACING,
+} from '@/constants/color';
+
+import {
+  getDayLabel,
+  type PlanStop,
+} from '@/services/tripPlanService';
+
+import {
+  getStopMemos,
+  saveStopMemo,
+} from '@/services/stop-memo-service';
+
+/* ============================================================
+ * COLORS
+ * ============================================================ */
 
 const COLORS = {
   background: SHARED_COLORS.background,
@@ -37,14 +63,35 @@ const COLORS = {
   routeSoft: '#FFD2C2',
 };
 
+/* ============================================================
+ * MAP
+ * ============================================================ */
+
+const ROUTE_MAP_HEIGHT = 260;
+
+/* ============================================================
+ * MEMO MODAL TYPES
+ * ============================================================ */
+
 type MemoEditorModalProps = {
   visible: boolean;
+
   stopName: string | null;
+
   draft: string;
-  onChangeDraft: (value: string) => void;
+
+  onChangeDraft: (
+    value: string,
+  ) => void;
+
   onSave: () => void;
+
   onClose: () => void;
 };
+
+/* ============================================================
+ * MEMO MODAL
+ * ============================================================ */
 
 function MemoEditorModal({
   visible,
@@ -55,50 +102,113 @@ function MemoEditorModal({
   onClose,
 }: MemoEditorModalProps) {
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <View style={styles.memoModalBackdrop}>
-        <View style={styles.memoModalCard}>
-          <Text allowFontScaling={false} style={styles.memoModalTitle}>
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={onClose}
+    >
+      <View
+        style={
+          styles.memoModalBackdrop
+        }
+      >
+        <View
+          style={
+            styles.memoModalCard
+          }
+        >
+          <Text
+            allowFontScaling={
+              false
+            }
+            style={
+              styles.memoModalTitle
+            }
+          >
             {stopName ?? ''} 메모
           </Text>
 
-          <Text allowFontScaling={false} style={styles.memoModalHint}>
+          <Text
+            allowFontScaling={
+              false
+            }
+            style={
+              styles.memoModalHint
+            }
+          >
             좋았던 점, 먹은 음식처럼 남기고 싶은 걸 적어보세요.
           </Text>
 
           <TextInput
             value={draft}
-            onChangeText={onChangeDraft}
+            onChangeText={
+              onChangeDraft
+            }
             placeholder="예: 노을이 예뻤고, 옆 포차에서 먹은 딱새우회가 최고였다."
-            placeholderTextColor={COLORS.textTertiary}
+            placeholderTextColor={
+              COLORS.textTertiary
+            }
             multiline
             autoFocus
-            style={styles.memoInput}
+            style={
+              styles.memoInput
+            }
           />
 
-          <View style={styles.memoModalButtonRow}>
+          <View
+            style={
+              styles.memoModalButtonRow
+            }
+          >
             <Pressable
-              onPress={onClose}
-              style={({ pressed }) => [
-                styles.memoModalButton,
-                styles.memoModalButtonGhost,
-                pressed && styles.cardPressed,
-              ]}
+              onPress={
+                onClose
+              }
+              style={({
+                pressed,
+              }) => [
+                  styles.memoModalButton,
+                  styles.memoModalButtonGhost,
+
+                  pressed &&
+                  styles.cardPressed,
+                ]}
             >
-              <Text allowFontScaling={false} style={styles.memoModalButtonGhostText}>
+              <Text
+                allowFontScaling={
+                  false
+                }
+                style={
+                  styles.memoModalButtonGhostText
+                }
+              >
                 취소
               </Text>
             </Pressable>
 
             <Pressable
-              onPress={onSave}
-              style={({ pressed }) => [
-                styles.memoModalButton,
-                styles.memoModalButtonPrimary,
-                pressed && styles.cardPressed,
-              ]}
+              onPress={
+                onSave
+              }
+              style={({
+                pressed,
+              }) => [
+                  styles.memoModalButton,
+                  styles.memoModalButtonPrimary,
+
+                  pressed &&
+                  styles.cardPressed,
+                ]}
             >
-              <Text allowFontScaling={false} style={styles.memoModalButtonPrimaryText}>
+              <Text
+                allowFontScaling={
+                  false
+                }
+                style={
+                  styles.memoModalButtonPrimaryText
+                }
+              >
                 저장
               </Text>
             </Pressable>
@@ -109,17 +219,31 @@ function MemoEditorModal({
   );
 }
 
+/* ============================================================
+ * PROPS
+ * ============================================================ */
+
 export type RoutePlanViewProps = {
   hasTrip: boolean;
+
   tripId?: string;
+
   stops: PlanStop[];
+
   dayNumbers: number[];
+
   tripStartDate: Date | null;
-  onReorderStops: (day: number, orderedIds: string[]) => void;
+
+  onReorderStops: (
+    day: number,
+    orderedIds: string[],
+  ) => void;
 };
 
-// stops/dayNumbers는 활성 여행의 실제 클립(recordingService)에서
-// 파생된 데이터입니다(부모가 buildPlanData()로 만들어 내려줌).
+/* ============================================================
+ * ROUTE PLAN VIEW
+ * ============================================================ */
+
 export function RoutePlanView({
   hasTrip,
   tripId,
@@ -128,286 +252,1112 @@ export function RoutePlanView({
   tripStartDate,
   onReorderStops,
 }: RoutePlanViewProps) {
-  const [selectedDay, setSelectedDay] = useState(dayNumbers[0] ?? 1);
+  /* ==========================================================
+   * DAY
+   * ========================================================== */
 
-  const [stopMemos, setStopMemos] = useState<Record<string, string>>({});
+  const [
+    selectedDay,
+    setSelectedDay,
+  ] = useState(
+    dayNumbers[0] ?? 1,
+  );
 
-  const [memoModalVisible, setMemoModalVisible] = useState(false);
-  const [activeStopId, setActiveStopId] = useState<string | null>(null);
-  const [memoDraft, setMemoDraft] = useState('');
+  /* ==========================================================
+   * MEMO
+   * ========================================================== */
 
-  // 메모를 AsyncStorage에 저장해서, 일정/지도 탭을 오가며 이 컴포넌트가
-  // 언마운트-리마운트돼도(my-route.tsx가 탭에 따라 조건부로 렌더링함) 메모가
-  // 사라지지 않도록 합니다. tripId가 바뀌면(여행 전환) 그 여행의 메모로 다시 불러옵니다.
+  const [
+    stopMemos,
+    setStopMemos,
+  ] = useState<
+    Record<string, string>
+  >({});
+
+  const [
+    memoModalVisible,
+    setMemoModalVisible,
+  ] = useState(false);
+
+  const [
+    activeStopId,
+    setActiveStopId,
+  ] = useState<
+    string | null
+  >(null);
+
+  const [
+    memoDraft,
+    setMemoDraft,
+  ] = useState('');
+
+  /* ==========================================================
+   * MEMO LOAD
+   * ========================================================== */
+
   useEffect(() => {
     if (!tripId) {
       setStopMemos({});
+
       return;
     }
 
-    let isActive = true;
-    void getStopMemos(tripId).then((memos) => {
-      if (isActive) setStopMemos(memos);
-    });
+    let isActive =
+      true;
+
+    void getStopMemos(
+      tripId,
+    ).then(
+      (memos) => {
+        if (
+          isActive
+        ) {
+          setStopMemos(
+            memos,
+          );
+        }
+      },
+    );
 
     return () => {
-      isActive = false;
+      isActive =
+        false;
     };
   }, [tripId]);
 
-  // 여행을 전환해서 날짜 목록 자체가 바뀌면, 이전 여행의 day 선택이 남아있지
-  // 않도록 첫 번째 날로 되돌립니다.
+  /* ==========================================================
+   * DAY RESET
+   * ========================================================== */
+
   useEffect(() => {
-    if (!dayNumbers.includes(selectedDay)) {
-      setSelectedDay(dayNumbers[0] ?? 1);
+    if (
+      !dayNumbers.includes(
+        selectedDay,
+      )
+    ) {
+      setSelectedDay(
+        dayNumbers[0] ??
+        1,
+      );
     }
+
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dayNumbers]);
 
-  // 드래그로 순서를 바꾸는 동안 즉시 화면에 반영되도록 로컬 상태로 들고 있고,
-  // stops/selectedDay가 바뀌면(다른 날짜로 전환, 새로고침 등) 최신 데이터로 다시 채웁니다.
-  const [dayStops, setDayStops] = useState<PlanStop[]>([]);
+  /* ==========================================================
+   * SELECTED DAY STOPS
+   * ========================================================== */
+
+  const [
+    dayStops,
+    setDayStops,
+  ] = useState<
+    PlanStop[]
+  >([]);
 
   useEffect(() => {
+    const nextStops =
+      stops
+        .filter(
+          (stop) =>
+            stop.day ===
+            selectedDay,
+        )
+        .sort(
+          (
+            a,
+            b,
+          ) =>
+            a.order -
+            b.order,
+        );
+
     setDayStops(
-      stops.filter((stop) => stop.day === selectedDay).sort((a, b) => a.order - b.order),
+      nextStops,
     );
-  }, [stops, selectedDay]);
+  }, [
+    stops,
+    selectedDay,
+  ]);
 
-  // 스톱을 한 칸 위/아래로 옮기고, 바뀐 순서를 바로 저장합니다.
-  const moveStop = useCallback(
-    (index: number, direction: -1 | 1) => {
-      const targetIndex = index + direction;
-      if (targetIndex < 0 || targetIndex >= dayStops.length) return;
+  /* ==========================================================
+   * KAKAO MAP PINS
+   *
+   * 현재 DAY의 장소 중 GPS가 있는 장소만 지도에 표시.
+   *
+   * HomeScreen의 KakaoMapPin 형식과 동일:
+   *
+   * {
+   *   id,
+   *   label,
+   *   lat,
+   *   lng
+   * }
+   * ========================================================== */
 
-      const next = [...dayStops];
-      const [moved] = next.splice(index, 1);
-      next.splice(targetIndex, 0, moved);
+  const routePins =
+    useMemo<
+      KakaoMapPin[]
+    >(() => {
+      return dayStops
+        .filter(
+          (
+            stop,
+          ): stop is PlanStop & {
+            latitude: number;
+            longitude: number;
+          } =>
+            typeof stop.latitude ===
+            'number' &&
+            typeof stop.longitude ===
+            'number' &&
+            Number.isFinite(
+              stop.latitude,
+            ) &&
+            Number.isFinite(
+              stop.longitude,
+            ) &&
+            !(
+              stop.latitude ===
+              0 &&
+              stop.longitude ===
+              0
+            ),
+        )
+        .map(
+          (
+            stop,
+            index,
+          ) => ({
+            id:
+              stop.id,
 
-      setDayStops(next);
-      onReorderStops(
-        selectedDay,
-        next.map((stop) => stop.id),
-      );
-    },
-    [dayStops, selectedDay, onReorderStops],
-  );
+            label:
+              String(
+                index +
+                1,
+              ),
 
-  // 카드를 길게 누르면 뜨는 "위로 이동 / 아래로 이동" 메뉴.
-  const openReorderMenu = useCallback(
-    (stop: PlanStop, index: number) => {
-      const options: {
-        text: string;
-        onPress?: () => void;
-        style?: 'cancel' | 'destructive';
-      }[] = [];
+            lat:
+              stop.latitude,
 
-      if (index > 0) {
-        options.push({ text: '위로 이동', onPress: () => moveStop(index, -1) });
-      }
-      if (index < dayStops.length - 1) {
-        options.push({ text: '아래로 이동', onPress: () => moveStop(index, 1) });
-      }
-      options.push({ text: '취소', style: 'cancel' });
+            lng:
+              stop.longitude,
+          }),
+        );
+    }, [dayStops]);
 
-      Alert.alert(stop.name, '순서를 바꿀 수 있어요.', options);
-    },
-    [dayStops.length, moveStop],
-  );
+  /* ==========================================================
+   * LOCATION STATE
+   * ========================================================== */
 
-  const activeStop = useMemo(
-    () => stops.find((stop) => stop.id === activeStopId) ?? null,
-    [stops, activeStopId],
-  );
+  const hasDayStops =
+    dayStops.length >
+    0;
 
-  const openMemoEditor = (stop: PlanStop) => {
-    setActiveStopId(stop.id);
-    setMemoDraft(stopMemos[stop.id] ?? '');
-    setMemoModalVisible(true);
-  };
+  const hasLocation =
+    routePins.length >
+    0;
 
-  const closeMemoEditor = () => {
-    setMemoModalVisible(false);
-  };
+  /* ==========================================================
+   * REORDER
+   * ========================================================== */
 
-  const saveMemo = () => {
-    if (activeStopId && tripId) {
-      const trimmed = memoDraft.trim();
+  const moveStop =
+    useCallback(
+      (
+        index: number,
+        direction:
+          | -1
+          | 1,
+      ) => {
+        const targetIndex =
+          index +
+          direction;
 
-      setStopMemos((prev) => {
-        const next = { ...prev };
-
-        if (trimmed.length > 0) {
-          next[activeStopId] = trimmed;
-        } else {
-          delete next[activeStopId];
+        if (
+          targetIndex <
+          0 ||
+          targetIndex >=
+          dayStops.length
+        ) {
+          return;
         }
 
-        return next;
-      });
+        const next = [
+          ...dayStops,
+        ];
 
-      void saveStopMemo(tripId, activeStopId, trimmed);
-    }
+        const [moved] =
+          next.splice(
+            index,
+            1,
+          );
 
-    setMemoModalVisible(false);
-  };
+        next.splice(
+          targetIndex,
+          0,
+          moved,
+        );
+
+        /*
+         * 화면에서 번호도 바로 재계산
+         */
+
+        const reordered =
+          next.map(
+            (
+              stop,
+              stopIndex,
+            ) => ({
+              ...stop,
+
+              order:
+                stopIndex +
+                1,
+            }),
+          );
+
+        setDayStops(
+          reordered,
+        );
+
+        onReorderStops(
+          selectedDay,
+
+          reordered.map(
+            (stop) =>
+              stop.id,
+          ),
+        );
+      },
+
+      [
+        dayStops,
+        selectedDay,
+        onReorderStops,
+      ],
+    );
+
+  /* ==========================================================
+   * REORDER MENU
+   * ========================================================== */
+
+  const openReorderMenu =
+    useCallback(
+      (
+        stop: PlanStop,
+        index: number,
+      ) => {
+        const options: {
+          text: string;
+
+          onPress?: () => void;
+
+          style?:
+          | 'cancel'
+          | 'destructive';
+        }[] = [];
+
+        if (
+          index >
+          0
+        ) {
+          options.push({
+            text:
+              '위로 이동',
+
+            onPress:
+              () =>
+                moveStop(
+                  index,
+                  -1,
+                ),
+          });
+        }
+
+        if (
+          index <
+          dayStops.length -
+          1
+        ) {
+          options.push({
+            text:
+              '아래로 이동',
+
+            onPress:
+              () =>
+                moveStop(
+                  index,
+                  1,
+                ),
+          });
+        }
+
+        options.push({
+          text: '취소',
+
+          style:
+            'cancel',
+        });
+
+        Alert.alert(
+          stop.name,
+
+          '순서를 바꿀 수 있어요.',
+
+          options,
+        );
+      },
+
+      [
+        dayStops.length,
+        moveStop,
+      ],
+    );
+
+  /* ==========================================================
+   * ACTIVE STOP
+   * ========================================================== */
+
+  const activeStop =
+    useMemo(
+      () =>
+        stops.find(
+          (stop) =>
+            stop.id ===
+            activeStopId,
+        ) ??
+        null,
+
+      [
+        stops,
+        activeStopId,
+      ],
+    );
+
+  /* ==========================================================
+   * MEMO ACTIONS
+   * ========================================================== */
+
+  const openMemoEditor =
+    (
+      stop: PlanStop,
+    ) => {
+      setActiveStopId(
+        stop.id,
+      );
+
+      setMemoDraft(
+        stopMemos[
+        stop.id
+        ] ?? '',
+      );
+
+      setMemoModalVisible(
+        true,
+      );
+    };
+
+  const closeMemoEditor =
+    () => {
+      setMemoModalVisible(
+        false,
+      );
+    };
+
+  const saveMemo =
+    () => {
+      if (
+        activeStopId &&
+        tripId
+      ) {
+        const trimmed =
+          memoDraft.trim();
+
+        setStopMemos(
+          (prev) => {
+            const next =
+            {
+              ...prev,
+            };
+
+            if (
+              trimmed.length >
+              0
+            ) {
+              next[
+                activeStopId
+              ] =
+                trimmed;
+            } else {
+              delete next[
+                activeStopId
+              ];
+            }
+
+            return next;
+          },
+        );
+
+        void saveStopMemo(
+          tripId,
+          activeStopId,
+          trimmed,
+        );
+      }
+
+      setMemoModalVisible(
+        false,
+      );
+    };
+
+  /* ==========================================================
+   * NO TRIP
+   * ========================================================== */
 
   if (!hasTrip) {
     return (
-      <View style={styles.planEmptyState}>
+      <View
+        style={
+          styles.planEmptyState
+        }
+      >
         <Image
           source={require('@/assets/images/HanOk.png')}
-          style={{ width: 32, height: 32 }}
+          style={{
+            width: 32,
+            height: 32,
+          }}
           contentFit="contain"
         />
-        <Text allowFontScaling={false} style={styles.planEmptyTitle}>
+
+        <Text
+          allowFontScaling={
+            false
+          }
+          style={
+            styles.planEmptyTitle
+          }
+        >
           선택된 여행이 없어요
         </Text>
-        <Text allowFontScaling={false} style={styles.planEmptyDescription}>
+
+        <Text
+          allowFontScaling={
+            false
+          }
+          style={
+            styles.planEmptyDescription
+          }
+        >
           홈 화면 상단에서 여행을 선택하거나 새로 만들어주세요.
         </Text>
       </View>
     );
   }
 
-  if (stops.length === 0) {
+  /* ==========================================================
+   * NO STOPS
+   * ========================================================== */
+
+  if (
+    stops.length ===
+    0
+  ) {
     return (
-      <View style={styles.planEmptyState}>
-        <Ionicons name="videocam-outline" size={32} color={COLORS.textTertiary} />
-        <Text allowFontScaling={false} style={styles.planEmptyTitle}>
+      <View
+        style={
+          styles.planEmptyState
+        }
+      >
+        <Ionicons
+          name="videocam-outline"
+          size={32}
+          color={
+            COLORS.textTertiary
+          }
+        />
+
+        <Text
+          allowFontScaling={
+            false
+          }
+          style={
+            styles.planEmptyTitle
+          }
+        >
           아직 촬영한 클립이 없어요
         </Text>
-        <Text allowFontScaling={false} style={styles.planEmptyDescription}>
+
+        <Text
+          allowFontScaling={
+            false
+          }
+          style={
+            styles.planEmptyDescription
+          }
+        >
           카메라로 이 여행의 첫 순간을 기록해보세요.
         </Text>
       </View>
     );
   }
 
+  /* ==========================================================
+   * MAIN
+   * ========================================================== */
+
   return (
-    <View style={styles.planScreen}>
+    <View
+      style={
+        styles.planScreen
+      }
+    >
       <ScrollView
-        style={styles.alternativeView}
-        contentContainerStyle={styles.planContent}
-        showsVerticalScrollIndicator={false}
+        style={
+          styles.alternativeView
+        }
+        contentContainerStyle={
+          styles.planContent
+        }
+        showsVerticalScrollIndicator={
+          false
+        }
       >
+        {/* ====================================================
+         * DAY SELECTOR
+         * ==================================================== */}
+
         <ScrollView
           horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.dayChipRow}
+          showsHorizontalScrollIndicator={
+            false
+          }
+          contentContainerStyle={
+            styles.dayChipRow
+          }
         >
-          {dayNumbers.map((day) => {
-            const selected = day === selectedDay;
+          {dayNumbers.map(
+            (day) => {
+              const selected =
+                day ===
+                selectedDay;
 
-            return (
-              <HapticPressable
-                key={day}
-                onPress={() => setSelectedDay(day)}
-                style={[styles.dayChip, selected && styles.dayChipSelected]}
-              >
-                <Text
-                  allowFontScaling={false}
-                  style={[styles.dayChipText, selected && styles.dayChipTextSelected]}
+              return (
+                <HapticPressable
+                  key={
+                    day
+                  }
+                  onPress={() =>
+                    setSelectedDay(
+                      day,
+                    )
+                  }
+                  style={[
+                    styles.dayChip,
+
+                    selected &&
+                    styles.dayChipSelected,
+                  ]}
                 >
-                  {getDayLabel(day, tripStartDate)}
-                </Text>
-              </HapticPressable>
-            );
-          })}
+                  <Text
+                    allowFontScaling={
+                      false
+                    }
+                    style={[
+                      styles.dayChipText,
+
+                      selected &&
+                      styles.dayChipTextSelected,
+                    ]}
+                  >
+                    {getDayLabel(
+                      day,
+                      tripStartDate,
+                    )}
+                  </Text>
+                </HapticPressable>
+              );
+            },
+          )}
         </ScrollView>
 
-        <View style={styles.planTimeline}>
-          {dayStops.map((stop, index) => {
-            const memo = stopMemos[stop.id];
+        {/* ====================================================
+         * KAKAO MAP
+         *
+         * 기존 고정 일러스트 지도는 여기서 사용하지 않음.
+         * 실제 촬영/저장된 장소 좌표만 표시.
+         * ==================================================== */}
 
-            return (
-              <View key={stop.id} style={styles.planTimelineRow}>
-                <View style={styles.planTimelineIndicator}>
-                  <View style={styles.planTimelineDot}>
-                    <Text allowFontScaling={false} style={styles.planTimelineDotText}>
-                      {stop.order}
-                    </Text>
-                  </View>
+        <View
+          style={
+            styles.routeMapContainer
+          }
+        >
+          {hasLocation ? (
+            <KakaoMapView
+              pins={
+                routePins
+              }
 
-                  {index < dayStops.length - 1 ? (
-                    <View style={styles.planTimelineLineArea}>
-                      <View style={styles.planTimelineLine} />
-                    </View>
-                  ) : null}
-                </View>
+              /*
+               * 이 화면에서는 현재 위치보다
+               * 여행 장소 경로 자체가 중요하므로 null.
+               */
+              currentLocation={
+                null
+              }
 
-                <Pressable style={styles.planStopCard} onLongPress={() => openReorderMenu(stop, index)}>
-                  <View style={styles.planStopCardTop}>
-                    <View style={styles.planStopStickerCircle}>
-                      <Ionicons name="location" size={18} color={COLORS.primary} />
-                    </View>
+              height={
+                ROUTE_MAP_HEIGHT
+              }
 
-                    <View style={styles.planStopTextArea}>
-                      <Text numberOfLines={1} allowFontScaling={false} style={styles.planStopName}>
-                        {stop.name}
-                      </Text>
-
-                      <Text allowFontScaling={false} style={styles.planStopMeta}>
-                        {stop.source === 'ai-recommendation'
-                          ? 'AI 추천으로 추가됨'
-                          : stop.source === 'manual'
-                          ? '직접 추가한 장소'
-                          : `${stop.time} · 클립 ${stop.clips.length}개`}
-                      </Text>
-                    </View>
-
-                    <Pressable
-                      hitSlop={8}
-                      onPress={() => openReorderMenu(stop, index)}
-                      style={styles.planStopIconButton}
-                    >
-                      <Ionicons name="ellipsis-vertical" size={18} color={COLORS.textSecondary} />
-                    </Pressable>
-                  </View>
-
-                  {memo ? (
-                    <Pressable
-                      onPress={() => openMemoEditor(stop)}
-                      style={({ pressed }) => [styles.planStopMemoBox, pressed && styles.cardPressed]}
-                    >
-                      <Text numberOfLines={3} allowFontScaling={false} style={styles.planStopMemoText}>
-                        {memo}
-                      </Text>
-                    </Pressable>
-                  ) : (
-                    <Pressable
-                      onPress={() => openMemoEditor(stop)}
-                      style={({ pressed }) => [
-                        styles.planStopMemoEmpty,
-                        pressed && styles.cardPressed,
-                      ]}
-                    >
-                      <Ionicons name="add" size={13} color={COLORS.textTertiary} />
-
-                      <Text allowFontScaling={false} style={styles.planStopMemoEmptyText}>
-                        메모 남기기
-                      </Text>
-                    </Pressable>
-                  )}
-                </Pressable>
+              /*
+               * HomeScreen과 동일하게 pathColor를 넘기면
+               * KakaoMapView 내부에서 핀 순서대로 경로를 연결.
+               */
+              pathColor={
+                COLORS.primary
+              }
+            />
+          ) : (
+            <View
+              style={
+                styles.routeMapEmpty
+              }
+            >
+              <View
+                style={
+                  styles.routeMapEmptyIcon
+                }
+              >
+                <Ionicons
+                  name={
+                    hasDayStops
+                      ? 'location-outline'
+                      : 'map-outline'
+                  }
+                  size={
+                    25
+                  }
+                  color={
+                    COLORS.primary
+                  }
+                />
               </View>
-            );
-          })}
 
-          <View style={styles.planAddRow}>
+              <Text
+                allowFontScaling={
+                  false
+                }
+                style={
+                  styles.routeMapEmptyTitle
+                }
+              >
+                {hasDayStops
+                  ? '위치 정보가 없어요'
+                  : '이 날짜에 등록된 장소가 없어요'}
+              </Text>
+
+              <Text
+                allowFontScaling={
+                  false
+                }
+                style={
+                  styles.routeMapEmptyDescription
+                }
+              >
+                {hasDayStops
+                  ? '위치가 저장된 클립을 촬영하면 여행 경로가 지도에 표시됩니다.'
+                  : '영상을 촬영하거나 장소를 추가하면 이곳에 여행 경로가 표시됩니다.'}
+              </Text>
+            </View>
+          )}
+        </View>
+
+        {/* ====================================================
+         * MAP SUMMARY
+         * ==================================================== */}
+
+        {hasLocation ? (
+          <View
+            style={
+              styles.routeSummaryRow
+            }
+          >
+            <View
+              style={
+                styles.routeSummaryIcon
+              }
+            >
+              <Ionicons
+                name="navigate-outline"
+                size={14}
+                color={
+                  COLORS.primary
+                }
+              />
+            </View>
+
+            <Text
+              allowFontScaling={
+                false
+              }
+              style={
+                styles.routeSummaryText
+              }
+            >
+              DAY {selectedDay} · 위치가 기록된 장소 {routePins.length}곳
+            </Text>
+          </View>
+        ) : null}
+
+        {/* ====================================================
+         * TIMELINE
+         * ==================================================== */}
+
+        <View
+          style={
+            styles.planTimeline
+          }
+        >
+          {dayStops.map(
+            (
+              stop,
+              index,
+            ) => {
+              const memo =
+                stopMemos[
+                stop.id
+                ];
+
+              const hasStopLocation =
+                typeof stop.latitude ===
+                'number' &&
+                typeof stop.longitude ===
+                'number' &&
+                Number.isFinite(
+                  stop.latitude,
+                ) &&
+                Number.isFinite(
+                  stop.longitude,
+                ) &&
+                !(
+                  stop.latitude ===
+                  0 &&
+                  stop.longitude ===
+                  0
+                );
+
+              return (
+                <View
+                  key={
+                    stop.id
+                  }
+                  style={
+                    styles.planTimelineRow
+                  }
+                >
+                  {/* ==========================================
+                   * 번호 + 연결선
+                   * ========================================== */}
+
+                  <View
+                    style={
+                      styles.planTimelineIndicator
+                    }
+                  >
+                    <View
+                      style={
+                        styles.planTimelineDot
+                      }
+                    >
+                      <Text
+                        allowFontScaling={
+                          false
+                        }
+                        style={
+                          styles.planTimelineDotText
+                        }
+                      >
+                        {index +
+                          1}
+                      </Text>
+                    </View>
+
+                    {index <
+                      dayStops.length -
+                      1 ? (
+                      <View
+                        style={
+                          styles.planTimelineLineArea
+                        }
+                      >
+                        <View
+                          style={
+                            styles.planTimelineLine
+                          }
+                        />
+                      </View>
+                    ) : null}
+                  </View>
+
+                  {/* ==========================================
+                   * STOP CARD
+                   * ========================================== */}
+
+                  <Pressable
+                    style={
+                      styles.planStopCard
+                    }
+                    onLongPress={() =>
+                      openReorderMenu(
+                        stop,
+                        index,
+                      )
+                    }
+                  >
+                    <View
+                      style={
+                        styles.planStopCardTop
+                      }
+                    >
+                      <View
+                        style={
+                          styles.planStopStickerCircle
+                        }
+                      >
+                        <Ionicons
+                          name={
+                            hasStopLocation
+                              ? 'location'
+                              : 'location-outline'
+                          }
+                          size={
+                            18
+                          }
+                          color={
+                            hasStopLocation
+                              ? COLORS.primary
+                              : COLORS.textTertiary
+                          }
+                        />
+                      </View>
+
+                      <View
+                        style={
+                          styles.planStopTextArea
+                        }
+                      >
+                        <Text
+                          numberOfLines={
+                            1
+                          }
+                          allowFontScaling={
+                            false
+                          }
+                          style={
+                            styles.planStopName
+                          }
+                        >
+                          {
+                            stop.name
+                          }
+                        </Text>
+
+                        <Text
+                          allowFontScaling={
+                            false
+                          }
+                          style={
+                            styles.planStopMeta
+                          }
+                        >
+                          {stop.source ===
+                            'ai-recommendation'
+                            ? 'AI 추천으로 추가됨'
+                            : stop.source ===
+                              'manual'
+                              ? '직접 추가한 장소'
+                              : `${stop.time} · 클립 ${stop.clips.length}개`}
+                        </Text>
+
+                        {!hasStopLocation ? (
+                          <Text
+                            allowFontScaling={
+                              false
+                            }
+                            style={
+                              styles.planStopLocationWarning
+                            }
+                          >
+                            위치 정보 없음
+                          </Text>
+                        ) : null}
+                      </View>
+
+                      <Pressable
+                        hitSlop={
+                          8
+                        }
+                        onPress={() =>
+                          openReorderMenu(
+                            stop,
+                            index,
+                          )
+                        }
+                        style={
+                          styles.planStopIconButton
+                        }
+                      >
+                        <Ionicons
+                          name="ellipsis-vertical"
+                          size={
+                            18
+                          }
+                          color={
+                            COLORS.textSecondary
+                          }
+                        />
+                      </Pressable>
+                    </View>
+
+                    {/* ========================================
+                     * MEMO
+                     * ======================================== */}
+
+                    {memo ? (
+                      <Pressable
+                        onPress={() =>
+                          openMemoEditor(
+                            stop,
+                          )
+                        }
+                        style={({
+                          pressed,
+                        }) => [
+                            styles.planStopMemoBox,
+
+                            pressed &&
+                            styles.cardPressed,
+                          ]}
+                      >
+                        <Text
+                          numberOfLines={
+                            3
+                          }
+                          allowFontScaling={
+                            false
+                          }
+                          style={
+                            styles.planStopMemoText
+                          }
+                        >
+                          {
+                            memo
+                          }
+                        </Text>
+                      </Pressable>
+                    ) : (
+                      <Pressable
+                        onPress={() =>
+                          openMemoEditor(
+                            stop,
+                          )
+                        }
+                        style={({
+                          pressed,
+                        }) => [
+                            styles.planStopMemoEmpty,
+
+                            pressed &&
+                            styles.cardPressed,
+                          ]}
+                      >
+                        <Ionicons
+                          name="add"
+                          size={
+                            13
+                          }
+                          color={
+                            COLORS.textTertiary
+                          }
+                        />
+
+                        <Text
+                          allowFontScaling={
+                            false
+                          }
+                          style={
+                            styles.planStopMemoEmptyText
+                          }
+                        >
+                          메모 남기기
+                        </Text>
+                      </Pressable>
+                    )}
+                  </Pressable>
+                </View>
+              );
+            },
+          )}
+
+          {/* ==================================================
+           * ADD PLACE
+           * ================================================== */}
+
+          <View
+            style={
+              styles.planAddRow
+            }
+          >
             <Pressable
               onPress={() => {
-                if (!tripId) return;
+                if (
+                  !tripId
+                ) {
+                  return;
+                }
+
                 router.push({
-                  pathname: '/add-place',
-                  params: { tripId, day: String(selectedDay) },
+                  pathname:
+                    '/add-place',
+
+                  params: {
+                    tripId,
+
+                    day: String(
+                      selectedDay,
+                    ),
+                  },
                 });
               }}
-              style={({ pressed }) => [styles.planAddButton, pressed && styles.cardPressed]}
-            >
-              <Ionicons name="add" size={16} color={COLORS.textSecondary} />
+              style={({
+                pressed,
+              }) => [
+                  styles.planAddButton,
 
-              <Text allowFontScaling={false} style={styles.planAddButtonText}>
+                  pressed &&
+                  styles.cardPressed,
+                ]}
+            >
+              <Ionicons
+                name="add"
+                size={16}
+                color={
+                  COLORS.textSecondary
+                }
+              />
+
+              <Text
+                allowFontScaling={
+                  false
+                }
+                style={
+                  styles.planAddButtonText
+                }
+              >
                 장소 추가
               </Text>
             </Pressable>
@@ -415,393 +1365,846 @@ export function RoutePlanView({
         </View>
       </ScrollView>
 
+      {/* ======================================================
+       * MEMO MODAL
+       * ====================================================== */}
+
       <MemoEditorModal
-        visible={memoModalVisible}
-        stopName={activeStop?.name ?? null}
-        draft={memoDraft}
-        onChangeDraft={setMemoDraft}
-        onSave={saveMemo}
-        onClose={closeMemoEditor}
+        visible={
+          memoModalVisible
+        }
+        stopName={
+          activeStop?.name ??
+          null
+        }
+        draft={
+          memoDraft
+        }
+        onChangeDraft={
+          setMemoDraft
+        }
+        onSave={
+          saveMemo
+        }
+        onClose={
+          closeMemoEditor
+        }
       />
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  cardPressed: {
-    opacity: 0.8,
-    transform: [{ scale: 0.99 }],
-  },
-
-  alternativeView: {
-    flex: 1,
-  },
-
-  planScreen: {
-    flex: 1,
-  },
-
-  planEmptyState: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 40,
-    paddingBottom: 120,
-    gap: SPACING.sm,
-  },
-
-  planEmptyTitle: {
-    marginTop: SPACING.xs,
-    color: COLORS.textPrimary,
-    fontSize: 15,
-    lineHeight: 21,
-    fontWeight: '700',
-  },
-
-  planEmptyDescription: {
-    color: COLORS.textSecondary,
-    fontSize: 12,
-    lineHeight: 18,
-    fontWeight: '500',
-    textAlign: 'center',
-  },
-
-  planContent: {
-    paddingHorizontal: SPACING.screenH,
-    paddingTop: SPACING.md,
-    paddingBottom: 190,
-  },
+/* ============================================================
+ * STYLES
+ * ============================================================ */
 
-  dayChipRow: {
-    flexDirection: 'row',
-    gap: SPACING.sm,
+const styles =
+  StyleSheet.create({
+    /* ========================================================
+     * COMMON
+     * ======================================================== */
 
-    paddingBottom: SPACING.xs,
-  },
+    cardPressed: {
+      opacity: 0.8,
 
-  dayChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
+      transform: [
+        {
+          scale: 0.99,
+        },
+      ],
+    },
 
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
+    alternativeView: {
+      flex: 1,
+    },
 
-    borderRadius: RADIUS.banner,
+    planScreen: {
+      flex: 1,
 
-    backgroundColor: SHARED_COLORS.surface,
-  },
+      backgroundColor:
+        COLORS.background,
+    },
 
-  dayChipSelected: {
-    backgroundColor: COLORS.primary,
-  },
+    /* ========================================================
+     * EMPTY STATE
+     * ======================================================== */
 
-  dayChipText: {
-    color: COLORS.textPrimary,
+    planEmptyState: {
+      flex: 1,
 
-    fontSize: 13,
-    fontWeight: '400',
-  },
+      alignItems:
+        'center',
 
-  dayChipTextSelected: {
-    color: '#FFFFFF',
-  },
+      justifyContent:
+        'center',
 
-  planTimeline: {
-    marginTop: 32,
-  },
+      paddingHorizontal:
+        40,
 
-  planTimelineRow: {
-    flexDirection: 'row',
-    gap: SPACING.sm,
-  },
+      paddingBottom:
+        120,
 
-  planTimelineIndicator: {
-    width: 40,
+      gap: SPACING.sm,
+    },
 
-    alignItems: 'center',
-  },
+    planEmptyTitle: {
+      marginTop:
+        SPACING.xs,
 
-  planTimelineDot: {
-    width: 22,
-    height: 22,
+      color:
+        COLORS.textPrimary,
 
-    borderRadius: 11,
+      fontSize: 15,
 
-    alignItems: 'center',
-    justifyContent: 'center',
+      lineHeight: 21,
 
-    backgroundColor: COLORS.primary,
-  },
+      fontWeight:
+        '700',
+    },
 
-  planTimelineDotText: {
-    color: '#FFFFFF',
+    planEmptyDescription:
+    {
+      color:
+        COLORS.textSecondary,
 
-    fontSize: 10,
-    lineHeight: 13,
-    fontWeight: '800',
-  },
+      fontSize: 12,
 
-  planTimelineLineArea: {
-    flex: 1,
-    width: '100%',
+      lineHeight: 18,
 
-    minHeight: 40,
+      fontWeight:
+        '500',
 
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+      textAlign:
+        'center',
+    },
 
-  planTimelineLine: {
-    position: 'absolute',
-    top: 3,
-    bottom: 3,
+    /* ========================================================
+     * CONTENT
+     * ======================================================== */
 
-    width: 2,
+    planContent: {
+      paddingHorizontal:
+        SPACING.screenH,
 
-    backgroundColor: COLORS.routeSoft,
-  },
+      paddingTop:
+        SPACING.md,
 
-  planStopStickerCircle: {
-    width: 44,
-    height: 44,
+      paddingBottom:
+        190,
+    },
 
-    marginRight: SPACING.sm,
+    /* ========================================================
+     * DAY SELECTOR
+     * ======================================================== */
 
-    borderRadius: RADIUS.sheet,
+    dayChipRow: {
+      flexDirection:
+        'row',
 
-    alignItems: 'center',
-    justifyContent: 'center',
+      gap:
+        SPACING.sm,
 
-    backgroundColor: COLORS.primarySoft,
-  },
+      paddingBottom:
+        SPACING.xs,
+    },
 
-  planStopCard: {
-    flex: 1,
-    marginBottom: SPACING.sm,
+    dayChip: {
+      flexDirection:
+        'row',
 
-    paddingHorizontal: 13,
-    paddingVertical: SPACING.sm,
+      alignItems:
+        'center',
 
-    borderRadius: RADIUS.banner,
+      paddingHorizontal:
+        SPACING.md,
 
-    backgroundColor: '#FBFBFA',
-  },
+      paddingVertical:
+        SPACING.sm,
 
-  planStopCardTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
+      borderRadius:
+        RADIUS.banner,
 
-  planStopTextArea: {
-    flex: 1,
-  },
+      backgroundColor:
+        SHARED_COLORS.surface,
+    },
 
-  planStopName: {
-    color: COLORS.textPrimary,
+    dayChipSelected: {
+      backgroundColor:
+        COLORS.primary,
+    },
 
-    fontSize: 14,
-    lineHeight: 19,
-    fontWeight: '700',
-  },
+    dayChipText: {
+      color:
+        COLORS.textPrimary,
 
-  planStopMeta: {
-    marginTop: SPACING.xs,
+      fontSize: 13,
 
-    color: COLORS.textSecondary,
+      fontWeight:
+        '400',
+    },
 
-    fontSize: 11,
-    lineHeight: 16,
-    fontWeight: '500',
-  },
+    dayChipTextSelected:
+    {
+      color:
+        '#FFFFFF',
 
-  planStopIconButton: {
-    width: 30,
-    height: 30,
+      fontWeight:
+        '700',
+    },
 
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+    /* ========================================================
+     * KAKAO MAP
+     * ======================================================== */
 
-  planStopMemoBox: {
-    marginTop: SPACING.sm,
+    routeMapContainer: {
+      width: '100%',
 
-    paddingHorizontal: 11,
-    paddingVertical: SPACING.sm,
+      height:
+        ROUTE_MAP_HEIGHT,
 
-    borderRadius: RADIUS.card,
+      marginTop: 20,
 
-    backgroundColor: COLORS.primarySoft,
-  },
+      borderRadius:
+        24,
 
-  planStopMemoText: {
-    color: COLORS.textPrimary,
+      overflow:
+        'hidden',
 
-    fontSize: 12,
-    lineHeight: 18,
-    fontWeight: '500',
-  },
+      backgroundColor:
+        '#F5F5F3',
 
-  planStopMemoEmpty: {
-    marginTop: SPACING.sm,
+      borderWidth: 1,
 
-    paddingVertical: SPACING.sm,
+      borderColor:
+        'rgba(20, 20, 20, 0.05)',
+    },
 
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: SPACING.xs,
+    routeMapEmpty: {
+      flex: 1,
 
-    borderRadius: RADIUS.card,
+      alignItems:
+        'center',
 
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderStyle: 'dashed',
-  },
+      justifyContent:
+        'center',
 
-  planStopMemoEmptyText: {
-    color: COLORS.textTertiary,
+      paddingHorizontal:
+        30,
 
-    fontSize: 11,
-    lineHeight: 15,
-    fontWeight: '600',
-  },
+      backgroundColor:
+        '#F7F6F3',
+    },
 
-  planAddRow: {
-    flexDirection: 'row',
-    gap: SPACING.sm,
+    routeMapEmptyIcon:
+    {
+      width: 50,
 
-    marginTop: SPACING.xs,
-  },
+      height: 50,
 
-  planAddButton: {
-    flex: 1,
+      borderRadius:
+        25,
 
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: SPACING.xs,
+      alignItems:
+        'center',
 
-    paddingVertical: 11,
+      justifyContent:
+        'center',
 
-    borderRadius: RADIUS.card,
+      marginBottom:
+        10,
 
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderStyle: 'dashed',
-  },
+      backgroundColor:
+        COLORS.primarySoft,
+    },
 
-  planAddButtonText: {
-    color: COLORS.textSecondary,
+    routeMapEmptyTitle:
+    {
+      color:
+        COLORS.textPrimary,
 
-    fontSize: 12,
-    lineHeight: 16,
-    fontWeight: '700',
-  },
+      fontSize: 14,
 
-  memoModalBackdrop: {
-    flex: 1,
+      lineHeight: 20,
 
-    alignItems: 'center',
-    justifyContent: 'center',
+      fontWeight:
+        '700',
+    },
 
-    paddingHorizontal: 28,
+    routeMapEmptyDescription:
+    {
+      maxWidth: 250,
 
-    backgroundColor: 'rgba(20,20,18,0.45)',
-  },
+      marginTop: 6,
 
-  memoModalCard: {
-    width: '100%',
+      color:
+        COLORS.textSecondary,
 
-    paddingHorizontal: SPACING.screenH,
-    paddingTop: SPACING.screenH,
-    paddingBottom: SPACING.md,
+      fontSize: 11,
 
-    borderRadius: RADIUS.sheet,
+      lineHeight: 17,
 
-    backgroundColor: COLORS.card,
-  },
+      fontWeight:
+        '500',
 
-  memoModalTitle: {
-    color: COLORS.textPrimary,
+      textAlign:
+        'center',
+    },
 
-    fontSize: 16,
-    lineHeight: 22,
-    fontWeight: '600',
-  },
+    /* ========================================================
+     * MAP SUMMARY
+     * ======================================================== */
 
-  memoModalHint: {
-    marginTop: SPACING.xs,
+    routeSummaryRow: {
+      flexDirection:
+        'row',
 
-    color: COLORS.textSecondary,
+      alignItems:
+        'center',
 
-    fontSize: 12,
-    lineHeight: 17,
-    fontWeight: '500',
-  },
+      marginTop: 10,
 
-  memoInput: {
-    marginTop: SPACING.md,
+      paddingHorizontal:
+        4,
+    },
 
-    minHeight: 96,
+    routeSummaryIcon: {
+      width: 26,
 
-    paddingHorizontal: 13,
-    paddingVertical: 11,
+      height: 26,
 
-    borderRadius: RADIUS.card,
+      borderRadius:
+        13,
 
-    color: COLORS.textPrimary,
+      alignItems:
+        'center',
 
-    fontSize: 14,
-    lineHeight: 19,
-    fontFamily: 'Pretendard-Medium',
+      justifyContent:
+        'center',
 
-    textAlignVertical: 'top',
+      marginRight: 7,
 
-    backgroundColor: COLORS.primarySoft,
-  },
+      backgroundColor:
+        COLORS.primarySoft,
+    },
 
-  memoModalButtonRow: {
-    flexDirection: 'row',
-    gap: SPACING.sm,
+    routeSummaryText: {
+      color:
+        COLORS.textSecondary,
 
-    marginTop: SPACING.md,
-  },
+      fontSize: 11,
 
-  memoModalButton: {
-    flex: 1,
+      lineHeight: 15,
 
-    alignItems: 'center',
-    justifyContent: 'center',
+      fontWeight:
+        '600',
+    },
 
-    paddingVertical: SPACING.sm,
+    /* ========================================================
+     * TIMELINE
+     * ======================================================== */
 
-    borderRadius: RADIUS.card,
-  },
+    planTimeline: {
+      marginTop: 28,
+    },
 
-  memoModalButtonGhost: {
-    backgroundColor: COLORS.background,
+    planTimelineRow:
+    {
+      flexDirection:
+        'row',
 
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
+      gap:
+        SPACING.sm,
+    },
 
-  memoModalButtonGhostText: {
-    color: COLORS.textSecondary,
+    planTimelineIndicator:
+    {
+      width: 40,
 
-    fontSize: 13,
-    lineHeight: 17,
-    fontWeight: '700',
-  },
+      alignItems:
+        'center',
+    },
 
-  memoModalButtonPrimary: {
-    backgroundColor: COLORS.primary,
-  },
+    planTimelineDot: {
+      width: 22,
 
-  memoModalButtonPrimaryText: {
-    color: '#FFFFFF',
+      height: 22,
 
-    fontSize: 13,
-    lineHeight: 17,
-    fontWeight: '800',
-  },
-});
+      borderRadius:
+        11,
+
+      alignItems:
+        'center',
+
+      justifyContent:
+        'center',
+
+      backgroundColor:
+        COLORS.primary,
+    },
+
+    planTimelineDotText:
+    {
+      color:
+        '#FFFFFF',
+
+      fontSize: 10,
+
+      lineHeight: 13,
+
+      fontWeight:
+        '800',
+    },
+
+    planTimelineLineArea:
+    {
+      flex: 1,
+
+      width:
+        '100%',
+
+      minHeight: 40,
+
+      alignItems:
+        'center',
+
+      justifyContent:
+        'center',
+    },
+
+    planTimelineLine: {
+      position:
+        'absolute',
+
+      top: 3,
+
+      bottom: 3,
+
+      width: 2,
+
+      backgroundColor:
+        COLORS.routeSoft,
+    },
+
+    /* ========================================================
+     * STOP CARD
+     * ======================================================== */
+
+    planStopStickerCircle:
+    {
+      width: 44,
+
+      height: 44,
+
+      marginRight:
+        SPACING.sm,
+
+      borderRadius:
+        RADIUS.sheet,
+
+      alignItems:
+        'center',
+
+      justifyContent:
+        'center',
+
+      backgroundColor:
+        COLORS.primarySoft,
+    },
+
+    planStopCard: {
+      flex: 1,
+
+      marginBottom:
+        SPACING.sm,
+
+      paddingHorizontal:
+        13,
+
+      paddingVertical:
+        SPACING.sm,
+
+      borderRadius:
+        RADIUS.banner,
+
+      backgroundColor:
+        '#FBFBFA',
+    },
+
+    planStopCardTop: {
+      flexDirection:
+        'row',
+
+      alignItems:
+        'center',
+    },
+
+    planStopTextArea: {
+      flex: 1,
+
+      minWidth: 0,
+    },
+
+    planStopName: {
+      color:
+        COLORS.textPrimary,
+
+      fontSize: 14,
+
+      lineHeight: 19,
+
+      fontWeight:
+        '700',
+    },
+
+    planStopMeta: {
+      marginTop:
+        SPACING.xs,
+
+      color:
+        COLORS.textSecondary,
+
+      fontSize: 11,
+
+      lineHeight: 16,
+
+      fontWeight:
+        '500',
+    },
+
+    planStopLocationWarning:
+    {
+      marginTop: 2,
+
+      color:
+        '#B6AAA0',
+
+      fontSize: 10,
+
+      lineHeight: 14,
+
+      fontWeight:
+        '500',
+    },
+
+    planStopIconButton:
+    {
+      width: 30,
+
+      height: 30,
+
+      alignItems:
+        'center',
+
+      justifyContent:
+        'center',
+    },
+
+    /* ========================================================
+     * MEMO
+     * ======================================================== */
+
+    planStopMemoBox: {
+      marginTop:
+        SPACING.sm,
+
+      paddingHorizontal:
+        11,
+
+      paddingVertical:
+        SPACING.sm,
+
+      borderRadius:
+        RADIUS.card,
+
+      backgroundColor:
+        COLORS.primarySoft,
+    },
+
+    planStopMemoText: {
+      color:
+        COLORS.textPrimary,
+
+      fontSize: 12,
+
+      lineHeight: 18,
+
+      fontWeight:
+        '500',
+    },
+
+    planStopMemoEmpty:
+    {
+      marginTop:
+        SPACING.sm,
+
+      paddingVertical:
+        SPACING.sm,
+
+      flexDirection:
+        'row',
+
+      alignItems:
+        'center',
+
+      justifyContent:
+        'center',
+
+      gap:
+        SPACING.xs,
+
+      borderRadius:
+        RADIUS.card,
+
+      borderWidth: 1,
+
+      borderColor:
+        COLORS.border,
+
+      borderStyle:
+        'dashed',
+    },
+
+    planStopMemoEmptyText:
+    {
+      color:
+        COLORS.textTertiary,
+
+      fontSize: 11,
+
+      lineHeight: 15,
+
+      fontWeight:
+        '600',
+    },
+
+    /* ========================================================
+     * ADD PLACE
+     * ======================================================== */
+
+    planAddRow: {
+      flexDirection:
+        'row',
+
+      gap:
+        SPACING.sm,
+
+      marginTop:
+        SPACING.xs,
+    },
+
+    planAddButton: {
+      flex: 1,
+
+      flexDirection:
+        'row',
+
+      alignItems:
+        'center',
+
+      justifyContent:
+        'center',
+
+      gap:
+        SPACING.xs,
+
+      paddingVertical:
+        11,
+
+      borderRadius:
+        RADIUS.card,
+
+      borderWidth: 1,
+
+      borderColor:
+        COLORS.border,
+
+      borderStyle:
+        'dashed',
+    },
+
+    planAddButtonText:
+    {
+      color:
+        COLORS.textSecondary,
+
+      fontSize: 12,
+
+      lineHeight: 16,
+
+      fontWeight:
+        '700',
+    },
+
+    /* ========================================================
+     * MODAL
+     * ======================================================== */
+
+    memoModalBackdrop:
+    {
+      flex: 1,
+
+      alignItems:
+        'center',
+
+      justifyContent:
+        'center',
+
+      paddingHorizontal:
+        28,
+
+      backgroundColor:
+        'rgba(20,20,18,0.45)',
+    },
+
+    memoModalCard: {
+      width:
+        '100%',
+
+      paddingHorizontal:
+        SPACING.screenH,
+
+      paddingTop:
+        SPACING.screenH,
+
+      paddingBottom:
+        SPACING.md,
+
+      borderRadius:
+        RADIUS.sheet,
+
+      backgroundColor:
+        COLORS.card,
+    },
+
+    memoModalTitle: {
+      color:
+        COLORS.textPrimary,
+
+      fontSize: 16,
+
+      lineHeight: 22,
+
+      fontWeight:
+        '600',
+    },
+
+    memoModalHint: {
+      marginTop:
+        SPACING.xs,
+
+      color:
+        COLORS.textSecondary,
+
+      fontSize: 12,
+
+      lineHeight: 17,
+
+      fontWeight:
+        '500',
+    },
+
+    memoInput: {
+      marginTop:
+        SPACING.md,
+
+      minHeight: 96,
+
+      paddingHorizontal:
+        13,
+
+      paddingVertical:
+        11,
+
+      borderRadius:
+        RADIUS.card,
+
+      color:
+        COLORS.textPrimary,
+
+      fontSize: 14,
+
+      lineHeight: 19,
+
+      fontFamily:
+        'Pretendard-Medium',
+
+      textAlignVertical:
+        'top',
+
+      backgroundColor:
+        COLORS.primarySoft,
+    },
+
+    memoModalButtonRow:
+    {
+      flexDirection:
+        'row',
+
+      gap:
+        SPACING.sm,
+
+      marginTop:
+        SPACING.md,
+    },
+
+    memoModalButton: {
+      flex: 1,
+
+      alignItems:
+        'center',
+
+      justifyContent:
+        'center',
+
+      paddingVertical:
+        SPACING.sm,
+
+      borderRadius:
+        RADIUS.card,
+    },
+
+    memoModalButtonGhost:
+    {
+      backgroundColor:
+        COLORS.background,
+
+      borderWidth: 1,
+
+      borderColor:
+        COLORS.border,
+    },
+
+    memoModalButtonGhostText:
+    {
+      color:
+        COLORS.textSecondary,
+
+      fontSize: 13,
+
+      lineHeight: 17,
+
+      fontWeight:
+        '700',
+    },
+
+    memoModalButtonPrimary:
+    {
+      backgroundColor:
+        COLORS.primary,
+    },
+
+    memoModalButtonPrimaryText:
+    {
+      color:
+        '#FFFFFF',
+
+      fontSize: 13,
+
+      lineHeight: 17,
+
+      fontWeight:
+        '800',
+    },
+  });
+
+export default RoutePlanView;

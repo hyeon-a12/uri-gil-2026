@@ -185,7 +185,7 @@ export default function TripDetailScreen() {
 
       {/* 실제 좌표 지도는 아직 연결 전이라, 목업 이미지로만 위치를 잡아둡니다. */}
       <View style={styles.mapWrapper}>
-        <RouteMapPreview height={200} />
+        {/* <RouteMapPreview height={200} /> */}
       </View>
 
       <RoutePlanView
