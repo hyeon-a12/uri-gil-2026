@@ -4,8 +4,13 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>우리길 카카오맵</title>
+  <!-- 앱 폰트(Pretendard)와 통일하기 위해 CDN에서 로드합니다. 이 페이지는
+       RN 번들과 별개로 GitHub Pages에서 서빙되는 정적 페이지라 로컬
+       폰트 파일(assets/fonts)을 그대로 쓸 수 없습니다. -->
+  <link rel="stylesheet" as="style" crossorigin
+    href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css" />
   <style>
-    html, body, #map { width: 100%; height: 100%; margin: 0; padding: 0; }
+    html, body, #map { width: 100%; height: 100%; margin: 0; padding: 0; font-family: 'Pretendard', sans-serif; }
     #debug {
       display: none;
       position: fixed;
@@ -162,7 +167,7 @@
 
           var color = pin.color || DEFAULT_ACCENT;
           var content =
-            '<div style="width:24px;height:24px;border-radius:12px;background:' + color + ';border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,0.25);display:flex;align-items:center;justify-content:center;font-size:10px;color:#fff;font-weight:700;">' +
+            '<div style="width:24px;height:24px;border-radius:12px;background:' + color + ';border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,0.25);display:flex;align-items:center;justify-content:center;font-family:\'Pretendard\',sans-serif;font-size:10px;color:#fff;font-weight:700;">' +
             (pin.label || '') +
             '</div>';
 
