@@ -36,9 +36,6 @@ def register(user: UserCreate, db: Session = Depends(get_db)):
         email=user.email,
         password=hashed_password.decode("utf-8"),
         nickname=user.nickname,
-        marketing_consent=user.marketing_consent,
-        sms_consent=user.sms_consent,
-        email_consent=user.email_consent,
     )
     db.add(new_user)
     db.commit()
