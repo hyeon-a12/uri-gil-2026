@@ -60,7 +60,7 @@ export default function ProfileEditScreen() {
           await SecureStore.deleteItemAsync('user_id');
           await SecureStore.deleteItemAsync('nickname');
           useAuthStore.getState().setLoggedIn(false);
-          router.replace('/login');
+          router.replace('/onboarding');
         },
       },
     ]);
@@ -79,7 +79,7 @@ export default function ProfileEditScreen() {
             await SecureStore.deleteItemAsync('user_id');
             await SecureStore.deleteItemAsync('nickname');
             useAuthStore.getState().setLoggedIn(false);
-            router.replace('/login');
+            router.replace('/onboarding');
           } catch (error) {
             console.error('[handleWithdraw] 탈퇴 실패:', error);
             Alert.alert('탈퇴 실패', '잠시 후 다시 시도해주세요.');

@@ -69,6 +69,12 @@ type KakaoMapViewProps = {
    * "핀 전체를 감싸지 말고 내 위치로만 중심을 옮겨라"라는 신호도 됩니다.
    */
   focusOnLocationToken?: number;
+  /**
+   * "내 위치로" 중심 이동 시, 지도 컨테이너의 기하학적 중앙 대신 이 값(px)
+   * 만큼 위로 올려서 중심을 잡습니다. 바텀시트처럼 지도 아래쪽을 가리는
+   * 오버레이가 있을 때, 내 위치 마커가 그 밑에 가려지지 않게 하기 위함입니다.
+   */
+  centerOffsetY?: number;
   onError?: (message: string) => void;
 };
 
@@ -80,6 +86,7 @@ function buildMapUrl(
   level: number,
   pathColor: string,
   focusOnLocationToken: number | undefined,
+  centerOffsetY: number | undefined,
 ): string {
   const jsKey = process.env.EXPO_PUBLIC_KAKAO_JS_KEY ?? '';
 
@@ -97,6 +104,10 @@ function buildMapUrl(
   if (focusOnLocationToken !== undefined) {
     params.set('centerMode', 'me');
     params.set('focusToken', String(focusOnLocationToken));
+
+    if (centerOffsetY) {
+      params.set('centerOffsetY', String(centerOffsetY));
+    }
   }
 
   return `${MAP_PAGE_URL}?${params.toString()}`;
@@ -109,13 +120,14 @@ export default function KakaoMapView({
   level = 4,
   pathColor = DEFAULT_ACCENT,
   focusOnLocationToken,
+  centerOffsetY,
   onError,
 }: KakaoMapViewProps) {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const mapUrl = useMemo(
-    () => buildMapUrl(pins, currentLocation, level, pathColor, focusOnLocationToken),
-    [pins, currentLocation, level, pathColor, focusOnLocationToken],
+    () => buildMapUrl(pins, currentLocation, level, pathColor, focusOnLocationToken, centerOffsetY),
+    [pins, currentLocation, level, pathColor, focusOnLocationToken, centerOffsetY],
   );
 
   const handleMessage = (event: WebViewMessageEvent) => {

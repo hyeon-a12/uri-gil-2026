@@ -85,6 +85,10 @@
     // "내 위치로" 버튼을 눌렀을 때만 'me'로 넘어옵니다 — 이때는 핀 전체를
     // 감싸는 setBounds 대신 내 위치 하나로만 중심을 옮겨야 합니다.
     var centerMode = getParam('centerMode', 'fit');
+    // 화면 위에 바텀시트 등이 떠 있어서 지도 컨테이너의 기하학적 중앙이
+    // 실제로는 가려져 있는 경우, 내 위치 마커를 그만큼 위로(픽셀 단위)
+    // 옮겨서 가려지지 않는 영역 안에 보이게 합니다.
+    var centerOffsetY = Number(getParam('centerOffsetY', '0'));
 
     var DEFAULT_ACCENT = '#FFB134';
     var CURRENT_LOCATION_COLOR = '#4285F4';
@@ -192,8 +196,20 @@
 
         if (centerMode === 'me' && currentLocation) {
           // "내 위치로" 버튼: 핀들과 상관없이 내 위치 하나로만 중심을 옮깁니다.
-          map.setCenter(new kakao.maps.LatLng(currentLocation.lat, currentLocation.lng));
+          var myLatLng = new kakao.maps.LatLng(currentLocation.lat, currentLocation.lng);
+          map.setCenter(myLatLng);
           map.setLevel(level);
+
+          if (centerOffsetY) {
+            // myLatLng을 컨테이너 정중앙에 둔 뒤, 그 픽셀 좌표를 위로
+            // centerOffsetY만큼 옮긴 지점의 좌표를 새 중심으로 삼습니다.
+            // 그러면 myLatLng 자체는 새 중심보다 centerOffsetY픽셀 위에서
+            // 렌더링되어, 화면 아래쪽(바텀시트 등)에 가려지지 않습니다.
+            var projection = map.getProjection();
+            var centerPoint = projection.containerPointFromCoords(myLatLng);
+            var shiftedPoint = new kakao.maps.Point(centerPoint.x, centerPoint.y + centerOffsetY);
+            map.setCenter(projection.coordsFromContainerPoint(shiftedPoint));
+          }
         } else if (pins.length >= 2 || (pins.length >= 1 && currentLocation)) {
           map.setBounds(bounds, 60);
         }

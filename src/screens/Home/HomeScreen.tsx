@@ -1,4 +1,3 @@
-import MyLocationIcon from '@/assets/images/my-location.svg';
 import NoPlaceIcon from '@/assets/images/no_place.svg';
 import { AppText as Text } from '@/components/AppText';
 import { ClipPreviewModal } from '@/components/ClipPreview/ClipPreviewModal';
@@ -54,6 +53,13 @@ const SHEET_PEEK_HEIGHT = SCREEN_HEIGHT * 0.46;
 const SHEET_EXPANDED_TOP_OFFSET = 118;
 // 지도 우선 상태에서 시트를 완전히 숨기지 않고, 헤더와 손잡이가 보일 정도로 남깁니다.
 const SHEET_MAP_FOCUS_VISIBLE_HEIGHT = 245;
+
+// "내 위치로" 버튼을 누르면 시트를 기본 peek 상태로 되돌리는데(아래
+// PullUpSheet 참고), 그 상태에서 지도의 가려지지 않은 영역은 화면 위쪽
+// SHEET_PEEK_HEIGHT만큼입니다. 내 위치 마커를 그 영역의 세로 중앙에 오도록,
+// 지도 컨테이너의 기하학적 중앙(SCREEN_HEIGHT/2)보다 이만큼(px) 위로 올려서
+// 중심을 잡습니다.
+const LOCATION_FOCUS_OFFSET_Y = (SCREEN_HEIGHT - SHEET_PEEK_HEIGHT) / 2;
 
 /** 활성 여행의 클립 중 실제 GPS 좌표가 찍힌 것만 지도 핀으로 씁니다.
  * (좌표 미기록 클립은 location이 (0,0) 더미값이라 지도에 올리면 왜곡됩니다.) */
@@ -551,9 +557,9 @@ function PullUpSheet({
     SCREEN_HEIGHT - SHEET_EXPANDED_TOP_OFFSET - SHEET_MAP_FOCUS_VISIBLE_HEIGHT;
   const SNAP_POINTS = [0, DRAG_RANGE, MAP_FOCUS_TRANSLATE];
 
-  const translateY = useRef(new Animated.Value(DRAG_RANGE)).current; // 기본값: 균형 보기
-  const currentValueRef = useRef(DRAG_RANGE);
-  const dragStartRef = useRef(DRAG_RANGE);
+  const translateY = useRef(new Animated.Value(MAP_FOCUS_TRANSLATE)).current; // 기본값: 지도 크게 보기
+  const currentValueRef = useRef(MAP_FOCUS_TRANSLATE);
+  const dragStartRef = useRef(MAP_FOCUS_TRANSLATE);
   const scrollOffsetRef = useRef(0); // 내부 ScrollView가 지금 맨 위(0)인지 추적
 
   const [previewClip, setPreviewClip] = useState<ClipItem | null>(null);
@@ -654,8 +660,16 @@ function PullUpSheet({
           { transform: [{ translateY }] },
         ]}
       >
-        <HapticPressable style={styles.compassButton} onPress={onPressCompass}>
-          <MyLocationIcon width={22} height={22} fill="#000000" />
+        <HapticPressable
+          style={styles.compassButton}
+          onPress={() => {
+            // 시트가 확장돼 있으면 내 위치가 그 밑에 가려질 수 있어서,
+            // 기본 peek 상태로 되돌려 지도가 보이는 영역을 확보합니다.
+            snapTo(DRAG_RANGE);
+            onPressCompass();
+          }}
+        >
+          <Ionicons name="navigate-outline" size={23} color={COLORS.textPrimary} />
         </HapticPressable>
       </Animated.View>
 
@@ -1835,6 +1849,16 @@ export default function TripHomeScreen() {
     void fetchCurrentLocation();
   }, [fetchCurrentLocation]);
 
+  // "내 위치로" 버튼을 눌렀을 때만 지도 중심을 내 위치로 옮기라는 신호를
+  // KakaoMapView에 넘겨줍니다(my-route.tsx의 locateToken과 동일한 이유 —
+  // 좌표가 이전과 같으면 URL이 안 바뀌어 재중심이 안 일어나는 문제 방지).
+  const [locateToken, setLocateToken] = useState(0);
+
+  const handlePressCompass = useCallback(async () => {
+    await fetchCurrentLocation();
+    setLocateToken((prev) => prev + 1);
+  }, [fetchCurrentLocation]);
+
   return (
     <View style={styles.screen}>
       {/* 지도는 네모 박스 안에 갇히지 않고 화면 전체 폭을 그대로 채웁니다.
@@ -1845,6 +1869,8 @@ export default function TripHomeScreen() {
           currentLocation={currentLocation}
           height={SCREEN_HEIGHT}
           pathColor={COLORS.accent}
+          focusOnLocationToken={locateToken || undefined}
+          centerOffsetY={LOCATION_FOCUS_OFFSET_Y}
         />
       </View>
 
@@ -1856,7 +1882,7 @@ export default function TripHomeScreen() {
         categoryResults={categoryResults}
         isSearchingCategory={isSearching}
         onPressCategory={(category) => void handleCategorySearch(category)}
-        onPressCompass={() => void fetchCurrentLocation()}
+        onPressCompass={() => void handlePressCompass()}
       />
 
       <AiRecommendationScreen
@@ -2194,21 +2220,16 @@ const styles = StyleSheet.create({
   compassButtonWrapper: {
     position: "absolute",
     right: 16,
-    top: SHEET_EXPANDED_TOP_OFFSET - 44 - 16,
+    top: SHEET_EXPANDED_TOP_OFFSET - 46 - 16,
     zIndex: 5,
   },
   compassButton: {
-    width: 44,
-    height: 44,
-    borderRadius: RADIUS.sheet,
+    width: 46,
+    height: 46,
+    borderRadius: 23,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: COLORS.white,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.15,
-    shadowRadius: 6,
-    elevation: 4,
+    backgroundColor: "rgba(255,255,255,0.93)",
   },
 
   // 바텀시트
