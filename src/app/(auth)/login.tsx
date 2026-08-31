@@ -239,6 +239,7 @@ const styles = StyleSheet.create({
     color: '#222222',
     fontFamily: 'Pretendard-Regular',
     fontSize: 15,
+    letterSpacing: 0,
     marginBottom: 20,
   },
 
@@ -261,6 +262,7 @@ const styles = StyleSheet.create({
     color: '#222222',
     fontFamily: 'Pretendard-Regular',
     fontSize: 15,
+    letterSpacing: 0,
   },
 
   passwordToggle: {
