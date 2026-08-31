@@ -6,9 +6,9 @@ import { colors } from '@/constants/menu-theme';
 export const cardShadow = {
   shadowColor: colors.shadow,
   shadowOffset: { width: 0, height: 2 },
-  shadowOpacity: 0.05,
+  shadowOpacity: 0.03,
   shadowRadius: 8,
-  elevation: 2,
+  elevation: 0.5,
 };
 
 export function Card({ style, children, ...props }: ViewProps) {

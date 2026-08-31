@@ -49,3 +49,22 @@ export const MAP_COLORS = {
   mapGreen: '#E6F2D8',
   mapCream: '#F7F0DA',
 };
+
+// 화면마다 제각각이던 borderRadius/padding/margin/gap 값을 통일하기 위한 토큰.
+export const RADIUS = {
+  badge: 8,
+  card: 12,
+  banner: 16,
+  sheet: 24,
+  full: 999,
+};
+
+export const SPACING = {
+  xs: 4,
+  sm: 8,
+  md: 16,
+  lg: 24,
+  xl: 32,
+  xxl: 48,
+  screenH: 20,
+};

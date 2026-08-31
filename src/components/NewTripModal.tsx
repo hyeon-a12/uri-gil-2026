@@ -10,24 +10,15 @@ import {
   Dimensions,
   StyleProp,
   ViewStyle,
-  KeyboardAvoidingView,
-  Platform,
+  TextStyle,
   Alert,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { ShootingStyleId } from '@/services/folderService';
-import { COLORS as SHARED_COLORS } from '@/constants/color';
+import { COLORS as SHARED_COLORS, RADIUS, SPACING } from '@/constants/color';
 
-/**
- * ─────────────────────────────────────────────────────────────
- * ⚠️ 색상 관련 참고
- * ─────────────────────────────────────────────────────────────
- * 단색 #FF7F5C 버튼으로 통일하고 싶으시면
- * GRADIENT 배열을 안 쓰고 backgroundColor: COLORS.accent 하나로 바꾸시면 됩니다
- * (아래 PrimaryButton 컴포넌트 안에 분기 처리해뒀어요).
- * 팔레트 v1에서 이 그라데이션은 공식적으로 사용 허용됐습니다.
- */
 const COLORS = {
   accent: SHARED_COLORS.accent,
   accentDark: SHARED_COLORS.accentPressed,
@@ -39,7 +30,6 @@ const COLORS = {
   gray100: SHARED_COLORS.surface,
   white: SHARED_COLORS.background,
 };
-const GRADIENT: [string, string] = [SHARED_COLORS.gradientStart, SHARED_COLORS.accent];
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -240,7 +230,8 @@ function PrimaryButton({
   label: string;
   onPress: () => void;
   disabled?: boolean;
-  icon?: keyof typeof Ionicons.glyphMap;
+  /** true면 버튼 텍스트 왼쪽에 한옥 아이콘을 붙입니다. */
+  icon?: boolean;
   style?: StyleProp<ViewStyle>;
 }) {
   if (disabled) {
@@ -252,22 +243,10 @@ function PrimaryButton({
   }
   return (
     <TouchableOpacity activeOpacity={0.85} onPress={onPress} style={style}>
-      <LinearGradient
-        colors={GRADIENT}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 0 }}
-        style={styles.primaryButton}
-      >
-        {icon && (
-          <Ionicons
-            name={icon}
-            size={16}
-            color={COLORS.white}
-            style={{ marginRight: 6 }}
-          />
-        )}
+      <View style={[styles.primaryButton, { backgroundColor: COLORS.accent }]}>
+
         <Text style={styles.primaryButtonText}>{label}</Text>
-      </LinearGradient>
+      </View>
     </TouchableOpacity>
   );
 }
@@ -322,15 +301,19 @@ function SelectableChip({
   selected,
   onPress,
   showPinIcon,
+  style,
+  textStyle,
 }: {
   label: string;
   selected: boolean;
   onPress: () => void;
   showPinIcon?: boolean;
+  style?: StyleProp<ViewStyle>;
+  textStyle?: StyleProp<TextStyle>;
 }) {
   return (
     <TouchableOpacity
-      style={[styles.chip, selected && styles.chipSelected]}
+      style={[styles.chip, selected && styles.chipSelected, style]}
       onPress={onPress}
       activeOpacity={0.8}
     >
@@ -339,10 +322,10 @@ function SelectableChip({
           name="location"
           size={12}
           color={COLORS.white}
-          style={{ marginRight: 4 }}
+          style={{ marginRight: SPACING.xs }}
         />
       )}
-      <Text style={[styles.chipText, selected && styles.chipTextSelected]}>
+      <Text style={[styles.chipText, selected && styles.chipTextSelected, textStyle]}>
         {label}
       </Text>
     </TouchableOpacity>
@@ -361,6 +344,13 @@ export default function NewTripModal({
 }: Props) {
   const [step, setStep] = useState<Step>(1);
   const [form, setForm] = useState<TripForm>(INITIAL_FORM);
+
+  // 이 모달은 탭 화면(홈/내 루트) 위에 뜨는데, 안드로이드 하단 탭바가
+  // position:'absolute' + elevation으로 떠 있어서 모달의 마지막 버튼과
+  // z-order가 꼬여 탭바에 가려 보일 수 있습니다. 버튼을 탭바 높이만큼
+  // 더 스크롤해서 위로 끌어올릴 수 있도록 콘텐츠 하단에 여유 공간을 둡니다.
+  const insets = useSafeAreaInsets();
+  const bottomScrollClearance = 130 + insets.bottom;
 
   // 수정 모드로 열릴 때마다 기존 여행 값으로 폼을 채우고 1단계부터 보여줍니다.
   useEffect(() => {
@@ -465,11 +455,8 @@ export default function NewTripModal({
       animationType="slide"
       onRequestClose={handleClose}
     >
-      <KeyboardAvoidingView
-        style={styles.overlay}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      >
-        <View style={styles.card}>
+      <View style={styles.overlay}>
+        <View style={[styles.card, step === 'success' && styles.cardSuccess]}>
           {step !== 'success' && (
             <>
               <View style={styles.headerRow}>
@@ -481,7 +468,7 @@ export default function NewTripModal({
                     <TouchableOpacity
                       onPress={handleDeletePress}
                       hitSlop={10}
-                      style={{ marginRight: 16 }}
+                      style={{ marginRight: SPACING.md }}
                     >
                       <Ionicons name="trash-outline" size={20} color={COLORS.accent} />
                     </TouchableOpacity>
@@ -500,7 +487,11 @@ export default function NewTripModal({
 
           {/* ── STEP 1: 기본 정보 ─────────────────────────── */}
           {step === 1 && (
-            <ScrollView style={styles.body} showsVerticalScrollIndicator={false}>
+            <ScrollView
+              style={styles.body}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={{ paddingBottom: bottomScrollClearance }}
+            >
               <Text style={styles.fieldLabel}>
                 여행 이름 <Text style={styles.required}>*</Text>
               </Text>
@@ -529,20 +520,10 @@ export default function NewTripModal({
                     selected={form.region === region}
                     onPress={() => toggleRegion(region)}
                     showPinIcon
+                    style={styles.regionChip}
                   />
                 ))}
               </View>
-
-              <Text style={styles.fieldLabel}>한 줄 메모 (선택)</Text>
-              <TextInput
-                style={styles.textInput}
-                placeholder="예) 친구들과 전주 맛집 탐방"
-                placeholderTextColor={COLORS.gray400}
-                value={form.memo}
-                onChangeText={(text) =>
-                  setForm((prev) => ({ ...prev, memo: text }))
-                }
-              />
 
               <View style={{ height: 24 }} />
               <PrimaryButton
@@ -556,7 +537,11 @@ export default function NewTripModal({
 
           {/* ── STEP 2: 일정 ──────────────────────────────── */}
           {step === 2 && (
-            <ScrollView style={styles.body} showsVerticalScrollIndicator={false}>
+            <ScrollView
+              style={styles.body}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={{ paddingBottom: bottomScrollClearance }}
+            >
               <Text style={styles.fieldLabel}>출발일</Text>
 
               {(!form.startDate || !form.endDate) && (
@@ -748,7 +733,7 @@ export default function NewTripModal({
                 <TouchableOpacity style={styles.backButton} onPress={() => setStep(1)}>
                   <Ionicons name="chevron-back" size={20} color={COLORS.black} />
                 </TouchableOpacity>
-                <View style={{ flex: 1, marginLeft: 12 }}>
+                <View style={{ flex: 1, marginLeft: SPACING.sm }}>
                   <PrimaryButton
                     label="다음 →"
                     disabled={!isStep2Valid}
@@ -762,7 +747,11 @@ export default function NewTripModal({
 
           {/* ── STEP 3: 테마 + 요약 ───────────────────────── */}
           {step === 3 && (
-            <ScrollView style={styles.body} showsVerticalScrollIndicator={false}>
+            <ScrollView
+              style={styles.body}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={{ paddingBottom: bottomScrollClearance }}
+            >
               <Text style={styles.fieldLabel}>
                 여행 테마 <Text style={styles.fieldLabelMuted}>(중복 선택 가능)</Text>
               </Text>
@@ -776,11 +765,13 @@ export default function NewTripModal({
                     label={theme}
                     selected={form.themes.includes(theme)}
                     onPress={() => toggleTheme(theme)}
+                    style={styles.themeChip}
+                    textStyle={styles.themeChipText}
                   />
                 ))}
               </View>
 
-              <Text style={[styles.fieldLabel, { marginTop: 8 }]}>여행 요약</Text>
+              <Text style={[styles.fieldLabel, { marginTop: SPACING.lg }]}>여행 요약</Text>
               <View style={styles.summaryCard}>
                 <SummaryRow icon="pencil-outline" label="여행 이름" value={form.name || '-'} />
                 <SummaryRow icon="location-outline" label="지역" value={form.region || '-'} />
@@ -808,10 +799,10 @@ export default function NewTripModal({
                 <TouchableOpacity style={styles.backButton} onPress={() => setStep(2)}>
                   <Ionicons name="chevron-back" size={20} color={COLORS.black} />
                 </TouchableOpacity>
-                <View style={{ flex: 1, marginLeft: 12 }}>
+                <View style={{ flex: 1, marginLeft: SPACING.sm }}>
                   <PrimaryButton
-                    label={mode === 'edit' ? '저장' : '여행 만들기!'}
-                    icon={mode === 'edit' ? undefined : 'airplane-outline'}
+                    label={mode === 'edit' ? '저장' : '여행 만들기'}
+                    icon={mode !== 'edit'}
                     onPress={mode === 'edit' ? handleSave : handleCreate}
                   />
                 </View>
@@ -842,7 +833,7 @@ export default function NewTripModal({
             </View>
           )}
         </View>
-      </KeyboardAvoidingView>
+      </View>
     </Modal>
   );
 }
@@ -905,21 +896,34 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: COLORS.white,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    borderTopLeftRadius: RADIUS.sheet,
+    borderTopRightRadius: RADIUS.sheet,
     paddingHorizontal: CARD_HORIZONTAL_PADDING,
-    paddingTop: 22,
-    maxHeight: SCREEN_HEIGHT * 0.9, // 화면 높이를 넘지 않도록 90%로 상한
+    paddingTop: SPACING.lg,
+    // minHeight/maxHeight(범위)만 있으면 카드 자체 높이가 콘텐츠에 따라
+    // 유동적으로 정해져서, 그 안의 ScrollView(styles.body)가 flex:1로
+    // 기준 삼을 "확정된 높이"가 없었습니다 — 그래서 스크롤 뷰가 자기 콘텐츠
+    // 크기만큼 그냥 늘어나 버려 실제로는 스크롤이 안 되고, 화면 밖(안드로이드
+    // 하단 탭바 영역)으로 버튼이 그냥 넘쳐 흘렀습니다. 고정 height로 바꿔서
+    // ScrollView가 진짜 스크롤 가능한 영역을 갖게 합니다.
+    height: SCREEN_HEIGHT * 0.88,
+  },
+  // 성공 화면은 내용이 짧아서 위 고정 height를 그대로 쓰면 카드 아래쪽에
+  // 빈 공간이 많이 남아 UI가 불필요하게 길어 보였습니다. height를 다시
+  // undefined로 되돌려서(스텝 1~3과 달리 스크롤이 필요 없으니) 카드가
+  // 콘텐츠 높이만큼만 짧게 잡히도록 합니다.
+  cardSuccess: {
+    height: undefined,
   },
   headerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: SPACING.md,
   },
   headerTitle: {
-    fontSize: 18,
-    fontWeight: '800',
+    fontSize: 17,
+    fontWeight: '700',
     color: COLORS.black,
   },
   headerActions: {
@@ -929,7 +933,7 @@ const styles = StyleSheet.create({
   stepIndicatorRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: SPACING.screenH,
   },
   stepCircle: {
     width: 22,
@@ -954,20 +958,20 @@ const styles = StyleSheet.create({
     width: 20,
     height: 1,
     backgroundColor: COLORS.gray200,
-    marginHorizontal: 4,
+    marginHorizontal: SPACING.xs,
   },
   stepLabel: {
-    marginLeft: 10,
+    marginLeft: SPACING.sm,
     fontSize: 12,
     color: COLORS.gray500,
   },
-  body: {},
+  body: { flex: 1 },
   fieldLabel: {
-    fontSize: 14,
-    fontWeight: '700',
+    fontSize: 13,
+    fontWeight: '600',
     color: COLORS.black,
-    marginTop: 18,
-    marginBottom: 8,
+    marginTop: SPACING.md,
+    marginBottom: SPACING.sm,
   },
   fieldLabelMuted: {
     fontWeight: '400',
@@ -978,7 +982,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: COLORS.gray400,
     marginTop: -4,
-    marginBottom: 10,
+    marginBottom: SPACING.sm,
   },
   required: {
     color: COLORS.accent,
@@ -987,9 +991,9 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     backgroundColor: COLORS.gray100,
     borderRadius: 20,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    marginBottom: 12,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    marginBottom: SPACING.sm,
   },
   dateHintText: {
     fontSize: 13,
@@ -998,10 +1002,10 @@ const styles = StyleSheet.create({
   },
   textInput: {
     backgroundColor: COLORS.gray100,
-    borderRadius: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 14,
+    borderRadius: RADIUS.card,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm * 1.5,
+    fontSize: 13,
     color: COLORS.black,
   },
   inputWithCounter: {
@@ -1017,18 +1021,30 @@ const styles = StyleSheet.create({
   chipWrap: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: SPACING.sm,
   },
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: COLORS.gray100,
     borderRadius: 20,
-    paddingHorizontal: 14,
-    paddingVertical: 9,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
   },
   chipSelected: {
     backgroundColor: COLORS.accent,
+  },
+  // 여행 이름 입력창(textInput)과 높이를 맞추기 위한 '여행 지역' 칩 전용 여백.
+  regionChip: {
+    paddingVertical: SPACING.sm * 1.8,
+  },
+  // '여행 테마' 칩만 기본 크기의 1.5배로.
+  themeChip: {
+    paddingHorizontal: SPACING.md * 1.1,
+    paddingVertical: SPACING.sm * 1.1,
+  },
+  themeChipText: {
+    fontSize: 14,
   },
   chipText: {
     fontSize: 13,
@@ -1040,14 +1056,14 @@ const styles = StyleSheet.create({
   },
   monthRow: {
     flexDirection: 'row',
-    marginBottom: 14,
+    marginBottom: SPACING.md,
   },
   monthChip: {
     backgroundColor: COLORS.gray100,
     borderRadius: 20,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    marginRight: 8,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    marginRight: SPACING.sm,
   },
   monthChipSelected: {
     backgroundColor: COLORS.accent,
@@ -1062,7 +1078,7 @@ const styles = StyleSheet.create({
   },
   weekdayRow: {
     flexDirection: 'row',
-    marginBottom: 6,
+    marginBottom: SPACING.xs,
   },
   weekdayText: {
     flex: 1,
@@ -1080,7 +1096,7 @@ const styles = StyleSheet.create({
     width: CALENDAR_CELL_WIDTH,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 6,
+    paddingVertical: SPACING.xs,
   },
   dayCircle: {
     width: CALENDAR_TRACK_HEIGHT,
@@ -1123,9 +1139,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     backgroundColor: COLORS.gray100,
-    borderRadius: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    borderRadius: RADIUS.card,
+    paddingHorizontal: SPACING.md,
+    // 여행 이름 입력창(textInput)과 세로 크기를 맞춥니다.
+    paddingVertical: SPACING.sm * 1.8,
   },
   stepperLabel: {
     fontSize: 13,
@@ -1135,12 +1152,12 @@ const styles = StyleSheet.create({
   partyLabelRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: SPACING.xs,
   },
   stepper: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: SPACING.sm,
   },
   stepperButton: {
     width: 26,
@@ -1161,14 +1178,14 @@ const styles = StyleSheet.create({
 
   summaryCard: {
     backgroundColor: COLORS.gray100,
-    borderRadius: 16,
-    padding: 16,
-    gap: 12,
+    borderRadius: RADIUS.banner,
+    padding: SPACING.md,
+    gap: SPACING.sm,
   },
   summaryRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: SPACING.sm,
   },
   summaryLabel: {
     fontSize: 12,
@@ -1188,7 +1205,7 @@ const styles = StyleSheet.create({
   backButton: {
     width: 44,
     height: 48,
-    borderRadius: 14,
+    borderRadius: RADIUS.card,
     borderWidth: 1,
     borderColor: COLORS.gray200,
     alignItems: 'center',
@@ -1197,7 +1214,7 @@ const styles = StyleSheet.create({
   primaryButton: {
     flexDirection: 'row',
     height: 48,
-    borderRadius: 14,
+    borderRadius: RADIUS.card,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1216,28 +1233,28 @@ const styles = StyleSheet.create({
   },
   successBody: {
     alignItems: 'center',
-    paddingVertical: 32,
-    paddingHorizontal: 8,
+    paddingVertical: SPACING.xl,
+    paddingHorizontal: SPACING.sm,
   },
   mascotPlaceholder: {
     height: 88,
-    marginBottom: 8,
+    marginBottom: SPACING.sm,
   },
   successTitle: {
     fontSize: 19,
     fontWeight: '800',
     color: COLORS.black,
-    marginBottom: 6,
+    marginBottom: SPACING.xs,
   },
   successTripName: {
     fontSize: 15,
     fontWeight: '700',
     color: COLORS.accent,
-    marginBottom: 4,
+    marginBottom: SPACING.xs,
   },
   successMeta: {
     fontSize: 13,
     color: COLORS.gray500,
-    marginBottom: 16,
+    marginBottom: SPACING.md,
   },
 });

@@ -61,6 +61,14 @@ type KakaoMapViewProps = {
   level?: number;
   /** 방문 경로 점선 색상 */
   pathColor?: string;
+  /**
+   * "내 위치로" 버튼을 누를 때마다 값을 증가시켜서 넘겨주세요. 위치 좌표가
+   * 이전과 완전히 같으면(제자리에서 다시 누른 경우) URL 문자열도 바뀌지
+   * 않아서 WebView가 재로드를 건너뛰는데, 이 토큰이 매번 URL을 바꿔줘서
+   * 항상 재중심(recenter)이 실제로 일어나게 만듭니다. 또한 지도 페이지에
+   * "핀 전체를 감싸지 말고 내 위치로만 중심을 옮겨라"라는 신호도 됩니다.
+   */
+  focusOnLocationToken?: number;
   onError?: (message: string) => void;
 };
 
@@ -71,6 +79,7 @@ function buildMapUrl(
   currentLocation: KakaoMapCurrentLocation | null | undefined,
   level: number,
   pathColor: string,
+  focusOnLocationToken: number | undefined,
 ): string {
   const jsKey = process.env.EXPO_PUBLIC_KAKAO_JS_KEY ?? '';
 
@@ -85,6 +94,11 @@ function buildMapUrl(
     params.set('currentLocation', JSON.stringify(currentLocation));
   }
 
+  if (focusOnLocationToken !== undefined) {
+    params.set('centerMode', 'me');
+    params.set('focusToken', String(focusOnLocationToken));
+  }
+
   return `${MAP_PAGE_URL}?${params.toString()}`;
 }
 
@@ -94,13 +108,14 @@ export default function KakaoMapView({
   currentLocation,
   level = 4,
   pathColor = DEFAULT_ACCENT,
+  focusOnLocationToken,
   onError,
 }: KakaoMapViewProps) {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const mapUrl = useMemo(
-    () => buildMapUrl(pins, currentLocation, level, pathColor),
-    [pins, currentLocation, level, pathColor],
+    () => buildMapUrl(pins, currentLocation, level, pathColor, focusOnLocationToken),
+    [pins, currentLocation, level, pathColor, focusOnLocationToken],
   );
 
   const handleMessage = (event: WebViewMessageEvent) => {
@@ -133,11 +148,14 @@ export default function KakaoMapView({
         javaScriptEnabled
         domStorageEnabled
         startInLoadingState
-        // Android에서 WebView는 하드웨어 서피스로 그려져서, JS 쪽 zIndex/
-        // 렌더 순서와 무관하게 형제 뷰(홈 화면의 바텀시트 등) 위로 겹쳐
-        // 보이는 문제가 있습니다. 'software'로 바꾸면 일반 RN 뷰처럼
-        // 정상적인 순서로 합성돼서 이 문제가 사라집니다(약간의 성능 비용은 있음).
-        androidLayerType="software"
+        // 예전엔 여기서 androidLayerType="software"를 강제했습니다 — Android에서
+        // WebView가 하드웨어 서피스로 그려져서 형제 뷰(홈 화면의 바텀시트 등)
+        // 위로 겹쳐 보이는 문제 때문이었어요. 근데 'software'로 바꾸면 카카오맵이
+        // 캔버스/WebGL로 그리는 실제 지도 부분이 흰 사각형으로 안 그려지는
+        // 부작용이 있어서(배경 워터마크만 보이고 그 위 지도만 빈 흰 박스) 제거했습니다.
+        // 대신 지도 위에 떠야 하는 형제 뷰들엔 zIndex뿐 아니라 elevation도
+        // 같이 줘서(예: my-route.tsx의 mapControls, HomeScreen의 topBarWrapper)
+        // 안드로이드에서도 확실히 지도 위로 올라오게 합니다.
         // 페이지 자체 스크립트가 실행되기 전에 console.*을 가로채서
         // RN 쪽으로 넘깁니다. injectedJavaScript(로드 후 실행)가 아니라
         // BeforeContentLoaded를 쓰는 이유: 우리 지도 페이지의 로그는

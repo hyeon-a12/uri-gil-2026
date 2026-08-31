@@ -6,8 +6,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
  * 직접 입력 장소 결합 규칙이 두 화면에서 절대 어긋나지 않도록 여기 한 곳에서만 관리합니다.
  */
 
-export const SEARCH_RADIUS_METERS = 3000;
-
 export type PlaceCoordinates = {
   latitude: number;
   longitude: number;
@@ -155,7 +153,6 @@ export function usePlaceSearch(coordinates: PlaceCoordinates | null) {
           query: keyword,
           x: String(center.longitude),
           y: String(center.latitude),
-          radius: String(SEARCH_RADIUS_METERS),
           sort: 'distance',
           size: '15',
         });

@@ -172,8 +172,8 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   greetingText: {
-    fontSize: 22,
-    fontWeight: '800',
+    fontSize: 19,
+    fontWeight: '700',
     color: colors.text,
     lineHeight: 28,
   },
@@ -182,13 +182,16 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
   },
   sectionTitle: {
-    fontSize: 16,
+    fontSize: 15,
     color: colors.text,
     marginBottom: 12,
-    fontWeight: '800',
+    fontWeight: '700',
   },
   orderCard: {
     padding: 20,
+    backgroundColor: '#FBFBFA',
+    shadowOpacity: 0,
+    elevation: 0,
   },
   orderCardHeader: {
     flexDirection: 'row',
@@ -198,7 +201,7 @@ const styles = StyleSheet.create({
   },
   orderCardTitle: {
     fontSize: 15,
-    fontWeight: '700',
+    fontWeight: '600',
     color: colors.text,
   },
   orderStatusContainer: {
@@ -213,10 +216,10 @@ const styles = StyleSheet.create({
   // 이 화면에서 사용자가 제일 궁금해할 숫자라, sectionTitle(16)보다도 크고
   // accent 컬러로 확실히 튀게 강조합니다.
   orderStatusNumber: {
-    fontSize: 24,
-    fontWeight: '800',
+    fontSize: 19,
+    fontWeight: '600',
     color: colors.accent,
-    marginBottom: 6,
+    marginBottom: 9,
   },
   orderStatusLabel: {
     fontSize: 11,
@@ -227,15 +230,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    backgroundColor: colors.card,
+    backgroundColor: '#FBFBFA',
     borderRadius: 20,
     paddingVertical: 16,
     paddingHorizontal: 16,
-    shadowColor: colors.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
   },
   activityCardPressed: {
     opacity: 0.85,
@@ -251,11 +249,14 @@ const styles = StyleSheet.create({
   activityCardTitle: {
     flex: 1,
     fontSize: 15,
-    fontWeight: '700',
+    fontWeight: '500',
     color: colors.text,
   },
   menuCard: {
     padding: 16,
+    backgroundColor: '#FBFBFA',
+    shadowOpacity: 0,
+    elevation: 0,
   },
   menuRow: {
     paddingVertical: 20,

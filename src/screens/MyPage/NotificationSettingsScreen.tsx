@@ -35,7 +35,7 @@ export default function NotificationSettingsScreen() {
                 subtitle="새 장소로 이동하면 클립 촬영을 알려드려요"
                 right={
                   <View style={styles.toggleContainer}>
-                    <Toggle value={values.moveClipReminder} onValueChange={setKey('moveClipReminder')} />
+                    <Toggle value={values.moveClipReminder} onValueChange={setKey('moveClipReminder')} scale={1.3} />
                   </View>
                 }
               />
@@ -51,7 +51,7 @@ export default function NotificationSettingsScreen() {
                 subtitle="근처 비혼잡 스팟을 추천해드려요"
                 right={
                   <View style={styles.toggleContainer}>
-                    <Toggle value={values.dispersalTip} onValueChange={setKey('dispersalTip')} />
+                    <Toggle value={values.dispersalTip} onValueChange={setKey('dispersalTip')} scale={1.3} />
                   </View>
                 }
               />

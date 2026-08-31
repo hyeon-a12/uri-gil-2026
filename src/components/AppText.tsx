@@ -1,21 +1,21 @@
 import React from 'react';
 import { Text as RNText, StyleSheet, type TextProps } from 'react-native';
 
-// react-native-native-스타일 기본 폰트(system-ui) 대신 SpoqaHanSansNeo를 앱 전체에 강제 적용하기 위한 공통 Text 컴포넌트입니다.
+// react-native-native-스타일 기본 폰트(system-ui) 대신 Pretendard를 앱 전체에 강제 적용하기 위한 공통 Text 컴포넌트입니다.
 // 커스텀 트루타입 폰트는 fontWeight 값을 자동으로 반영하지 못하므로,
 // 기존 스타일의 fontWeight 값을 읽어서 그에 맞는 폰트 파일(fontFamily)로 바꿔치기 합니다.
 const FONT_BY_WEIGHT: Record<string, string> = {
-  '100': 'SpoqaHanSansNeo-Thin',
-  '200': 'SpoqaHanSansNeo-Thin',
-  '300': 'SpoqaHanSansNeo-Light',
-  '400': 'SpoqaHanSansNeo-Regular',
-  normal: 'SpoqaHanSansNeo-Regular',
-  '500': 'SpoqaHanSansNeo-Medium',
-  '600': 'SpoqaHanSansNeo-Medium',
-  '700': 'SpoqaHanSansNeo-Bold',
-  bold: 'SpoqaHanSansNeo-Bold',
-  '800': 'SpoqaHanSansNeo-Bold',
-  '900': 'SpoqaHanSansNeo-Bold',
+  '100': 'Pretendard-Thin',
+  '200': 'Pretendard-ExtraLight',
+  '300': 'Pretendard-Light',
+  '400': 'Pretendard-Regular',
+  normal: 'Pretendard-Regular',
+  '500': 'Pretendard-Medium',
+  '600': 'Pretendard-SemiBold',
+  '700': 'Pretendard-Bold',
+  bold: 'Pretendard-Bold',
+  '800': 'Pretendard-ExtraBold',
+  '900': 'Pretendard-Black',
 };
 
 export function AppText({ style, ...props }: TextProps) {

@@ -6,12 +6,16 @@ import { AppText as Text } from '@/components/AppText';
 
 import { useTripStore } from '@/store/useTripStore';
 import { TripSwitchSheet } from './TripSwitchSheet';
+import NewTripModal from '@/components/NewTripModal';
+import { useCreateTripModal } from '@/hooks/useCreateTripModal';
 import { COLORS as SHARED_COLORS } from '@/constants/color';
 
 const COLORS = {
   textPrimary: SHARED_COLORS.textPrimary,
   textSecondary: SHARED_COLORS.textSecondary,
   white: SHARED_COLORS.background,
+  accent: SHARED_COLORS.accent,
+  surface: SHARED_COLORS.surface,
 };
 
 /**
@@ -25,6 +29,9 @@ export function TripSelector() {
   const currentTrip = useTripStore((state) => state.currentTrip);
   const [sheetVisible, setSheetVisible] = useState(false);
 
+  const { visible: createModalVisible, openCreateModal, closeCreateModal, handleCreatedTrip } =
+    useCreateTripModal();
+
   return (
     <>
       <View style={[styles.wrapper, { top: insets.top + 12 }]}>
@@ -33,15 +40,40 @@ export function TripSelector() {
           activeOpacity={0.85}
           onPress={() => setSheetVisible(true)}
         >
-          <Ionicons name="airplane-outline" size={18} color={COLORS.textSecondary} />
-          <Text numberOfLines={1} style={styles.tripName}>
-            {currentTrip ? currentTrip.title : '여행을 선택해주세요'}
-          </Text>
-          <Ionicons name="chevron-down" size={18} color={COLORS.textPrimary} />
+          <View style={styles.brand}>
+            <View style={styles.logoMark} />
+          </View>
+
+          <View style={styles.tripInfo}>
+            <Text numberOfLines={1} style={styles.tripLabel}>
+              현재 여행
+            </Text>
+            <Text numberOfLines={1} style={styles.tripName}>
+              {currentTrip ? currentTrip.title : '여행을 선택해주세요'}
+            </Text>
+          </View>
+
+          <View style={styles.chevronButton}>
+            <Ionicons name="chevron-down" size={16} color={COLORS.textSecondary} />
+          </View>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.addButton}
+          activeOpacity={0.85}
+          onPress={openCreateModal}
+        >
+          <Ionicons name="add" size={22} color={COLORS.accent} />
         </TouchableOpacity>
       </View>
 
       <TripSwitchSheet visible={sheetVisible} onClose={() => setSheetVisible(false)} />
+
+      <NewTripModal
+        visible={createModalVisible}
+        onClose={closeCreateModal}
+        onCreated={handleCreatedTrip}
+      />
     </>
   );
 }
@@ -52,25 +84,74 @@ const styles = StyleSheet.create({
     left: 20,
     right: 20,
     zIndex: 10,
+    // 안드로이드에서 카카오맵 WebView가 zIndex와 무관하게 위로 겹쳐 보일 수
+    // 있어서 elevation도 같이 줍니다.
+    elevation: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
   },
   bar: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
     backgroundColor: COLORS.white,
     borderRadius: 24,
-    paddingHorizontal: 16,
-    height: 48,
+    paddingHorizontal: 14,
+    height: 57,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.08,
     shadowRadius: 10,
     elevation: 4,
   },
-  tripName: {
+  addButton: {
+    width: 57,
+    height: 57,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.white,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    elevation: 4,
+  },
+  brand: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  logoMark: {
+    width: 24,
+    height: 24,
+    borderRadius: 8,
+    backgroundColor: COLORS.accent,
+  },
+  tripInfo: {
     flex: 1,
+    marginLeft: 10,
+  },
+  tripLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 0.5,
+    color: COLORS.textSecondary,
+  },
+  tripName: {
+    marginTop: 2,
     fontSize: 14,
-    fontWeight: '700',
+    fontWeight: '600',
     color: COLORS.textPrimary,
+  },
+  chevronButton: {
+    width: 28,
+    height: 26,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.surface,
   },
 });

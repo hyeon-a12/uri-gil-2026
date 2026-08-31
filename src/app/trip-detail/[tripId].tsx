@@ -1,11 +1,12 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import React, { useCallback, useMemo, useState } from 'react';
+import { Alert, Pressable, StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { AppText as Text } from '@/components/AppText';
 import { colors } from '@/constants/menu-theme';
 import { ScreenHeader } from '@/components/common';
 import { RouteMapPreview } from '@/components/RouteMapPreview';
+import { RoutePlanView } from '@/components/RoutePlanView';
 import NewTripModal from '@/components/NewTripModal';
 import {
   deleteFolder,
@@ -16,7 +17,8 @@ import {
 } from '@/services/folderService';
 import { getRecordingsByFolder } from '@/services/recordingService';
 import { getTripScheduleStops } from '@/services/trip-schedule-service';
-import { buildPlanData, type PlanStop, type PlanTravelLog } from '@/services/tripPlanService';
+import { getStopOrder, saveStopOrder } from '@/services/stop-order-service';
+import { buildPlanData, type PlanStop } from '@/services/tripPlanService';
 import { useTripStore, clearCurrentTrip as clearActiveTrip } from '@/store/useTripStore';
 
 function formatDate(date: Date): string {
@@ -37,7 +39,6 @@ export default function TripDetailScreen() {
   const { tripId } = useLocalSearchParams<{ tripId: string }>();
   const [trip, setTrip] = useState<FolderItem | null | undefined>(undefined);
   const [stops, setStops] = useState<PlanStop[]>([]);
-  const [travelLogs, setTravelLogs] = useState<PlanTravelLog[]>([]);
   const [dayNumbers, setDayNumbers] = useState<number[]>([]);
   const [settingsVisible, setSettingsVisible] = useState(false);
 
@@ -49,15 +50,15 @@ export default function TripDetailScreen() {
       return;
     }
 
-    const [recordings, scheduleStops] = await Promise.all([
+    const [recordings, scheduleStops, order] = await Promise.all([
       getRecordingsByFolder(tripId),
       getTripScheduleStops(tripId),
+      getStopOrder(tripId),
     ]);
-    const plan = buildPlanData(recordings, folder, scheduleStops);
+    const plan = buildPlanData(recordings, folder, scheduleStops, order);
 
     setTrip(folder);
     setStops(plan.stops);
-    setTravelLogs(plan.travelLogs);
     setDayNumbers(plan.dayNumbers);
   }, [tripId]);
 
@@ -66,6 +67,21 @@ export default function TripDetailScreen() {
       void loadTrip();
     }, [loadTrip]),
   );
+
+  // RoutePlanView가 화면 안에서 즉시 순서를 반영해주므로, 여기선 다음 방문 때도
+  // 유지되도록 AsyncStorage에 저장만 해줍니다(my-route.tsx의 handleReorderStops와 동일한 역할).
+  const handleReorderStops = useCallback(
+    (day: number, orderedIds: string[]) => {
+      if (!tripId) return;
+      void saveStopOrder(tripId, day, orderedIds);
+    },
+    [tripId],
+  );
+
+  const tripStartDate = useMemo(() => {
+    if (!trip) return null;
+    return parseDateRange(trip.dateRange)?.start ?? null;
+  }, [trip]);
 
   const settingsInitialValues = useMemo(() => {
     if (!trip) return undefined;
@@ -162,11 +178,24 @@ export default function TripDetailScreen() {
             onPress={() => setSettingsVisible(true)}
             style={({ pressed }) => pressed && { opacity: 0.6 }}
           >
-            <Ionicons name="settings-outline" size={22} color={colors.text} />
+            <Ionicons name="pencil" size={20} color={colors.text} />
           </Pressable>
         }
       />
-      <TripPlanView trip={trip} stops={stops} travelLogs={travelLogs} dayNumbers={dayNumbers} />
+
+      {/* 실제 좌표 지도는 아직 연결 전이라, 목업 이미지로만 위치를 잡아둡니다. */}
+      <View style={styles.mapWrapper}>
+        <RouteMapPreview height={200} />
+      </View>
+
+      <RoutePlanView
+        hasTrip
+        tripId={trip.id}
+        stops={stops}
+        dayNumbers={dayNumbers}
+        tripStartDate={tripStartDate}
+        onReorderStops={handleReorderStops}
+      />
 
       <NewTripModal
         visible={settingsVisible}
@@ -181,278 +210,8 @@ export default function TripDetailScreen() {
   );
 }
 
-type TripPlanViewProps = {
-  trip: FolderItem;
-  stops: PlanStop[];
-  travelLogs: PlanTravelLog[];
-  dayNumbers: number[];
-};
-
-// my-route.tsx의 '일정' 탭(RoutePlanView)과 같은 구성(일자별 타임라인 + 이동 중
-// 기록)을 여행 상세에서도 그대로 보여줍니다. 다만 메모 남기기 기능은 뺐어요.
-function TripPlanView({ trip, stops, travelLogs, dayNumbers }: TripPlanViewProps) {
-  const [selectedDay, setSelectedDay] = useState(dayNumbers[0] ?? 1);
-
-  useEffect(() => {
-    if (!dayNumbers.includes(selectedDay)) {
-      setSelectedDay(dayNumbers[0] ?? 1);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dayNumbers]);
-
-  const dayStops = useMemo(
-    () => stops.filter((stop) => stop.day === selectedDay).sort((a, b) => a.order - b.order),
-    [stops, selectedDay],
-  );
-
-  const dayLogs = useMemo(
-    () => travelLogs.filter((log) => log.day === selectedDay),
-    [travelLogs, selectedDay],
-  );
-
-  if (stops.length === 0 && travelLogs.length === 0) {
-    return (
-      <View style={styles.planEmptyState}>
-        <Ionicons name="videocam-outline" size={32} color={colors.textTertiary} />
-        <Text style={styles.planEmptyTitle}>아직 촬영한 클립이 없어요</Text>
-        <Text style={styles.planEmptyDescription}>
-          {trip.title}에서 촬영한 클립이 없어서 일정을 만들 수 없어요.
-        </Text>
-      </View>
-    );
-  }
-
-  return (
-    <View style={styles.planScreen}>
-      <ScrollView contentContainerStyle={styles.planContent} showsVerticalScrollIndicator={false}>
-        <View style={styles.hero}>
-          <Text style={styles.heroTitle}>{trip.dateRange}</Text>
-        </View>
-
-        <View style={styles.mapWrapper}>
-          <RouteMapPreview />
-        </View>
-
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.dayChipRow}
-        >
-          {dayNumbers.map((day) => {
-            const selected = day === selectedDay;
-            return (
-              <Pressable
-                key={day}
-                onPress={() => setSelectedDay(day)}
-                style={[styles.dayChip, selected && styles.dayChipSelected]}
-              >
-                <Text style={[styles.dayChipText, selected && styles.dayChipTextSelected]}>
-                  Day {day}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
-
-        <View style={styles.planTimeline}>
-          {dayStops.map((stop, index) => (
-            <View key={stop.id} style={styles.planTimelineRow}>
-              <View style={styles.planTimelineIndicator}>
-                <View style={styles.planTimelineDot}>
-                  <Text style={styles.planTimelineDotText}>{stop.order}</Text>
-                </View>
-
-                {index < dayStops.length - 1 ? (
-                  <View style={styles.planTimelineLineArea}>
-                    <View style={styles.planTimelineLine} />
-                  </View>
-                ) : null}
-              </View>
-
-              <View style={styles.planStopCard}>
-                <View style={styles.planStopCardTop}>
-                  <View style={styles.planStopTextArea}>
-                    <Text numberOfLines={1} style={styles.planStopName}>
-                      {stop.name}
-                    </Text>
-                    <Text style={styles.planStopMeta}>
-                      {stop.source === 'ai-recommendation'
-                        ? 'AI 추천으로 추가됨'
-                        : stop.source === 'manual'
-                        ? '직접 추가한 장소'
-                        : `${stop.time} · 클립 ${stop.clips.length}개`}
-                    </Text>
-                  </View>
-
-                  <Pressable
-                    hitSlop={8}
-                    onPress={() => {
-                      Alert.alert(stop.name, '장소 상세 정보 화면으로 연결할 예정입니다.');
-                    }}
-                    style={styles.planStopIconButton}
-                  >
-                    <Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />
-                  </Pressable>
-                </View>
-              </View>
-            </View>
-          ))}
-        </View>
-
-        {dayLogs.length > 0 && (
-          <View style={styles.travelLogSection}>
-            <View style={styles.travelLogHeader}>
-              <Text style={styles.travelLogTitle}>이동 중 기록</Text>
-              <Text style={styles.travelLogSubtitle}>장소 미지정 클립</Text>
-            </View>
-
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.travelLogList}
-            >
-              {dayLogs.map((log) => (
-                <Pressable
-                  key={log.id}
-                  onPress={() => {
-                    Alert.alert(
-                      '미분류 기록',
-                      '촬영 시 장소를 입력하지 않은 클립이에요.',
-                    );
-                  }}
-                  style={styles.travelLogItem}
-                >
-                  <View style={styles.travelLogThumbWrapper}>
-                    <Image source={{ uri: log.thumbnail }} style={styles.travelLogThumb} />
-                    <View style={[styles.travelLogBadge, styles.travelLogBadgeUnmatched]}>
-                      <Ionicons name="location-outline" size={9} color={colors.textSub} />
-                    </View>
-                  </View>
-                  <Text numberOfLines={1} style={styles.travelLogTime}>
-                    미분류 · {log.time}
-                  </Text>
-                </Pressable>
-              ))}
-            </ScrollView>
-          </View>
-        )}
-      </ScrollView>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   errorText: { padding: 16, fontSize: 13, color: colors.textSub },
-
-  planScreen: { flex: 1 },
-  planContent: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 40 },
-
-  hero: { paddingBottom: 14 },
-  heroTitle: { fontSize: 13, fontWeight: '700', color: colors.textSub },
-  mapWrapper: { marginBottom: 20 },
-
-  // 헤더 아래 남은 공간이 아니라 화면 전체 높이 기준 정중앙에 오도록 절대 위치로 겹칩니다.
-  planEmptyState: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 40,
-    gap: 8,
-  },
-  planEmptyTitle: { marginTop: 6, color: colors.text, fontSize: 15, fontWeight: '800' },
-  planEmptyDescription: {
-    color: colors.textSub,
-    fontSize: 12,
-    lineHeight: 18,
-    textAlign: 'center',
-  },
-
-  dayChipRow: { flexDirection: 'row', gap: 8, paddingBottom: 4 },
-  dayChip: {
-    paddingHorizontal: 16,
-    paddingVertical: 9,
-    borderRadius: 18,
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  dayChipSelected: { backgroundColor: colors.accentSoft, borderColor: colors.accent },
-  dayChipText: { color: colors.textSub, fontSize: 12, fontWeight: '700' },
-  dayChipTextSelected: { color: colors.accentDark, fontWeight: '800' },
-
-  planTimeline: { marginTop: 20 },
-  planTimelineRow: { flexDirection: 'row', gap: 12 },
-  planTimelineIndicator: { width: 40, alignItems: 'center' },
-  planTimelineDot: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.accent,
-  },
-  planTimelineDotText: { color: '#FFFFFF', fontSize: 10, fontWeight: '800' },
-  planTimelineLineArea: {
-    flex: 1,
-    width: '100%',
-    minHeight: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  planTimelineLine: {
-    position: 'absolute',
-    top: 3,
-    bottom: 3,
-    width: 2,
-    backgroundColor: '#FFD2C2',
-  },
-  planStopCard: {
-    flex: 1,
-    marginBottom: 12,
-    paddingHorizontal: 13,
-    paddingVertical: 12,
-    borderRadius: 16,
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  planStopCardTop: { flexDirection: 'row', alignItems: 'center' },
-  planStopTextArea: { flex: 1 },
-  planStopName: { color: colors.text, fontSize: 14, fontWeight: '800' },
-  planStopMeta: { marginTop: 2, color: colors.textSub, fontSize: 11, fontWeight: '500' },
-  planStopIconButton: { width: 30, height: 30, alignItems: 'center', justifyContent: 'center' },
-
-  travelLogSection: { marginTop: 8 },
-  travelLogHeader: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    justifyContent: 'space-between',
-    marginBottom: 10,
-  },
-  travelLogTitle: { color: colors.text, fontSize: 14, fontWeight: '800' },
-  travelLogSubtitle: { color: colors.textTertiary, fontSize: 11, fontWeight: '500' },
-  travelLogList: { gap: 10 },
-  travelLogItem: { width: 68 },
-  travelLogThumbWrapper: { position: 'relative' },
-  travelLogThumb: { width: 68, height: 68, borderRadius: 14, backgroundColor: '#E8E5DF' },
-  travelLogBadge: {
-    position: 'absolute',
-    right: -3,
-    bottom: -3,
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.accent,
-    borderWidth: 2,
-    borderColor: '#FFFFFF',
-  },
-  travelLogBadgeUnmatched: { backgroundColor: '#FFFFFF' },
-  travelLogTime: { marginTop: 5, color: colors.textSub, fontSize: 10, fontWeight: '600', textAlign: 'center' },
+  mapWrapper: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 4 },
 });

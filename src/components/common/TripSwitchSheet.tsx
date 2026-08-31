@@ -11,11 +11,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { AppText as Text } from '@/components/AppText';
 import { Image } from 'expo-image';
 
-import { getAllFolders, saveFolder, updateFolder, type FolderItem } from '@/services/folderService';
+import { getAllFolders, type FolderItem } from '@/services/folderService';
 import { selectCurrentTrip, useTripStore } from '@/store/useTripStore';
 import NewTripModal from '@/components/NewTripModal';
-import { apiFetch } from '@/services/api';
-import { COLORS as SHARED_COLORS } from '@/constants/color';
+import { useCreateTripModal } from '@/hooks/useCreateTripModal';
+import { COLORS as SHARED_COLORS, RADIUS, SPACING } from '@/constants/color';
 
 const COLORS = {
   background: SHARED_COLORS.background,
@@ -45,7 +45,6 @@ export function TripSwitchSheet({ visible, onClose }: Props) {
   const currentTrip = useTripStore((state) => state.currentTrip);
 
   const [trips, setTrips] = useState<FolderItem[]>([]);
-  const [newTripModalVisible, setNewTripModalVisible] = useState(false);
 
   const loadTrips = async () => {
     try {
@@ -75,77 +74,17 @@ export function TripSwitchSheet({ visible, onClose }: Props) {
     }
   };
 
+  const { visible: newTripModalVisible, openCreateModal, closeCreateModal, handleCreatedTrip } =
+    useCreateTripModal(loadTrips);
+
   const handleOpenNewTripModal = () => {
     // 시트를 먼저 닫고 나서 모달을 띄웁니다 — 두 Modal이 동시에 겹쳐 뜨면
     // 전환 애니메이션이 어색해서, NewTripModal의 slide-up 애니메이션이
     // 자연스럽게 보이도록 살짝 텀을 둡니다.
     onClose();
     setTimeout(() => {
-      setNewTripModalVisible(true);
+      openCreateModal();
     }, 300);
-  };
-
-const handleCreatedTrip: React.ComponentProps<typeof NewTripModal>['onCreated'] = async (
-    trip,
-  ) => {
-    const formatDate = (date: Date) => {
-      const year = date.getFullYear();
-      const month = String(date.getMonth() + 1).padStart(2, '0');
-      const day = String(date.getDate()).padStart(2, '0');
-      return `${year}.${month}.${day}.`;
-    };
-
-    // 서버(Pydantic date 타입)로 보낼 땐 YYYY-MM-DD 형식이 필요함
-    const toIsoDate = (date: Date) => {
-      const year = date.getFullYear();
-      const month = String(date.getMonth() + 1).padStart(2, '0');
-      const day = String(date.getDate()).padStart(2, '0');
-      return `${year}-${month}-${day}`;
-    };
-
-    const folder: FolderItem = {
-      id: `folder-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      title: trip.name.trim(),
-      dateRange: `${formatDate(trip.startDate)} ~ ${formatDate(trip.endDate)}`,
-      thumbnail: '',
-      region: trip.region,
-      memo: trip.memo,
-      partySize: trip.partySize,
-      themes: trip.themes,
-      clipLengthSeconds: trip.clipLengthSeconds,
-      shootingStyle: trip.shootingStyle,
-    };
-
-    try {
-      // 1. 로컬 저장 먼저 (오프라인이어도 여행 생성 자체는 항상 성공하도록)
-      await saveFolder(folder);
-      await selectCurrentTrip(folder);
-      await loadTrips();
-
-      // 2. 서버에도 저장 시도 (실패해도 로컬 흐름은 막지 않음)
-      try {
-        const serverRoute = await apiFetch('/routes/', {
-          method: 'POST',
-          body: JSON.stringify({
-            title: trip.name.trim(),
-            region: trip.region,
-            theme: trip.themes.join(','),
-            description: trip.memo || null,
-            start_date: toIsoDate(trip.startDate),
-            end_date: toIsoDate(trip.endDate),
-            member_count: trip.partySize,
-          }),
-        });
-
-        // 서버가 발급한 route_id를 로컬 데이터에도 연결해둠
-        await updateFolder(folder.id, { routeId: serverRoute.id });
-      } catch (serverError) {
-        console.error('[TripSwitchSheet] 서버 저장 실패 (로컬은 저장됨):', serverError);
-      }
-    } catch (error) {
-      console.error('[TripSwitchSheet] 새 여행 저장에 실패했습니다.', error);
-      Alert.alert('여행 생성 실패', '새 여행을 저장하지 못했습니다.');
-    }
   };
 
   return (
@@ -219,7 +158,7 @@ const handleCreatedTrip: React.ComponentProps<typeof NewTripModal>['onCreated'] 
 
       <NewTripModal
         visible={newTripModalVisible}
-        onClose={() => setNewTripModalVisible(false)}
+        onClose={closeCreateModal}
         onCreated={handleCreatedTrip}
       />
     </>
@@ -232,7 +171,11 @@ function TripThumb({ trip, selected }: { trip: FolderItem; selected: boolean }) 
       {trip.thumbnail ? (
         <Image source={{ uri: trip.thumbnail }} style={styles.thumbImage} contentFit="cover" />
       ) : (
-        <Ionicons name="airplane" size={22} color={selected ? COLORS.primary : COLORS.textSecondary} />
+        <Image
+          source={require('@/assets/images/HanOk.png')}
+          style={{ width: 22, height: 22 }}
+          contentFit="contain"
+        />
       )}
     </View>
   );
@@ -245,9 +188,10 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.overlay,
   },
   sheet: {
-    maxHeight: '75%',
-    paddingHorizontal: 20,
-    paddingTop: 10,
+    minHeight: '55%',
+    maxHeight: '85%',
+    paddingHorizontal: SPACING.screenH,
+    paddingTop: SPACING.sm,
     paddingBottom: 28,
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
@@ -257,38 +201,38 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     width: 42,
     height: 5,
-    marginBottom: 18,
+    marginBottom: SPACING.md,
     borderRadius: 3,
     backgroundColor: '#D7D7D7',
     overflow: 'hidden',
   },
   title: {
-    fontSize: 20,
+    fontSize: 18,
     lineHeight: 27,
-    fontWeight: '800',
+    fontWeight: '700',
     color: COLORS.textPrimary,
   },
   subtitle: {
-    marginTop: 4,
-    marginBottom: 16,
+    marginTop: SPACING.xs,
+    marginBottom: SPACING.md,
     fontSize: 12,
     lineHeight: 17,
     fontWeight: '500',
     color: COLORS.textSecondary,
   },
   list: {
-    maxHeight: 420,
+    maxHeight: 520,
   },
   listContent: {
-    paddingBottom: 4,
+    paddingBottom: SPACING.xs,
   },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     minHeight: 72,
-    paddingVertical: 8,
-    paddingHorizontal: 4,
-    gap: 12,
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.xs,
+    gap: SPACING.sm,
   },
   rowPressed: {
     opacity: 0.7,
@@ -296,7 +240,7 @@ const styles = StyleSheet.create({
   thumb: {
     width: 56,
     height: 56,
-    borderRadius: 16,
+    borderRadius: RADIUS.banner,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#F5F5F5',
@@ -316,25 +260,25 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   rowTitle: {
-    fontSize: 15,
+    fontSize: 14,
     lineHeight: 20,
     fontWeight: '700',
     color: COLORS.textPrimary,
   },
   rowSubtitle: {
-    marginTop: 3,
+    marginTop: SPACING.xs,
     fontSize: 12,
     lineHeight: 16,
-    fontWeight: '500',
+    fontWeight: '400',
     color: COLORS.textSecondary,
   },
   addRow: {
-    marginTop: 4,
+    marginTop: SPACING.xs,
   },
   addThumb: {
     width: 56,
     height: 56,
-    borderRadius: 16,
+    borderRadius: RADIUS.banner,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#F5F5F5',
@@ -343,7 +287,7 @@ const styles = StyleSheet.create({
     borderStyle: 'dashed',
   },
   addLabel: {
-    fontSize: 15,
+    fontSize: 14,
     lineHeight: 20,
     fontWeight: '700',
     color: COLORS.textSecondary,

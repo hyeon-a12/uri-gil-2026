@@ -369,21 +369,21 @@ const styles = StyleSheet.create({
     color: '#222222',
     fontSize: 40,
     lineHeight: 42,
-    fontFamily: 'SpoqaHanSansNeo-Regular',
+    fontFamily: 'Pretendard-Regular',
   },
 
   title: {
     color: '#222222',
     fontSize: 28,
     lineHeight: 39,
-    fontFamily: 'SpoqaHanSansNeo-Bold',
+    fontFamily: 'Pretendard-Bold',
   },
 
   description: {
     color: '#8A8A8A',
     fontSize: 15,
     lineHeight: 23,
-    fontFamily: 'SpoqaHanSansNeo-Regular',
+    fontFamily: 'Pretendard-Regular',
     marginTop: 10,
   },
 
@@ -394,7 +394,7 @@ const styles = StyleSheet.create({
   label: {
     color: '#222222',
     fontSize: 14,
-    fontFamily: 'SpoqaHanSansNeo-Medium',
+    fontFamily: 'Pretendard-Medium',
     marginBottom: 9,
   },
 
@@ -407,14 +407,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 17,
     color: '#222222',
     fontSize: 15,
-    fontFamily: 'SpoqaHanSansNeo-Regular',
+    fontFamily: 'Pretendard-Regular',
     marginBottom: 20,
   },
 
   helperText: {
     color: '#8A8A8A',
     fontSize: 12,
-    fontFamily: 'SpoqaHanSansNeo-Regular',
+    fontFamily: 'Pretendard-Regular',
     marginTop: -12,
     marginBottom: 20,
     marginLeft: 4,
@@ -438,7 +438,7 @@ const styles = StyleSheet.create({
     paddingRight: 8,
     color: '#222222',
     fontSize: 15,
-    fontFamily: 'SpoqaHanSansNeo-Regular',
+    fontFamily: 'Pretendard-Regular',
   },
 
   passwordToggle: {
@@ -450,7 +450,7 @@ const styles = StyleSheet.create({
   passwordToggleText: {
     color: '#FF7F5C',
     fontSize: 13,
-    fontFamily: 'SpoqaHanSansNeo-Medium',
+    fontFamily: 'Pretendard-Medium',
   },
 
   agreementRow: {
@@ -488,7 +488,7 @@ const styles = StyleSheet.create({
     color: '#8A8A8A',
     fontSize: 13,
     lineHeight: 19,
-    fontFamily: 'SpoqaHanSansNeo-Regular',
+    fontFamily: 'Pretendard-Regular',
   },
 
   joinButton: {
@@ -503,7 +503,7 @@ const styles = StyleSheet.create({
   joinButtonText: {
     color: '#FFFFFF',
     fontSize: 16,
-    fontFamily: 'SpoqaHanSansNeo-Bold',
+    fontFamily: 'Pretendard-Bold',
   },
 
   loginRow: {
@@ -516,43 +516,43 @@ const styles = StyleSheet.create({
   loginDescription: {
     color: '#8A8A8A',
     fontSize: 14,
-    fontFamily: 'SpoqaHanSansNeo-Regular',
+    fontFamily: 'Pretendard-Regular',
   },
 
   loginText: {
     color: '#FF7F5C',
     fontSize: 14,
-    fontFamily: 'SpoqaHanSansNeo-Bold',
+    fontFamily: 'Pretendard-Bold',
     marginLeft: 8,
   },
 
 
   termsSection: { marginTop: 8 },
-  termsTitle: { color: '#222222', fontSize: 14, fontFamily: 'SpoqaHanSansNeo-Medium', marginBottom: 12 },
+  termsTitle: { color: '#222222', fontSize: 14, fontFamily: 'Pretendard-Medium', marginBottom: 12 },
   allAgreeRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10 },
   termsTextWrap: { flex: 1 },
-  allAgreeText: { color: '#222222', fontSize: 15, fontFamily: 'SpoqaHanSansNeo-Bold' },
-  allAgreeHelper: { color: '#9A9A9A', fontSize: 11, fontFamily: 'SpoqaHanSansNeo-Regular', marginTop: 3 },
+  allAgreeText: { color: '#222222', fontSize: 15, fontFamily: 'Pretendard-Bold' },
+  allAgreeHelper: { color: '#9A9A9A', fontSize: 11, fontFamily: 'Pretendard-Regular', marginTop: 3 },
   divider: { height: 1, backgroundColor: '#EEEEEE', marginVertical: 8 },
   termRow: { minHeight: 44, flexDirection: 'row', alignItems: 'center' },
   termCheckArea: { flex: 1, flexDirection: 'row', alignItems: 'center', paddingVertical: 8 },
-  termText: { flex: 1, color: '#555555', fontSize: 13, fontFamily: 'SpoqaHanSansNeo-Regular' },
+  termText: { flex: 1, color: '#555555', fontSize: 13, fontFamily: 'Pretendard-Regular' },
   viewTermsButton: { paddingVertical: 10, paddingLeft: 12 },
-  viewTermsText: { color: '#8A8A8A', fontSize: 12, fontFamily: 'SpoqaHanSansNeo-Medium', textDecorationLine: 'underline' },
+  viewTermsText: { color: '#8A8A8A', fontSize: 12, fontFamily: 'Pretendard-Medium', textDecorationLine: 'underline' },
   channelRow: { flexDirection: 'row', paddingLeft: 32, gap: 24, marginTop: 2, marginBottom: 4 },
   channelItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6 },
   smallCheckbox: { width: 18, height: 18, borderRadius: 5, borderWidth: 1, borderColor: '#DDDDDD', alignItems: 'center', justifyContent: 'center', marginRight: 7 },
   smallCheckText: { color: '#FFFFFF', fontSize: 11, fontWeight: '700' },
-  channelText: { color: '#666666', fontSize: 13, fontFamily: 'SpoqaHanSansNeo-Regular' },
+  channelText: { color: '#666666', fontSize: 13, fontFamily: 'Pretendard-Regular' },
   modalBackdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.35)' },
   modalDismissArea: { flex: 1 },
   bottomSheet: { maxHeight: '72%', minHeight: 420, backgroundColor: '#FFFFFF', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 24, paddingTop: 10, paddingBottom: 24 },
   sheetHandle: { width: 40, height: 4, borderRadius: 2, backgroundColor: '#D8D8D8', alignSelf: 'center', marginBottom: 18 },
   sheetHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 },
-  sheetTitle: { flex: 1, color: '#222222', fontSize: 19, fontFamily: 'SpoqaHanSansNeo-Bold', paddingRight: 12 },
-  closeText: { color: '#333333', fontSize: 32, lineHeight: 32, fontFamily: 'SpoqaHanSansNeo-Regular' },
+  sheetTitle: { flex: 1, color: '#222222', fontSize: 19, fontFamily: 'Pretendard-Bold', paddingRight: 12 },
+  closeText: { color: '#333333', fontSize: 32, lineHeight: 32, fontFamily: 'Pretendard-Regular' },
   termsContent: { flexGrow: 0, marginBottom: 20 },
-  termsBody: { color: '#666666', fontSize: 13, lineHeight: 22, fontFamily: 'SpoqaHanSansNeo-Regular' },
+  termsBody: { color: '#666666', fontSize: 13, lineHeight: 22, fontFamily: 'Pretendard-Regular' },
   sheetButton: { height: 54, borderRadius: 16, backgroundColor: '#FF7F5C', alignItems: 'center', justifyContent: 'center' },
-  sheetButtonText: { color: '#FFFFFF', fontSize: 15, fontFamily: 'SpoqaHanSansNeo-Bold' },
+  sheetButtonText: { color: '#FFFFFF', fontSize: 15, fontFamily: 'Pretendard-Bold' },
 });

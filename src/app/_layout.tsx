@@ -9,13 +9,15 @@ SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
   const [fontsLoaded] = useFonts({
-    'SpoqaHanSansNeo-Thin': require('../../assets/fonts/SpoqaHanSansNeo-Thin.ttf'),
-    'SpoqaHanSansNeo-Light': require('../../assets/fonts/SpoqaHanSansNeo-Light.ttf'),
-    'SpoqaHanSansNeo-Regular': require('../../assets/fonts/SpoqaHanSansNeo-Regular.ttf'),
-    'SpoqaHanSansNeo-Medium': require('../../assets/fonts/SpoqaHanSansNeo-Medium.ttf'),
-    'SpoqaHanSansNeo-Bold': require('../../assets/fonts/SpoqaHanSansNeo-Bold.ttf'),
+    'Pretendard-Thin': require('../../assets/fonts/Pretendard-Thin.ttf'),
+    'Pretendard-ExtraLight': require('../../assets/fonts/Pretendard-ExtraLight.ttf'),
+    'Pretendard-Light': require('../../assets/fonts/Pretendard-Light.ttf'),
     'Pretendard-Regular': require('../../assets/fonts/Pretendard-Regular.ttf'),
+    'Pretendard-Medium': require('../../assets/fonts/Pretendard-Medium.ttf'),
+    'Pretendard-SemiBold': require('../../assets/fonts/Pretendard-SemiBold.ttf'),
     'Pretendard-Bold': require('../../assets/fonts/Pretendard-Bold.ttf'),
+    'Pretendard-ExtraBold': require('../../assets/fonts/Pretendard-ExtraBold.ttf'),
+    'Pretendard-Black': require('../../assets/fonts/Pretendard-Black.ttf'),
     'MaruBuri-Regular': require('../../assets/fonts/MaruBuri-Regular.ttf'),
     'MaruBuri-Bold': require('../../assets/fonts/MaruBuri-Bold.ttf'),
     'KERISKEDU-Regular': require('../../assets/fonts/KERISKEDU_R.ttf'),

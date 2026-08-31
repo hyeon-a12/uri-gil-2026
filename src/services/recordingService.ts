@@ -45,7 +45,9 @@ export async function getRecordingsByFolder(
     folderId: string,
 ): Promise<RecordingData[]> {
     const all = await getAllRecordings();
-    return all.filter((r) => r.folderId === folderId);
+    return all
+        .filter((r) => r.folderId === folderId)
+        .sort((a, b) => a.recordedAt.localeCompare(b.recordedAt));
 }
 
 export async function getAllRecordings(): Promise<RecordingData[]> {

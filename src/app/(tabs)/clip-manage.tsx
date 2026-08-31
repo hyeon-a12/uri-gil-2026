@@ -7,6 +7,7 @@ import {
   FlatList,
   Modal,
   TouchableWithoutFeedback,
+  ScrollView,
 } from 'react-native';
 import { AppText as Text } from '@/components/AppText';
 import { Image } from 'expo-image';
@@ -14,11 +15,19 @@ import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { clearActiveFolder, getActiveFolder } from '@/services/activeFolderService';
-import { getAllFolders, saveFolder, deleteFolder as deleteFolderFromStorage, FolderItem } from '@/services/folderService';
+import {
+  getAllFolders,
+  saveFolder,
+  deleteFolder as deleteFolderFromStorage,
+  getFolderStatus,
+  FolderItem,
+  FolderStatus,
+} from '@/services/folderService';
 import { getRecordingsByFolder } from '@/services/recordingService';
 import { useTripStore } from '@/store/useTripStore';
 import NewTripModal from '@/components/NewTripModal';
-import { COLORS as SHARED_COLORS } from '@/constants/color';
+import { HapticPressable } from '@/components/common';
+import { COLORS as SHARED_COLORS, RADIUS, SPACING } from '@/constants/color';
 import { TextInput } from 'react-native-gesture-handler';
 
 const COLORS = {
@@ -36,6 +45,8 @@ const COLORS = {
 
   border: SHARED_COLORS.border,
   divider: SHARED_COLORS.border,
+  surface: SHARED_COLORS.surface,
+  success: SHARED_COLORS.success,
 
   handle: '#999A95',
   shadow: SHARED_COLORS.shadow,
@@ -44,6 +55,46 @@ const COLORS = {
 
   overlay: 'rgba(0,0,0,0.25)',
 };
+
+function StatusChip({
+  label,
+  count,
+  selected,
+  emphasize,
+  countColor,
+  onPress,
+}: {
+  label: string;
+  count?: number;
+  selected: boolean;
+  emphasize?: boolean;
+  countColor?: string;
+  onPress: () => void;
+}) {
+  return (
+    <HapticPressable
+      style={[styles.filterChip, selected && styles.filterChipSelected]}
+      onPress={onPress}
+    >
+      <Text style={[styles.filterChipText, selected && styles.filterChipTextSelected]}>
+        {label}
+      </Text>
+      {count !== undefined && (
+        <Text
+          style={[
+            styles.filterChipCount,
+            selected && styles.filterChipTextSelected,
+            !selected && emphasize && styles.filterChipCountEmphasize,
+            !selected && countColor && { color: countColor },
+          ]}
+        >
+          {' '}
+          {count}
+        </Text>
+      )}
+    </HapticPressable>
+  );
+}
 
 export default function ClipManageScreen() {
   const insets = useSafeAreaInsets();
@@ -55,9 +106,10 @@ export default function ClipManageScreen() {
     }, []),
   );
   
-  type FolderWithCount = FolderItem & { clipCount: number };
+  type FolderWithCount = FolderItem & { clipCount: number; previewThumbnails: string[] };
   const [folders, setFolders] = useState<FolderWithCount[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | FolderStatus>('all');
 
   const loadFolders = async () => {
     try {
@@ -70,6 +122,7 @@ export default function ClipManageScreen() {
           return {
             ...f,
             clipCount: records.length,
+            previewThumbnails: records.slice(0, 3).map((r) => r.thumbnail),
             isCurrentActive: f.id === activeId,
           };
         }),
@@ -93,9 +146,29 @@ export default function ClipManageScreen() {
     useState<FolderItem | null>(null);
   const [newTripModalVisible, setNewTripModalVisible] = useState(false);
 
-  const filteredFolders = folders.filter((f) =>
-    f.title.toLowerCase().includes(searchQuery.toLowerCase()),
+  const filteredFolders = folders.filter((f) => {
+    const matchesQuery = f.title.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesStatus =
+      statusFilter === 'all' || getFolderStatus(f) === statusFilter;
+    return matchesQuery && matchesStatus;
+  });
+
+  const statusCounts = folders.reduce(
+    (counts, f) => {
+      const status = getFolderStatus(f);
+      if (status) counts[status] += 1;
+      return counts;
+    },
+    { before: 0, ing: 0, done: 0 } as Record<FolderStatus, number>,
   );
+
+  const totalClipCount = folders.reduce((sum, f) => sum + f.clipCount, 0);
+
+  const STATUS_LABEL: Record<FolderStatus, string> = {
+    before: '예정',
+    ing: '진행중',
+    done: '완료',
+  };
 
   const handleFolderPress = (folder: FolderItem) => {
     router.push({
@@ -138,7 +211,7 @@ export default function ClipManageScreen() {
     try {
       await saveFolder(newFolder);
       setFolders((prev) => [
-        { ...newFolder, clipCount: 0 },
+        { ...newFolder, clipCount: 0, previewThumbnails: [] },
         ...prev,
       ]);
     } catch (error) {
@@ -181,24 +254,38 @@ export default function ClipManageScreen() {
   };
 
   const renderFolderItem = ({ item }: { item: FolderWithCount }) => {
-    const isActive = item.id === activeFolderId;
+    const status = getFolderStatus(item);
 
     return (
-      <>
-        <TouchableOpacity
-          style={styles.folderCard}
-          activeOpacity={0.7}
-          onPress={() => handleFolderPress(item)}
-        >
-          <Image source={{ uri: item.thumbnail }} style={styles.folderThumbnail} />
-
-          <View style={styles.folderInfo}>
-            <Text style={styles.folderTitle}>
+      <TouchableOpacity
+        style={styles.folderCard}
+        activeOpacity={0.7}
+        onPress={() => handleFolderPress(item)}
+      >
+        <View style={styles.folderCardTopRow}>
+          <View style={styles.folderTitleRow}>
+            <Text style={styles.folderTitle} numberOfLines={1}>
               {item.title}
-              {isActive && <Text style={styles.activeTag}> (진행중)</Text>}
             </Text>
-            <Text style={styles.folderSubText}>{item.dateRange}</Text>
-            <Text style={styles.clipCountText}>클립 {item.clipCount}개</Text>
+            {status && (
+              <View
+                style={[
+                  styles.statusBadge,
+                  status === 'ing' && styles.statusBadgeIng,
+                  status === 'done' && styles.statusBadgeDone,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.statusBadgeText,
+                    status === 'ing' && styles.statusBadgeTextIng,
+                    status === 'done' && styles.statusBadgeTextDone,
+                  ]}
+                >
+                  {STATUS_LABEL[status]}
+                </Text>
+              </View>
+            )}
           </View>
 
           <TouchableOpacity
@@ -210,24 +297,38 @@ export default function ClipManageScreen() {
           >
             <Feather name="more-horizontal" size={20} color={COLORS.textSecondary} />
           </TouchableOpacity>
-        </TouchableOpacity>
+        </View>
 
-        <View style={styles.itemDivider} />
-      </>
+        <Text style={styles.folderSubText}>
+          {item.dateRange} · 클립 {item.clipCount}
+        </Text>
+
+        {item.previewThumbnails.length > 0 && (
+          <View style={styles.folderPreviewRow}>
+            {item.previewThumbnails.map((uri, index) => (
+              <Image
+                key={`${item.id}-${index}`}
+                source={{ uri }}
+                style={styles.folderThumbnail}
+              />
+            ))}
+          </View>
+        )}
+      </TouchableOpacity>
     );
   };
 
   return (
     <View style={styles.screen}>
       <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
-        {/* 탭 루트 화면이라 뒤로가기 개념이 없어서 버튼을 없앴습니다.
-            오른쪽 빈 자리와의 좌우 균형을 위해 같은 폭의 빈 자리만 남겨둡니다. */}
-        <View style={styles.headerButton} />
-
-        <Text allowFontScaling={false} style={styles.headerTitle}>
-          클립 관리
-        </Text>
-        <View style={styles.headerButton} />
+        <View style={styles.headerTextArea}>
+          <Text allowFontScaling={false} style={styles.headerTitle}>
+            클립 관리
+          </Text>
+          <Text allowFontScaling={false} style={styles.headerStats}>
+            여행 {folders.length}개 · 클립 {totalClipCount}개
+          </Text>
+        </View>
       </View>
 
       <View style={styles.searchContainer}>
@@ -248,7 +349,41 @@ export default function ClipManageScreen() {
         </View>
       </View>
 
+      <ScrollView
+        horizontal
+        style={styles.filterScroll}
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.filterRow}
+      >
+        <StatusChip
+          label="전체"
+          selected={statusFilter === 'all'}
+          onPress={() => setStatusFilter('all')}
+        />
+        <StatusChip
+          label="예정"
+          count={statusCounts.before}
+          selected={statusFilter === 'before'}
+          onPress={() => setStatusFilter('before')}
+        />
+        <StatusChip
+          label="진행중"
+          count={statusCounts.ing}
+          selected={statusFilter === 'ing'}
+          onPress={() => setStatusFilter('ing')}
+          emphasize
+        />
+        <StatusChip
+          label="완료"
+          count={statusCounts.done}
+          selected={statusFilter === 'done'}
+          onPress={() => setStatusFilter('done')}
+          countColor={COLORS.success}
+        />
+      </ScrollView>
+
       <FlatList
+        style={styles.list}
         data={filteredFolders}
         keyExtractor={(item) => item.id}
         renderItem={renderFolderItem}
@@ -305,8 +440,8 @@ const styles = StyleSheet.create({
   // Header
   header: {
     minHeight: 92,
-    paddingHorizontal: 18,
-    paddingBottom: 14,
+    paddingHorizontal: SPACING.md,
+    paddingBottom: SPACING.xs,
     flexDirection: 'row',
     alignItems: 'flex-end',
     justifyContent: 'space-between',
@@ -318,53 +453,105 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  headerTextArea: {
+    flex: 1,
+    alignItems: 'center',
+  },
   headerTitle: {
-    paddingBottom: 10,
     color: COLORS.textPrimary,
     fontSize: 19,
     lineHeight: 25,
-    fontWeight: '800',
-    letterSpacing: -0.4,
+    fontWeight: '700',
+    letterSpacing: -0.5,
+  },
+  headerStats: {
+    marginTop: SPACING.xs,
+    color: COLORS.textSecondary,
+    fontSize: 11,
+    lineHeight: 16,
+    fontWeight: '600',
   },
   editButtonText: {
     color: COLORS.primary,
-    fontSize: 14,
+    fontSize: 11,
     lineHeight: 19,
-    fontWeight: '700',
+    fontWeight: '600',
+  },
+
+  // Status filter
+  filterScroll: {
+    flexGrow: 0,
+  },
+  filterRow: {
+    paddingHorizontal: SPACING.screenH,
+    paddingBottom: 8, // 태그 줄 자체의 아래쪽 여백 (px로 직접 조절)
+    flexDirection: 'row',
+    gap: SPACING.sm,
+  },
+  filterChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 38,
+    paddingHorizontal: SPACING.md,
+    borderRadius: RADIUS.banner,
+    backgroundColor: COLORS.background,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  filterChipSelected: {
+    backgroundColor: COLORS.textPrimary,
+    borderColor: COLORS.textPrimary,
+  },
+  filterChipText: {
+    fontSize: 13,
+    fontWeight: '400',
+    color: COLORS.textPrimary,
+  },
+  filterChipTextSelected: {
+    color: '#FFFFFF',
+  },
+  filterChipCount: {
+    fontSize: 13,
+    fontWeight: '300',
+    color: COLORS.textSecondary,
+  },
+  filterChipCountEmphasize: {
+    color: COLORS.primary,
   },
 
   // Search
   searchContainer: {
-    paddingHorizontal: 20,
-    paddingTop: 8,
-    paddingBottom: 12,
+    paddingHorizontal: SPACING.screenH,
+    paddingTop: SPACING.md,
+    paddingBottom: SPACING.md,
   },
   searchBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.background,
-    borderRadius: 12,
-    paddingHorizontal: 15,
-    height: 42,
-    borderWidth: 1,
-    borderColor: COLORS.border,
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.card,
+    paddingHorizontal: SPACING.md,
+    height: 40,
   },
   searchIcon: {
-    marginRight: 8,
+    marginRight: SPACING.sm,
   },
   searchInput: {
     flex: 1,
-    fontSize: 14,
+    fontSize: 12,
+    fontFamily: 'Pretendard-Regular',
     color: COLORS.textPrimary,
     padding: 0,
   },
 
   // List
+  list: {
+    flex: 1,
+  },
   listContent: {
-    justifyContent: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 40,
+    paddingHorizontal: SPACING.screenH,
+    paddingTop: 15, // 목록 시작 전 위쪽 여백 (px로 직접 조절)
+    paddingBottom: 90,
   },
   separator: {
     height: 20,
@@ -377,18 +564,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: COLORS.primarySoft,
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 24,
+    borderRadius: RADIUS.banner,
+    padding: SPACING.screenH,
+    marginBottom: SPACING.lg,
   },
   addButton: {
     width: 44,
     height: 44,
-    borderRadius: 22,
+    borderRadius: RADIUS.sheet,
     backgroundColor: COLORS.primary,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 16,
+    marginRight: SPACING.md,
   },
   bannerTextContainer: {
     justifyContent: 'center',
@@ -397,7 +584,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     color: COLORS.textPrimary,
-    marginBottom: 2,
+    marginBottom: SPACING.xs,
   },
   bannerSubtitle: {
     fontSize: 13,
@@ -409,47 +596,74 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     color: COLORS.textPrimary,
-    marginBottom: 16,
+    marginBottom: SPACING.md,
   },
 
   // Folder Card
   folderCard: {
+    padding: SPACING.md,
+    borderRadius: RADIUS.banner,
+    backgroundColor: '#FBFBFA',
+    marginBottom: SPACING.md,
+  },
+  folderCardTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 20,
+    justifyContent: 'space-between',
   },
-  folderThumbnail: {
-    width: 55,
-    height: 55,
-    borderRadius: 25,
-    backgroundColor: COLORS.border,
-  },
-  folderInfo: {
+  folderTitleRow: {
     flex: 1,
-    marginLeft: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
   },
   folderTitle: {
-    fontSize: 16,
+    flexShrink: 1,
+    fontSize: 15,
     fontWeight: '700',
     color: COLORS.textPrimary,
-    marginBottom: 4,
   },
-  activeTag: {
-    fontSize: 13,
+  statusBadge: {
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 2,
+    borderRadius: RADIUS.badge,
+    backgroundColor: COLORS.background,
+  },
+  statusBadgeIng: {
+    backgroundColor: '#FFF1E4',
+  },
+  statusBadgeDone: {
+    backgroundColor: '#E7F5EA',
+  },
+  statusBadgeText: {
+    fontSize: 11,
     fontWeight: '700',
-    color: COLORS.accent,
+    color: COLORS.textSecondary,
+  },
+  statusBadgeTextIng: {
+    color: COLORS.primary,
+  },
+  statusBadgeTextDone: {
+    color: COLORS.success,
   },
   folderSubText: {
+    marginTop: SPACING.xs,
     fontSize: 13,
     color: COLORS.textSecondary,
-    marginBottom: 2,
   },
-  clipCountText: {
-    fontSize: 12,
-    color: COLORS.textTertiary,
+  folderPreviewRow: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+    marginTop: SPACING.md,
+  },
+  folderThumbnail: {
+    width: 64,
+    height: 64,
+    borderRadius: RADIUS.card,
+    backgroundColor: COLORS.border,
   },
   moreButton: {
-    padding: 8,
+    padding: SPACING.xs,
   },
   itemDivider: {
     height: 1,
@@ -467,9 +681,9 @@ const styles = StyleSheet.create({
   menuBox: {
     width: 220,
     backgroundColor: COLORS.card,
-    borderRadius: 16,
-    paddingVertical: 8,
-    paddingHorizontal: 8,
+    borderRadius: RADIUS.banner,
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.sm,
     shadowColor: '#000',
     shadowOpacity: 0.15,
     shadowRadius: 10,
@@ -479,10 +693,10 @@ const styles = StyleSheet.create({
   menuItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 10,
-    gap: 10,
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.md,
+    borderRadius: RADIUS.badge,
+    gap: SPACING.sm,
   },
   menuText: {
     fontSize: 15,

@@ -16,12 +16,15 @@ export const colors = {
 
   border: SHARED_COLORS.border,
   shadow: SHARED_COLORS.shadow,
+  success: SHARED_COLORS.success,
+  surface: SHARED_COLORS.surface,
+  danger: SHARED_COLORS.danger,
 };
 
-// 여행 상태(예정/여행중/완료) 뱃지처럼, 팔레트에는 없는 상태 표시용 색상입니다.
-// done의 초록색은 v1 팔레트 문서에 없는 값이라 로컬로 유지합니다.
+// 여행 상태(예정/여행중/완료) 뱃지 색상. 클립 관리 화면(clip-manage.tsx)의
+// statusBadge 색상과 맞춰뒀습니다.
 export const statusColors = {
-  before: { bg: colors.border, text: colors.textSub },
-  ing: { bg: colors.accentSoft, text: colors.accentDark },
-  done: { bg: '#E4F1E6', text: '#3E8E5B' },
+  before: { bg: colors.bg, text: colors.textSub },
+  ing: { bg: '#FFF1E4', text: colors.accent },
+  done: { bg: '#E7F5EA', text: colors.success },
 };

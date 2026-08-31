@@ -207,14 +207,14 @@ const styles = StyleSheet.create({
 },
 
   title: {
-    fontFamily: 'SpoqaHanSansNeo-Bold',
+    fontFamily: 'Pretendard-Bold',
     color: '#222222',
     fontSize: 28,
     lineHeight: 38,
   },
 
   description: {
-    fontFamily: 'SpoqaHanSansNeo-Regular',
+    fontFamily: 'Pretendard-Regular',
     color: '#8A8A8A',
     fontSize: 15,
     lineHeight: 23,
@@ -226,7 +226,7 @@ const styles = StyleSheet.create({
   },
 
   label: {
-    fontFamily: 'SpoqaHanSansNeo-Medium',
+    fontFamily: 'Pretendard-Medium',
     color: '#222222',
     fontSize: 14,
     marginBottom: 9,
@@ -240,7 +240,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     paddingHorizontal: 17,
     color: '#222222',
-    fontFamily: 'SpoqaHanSansNeo-Regular',
+    fontFamily: 'Pretendard-Regular',
     fontSize: 15,
     marginBottom: 20,
   },
@@ -262,7 +262,7 @@ const styles = StyleSheet.create({
     paddingLeft: 17,
     paddingRight: 8,
     color: '#222222',
-    fontFamily: 'SpoqaHanSansNeo-Regular',
+    fontFamily: 'Pretendard-Regular',
     fontSize: 15,
   },
 
@@ -273,7 +273,7 @@ const styles = StyleSheet.create({
   },
 
   passwordToggleText: {
-    fontFamily: 'SpoqaHanSansNeo-Medium',
+    fontFamily: 'Pretendard-Medium',
     color: '#FF7F5C',
     fontSize: 13,
   },
@@ -284,7 +284,7 @@ const styles = StyleSheet.create({
   },
 
   findPasswordText: {
-    fontFamily: 'SpoqaHanSansNeo-Regular',
+    fontFamily: 'Pretendard-Regular',
     color: '#8A8A8A',
     fontSize: 13,
   },
@@ -301,13 +301,13 @@ const styles = StyleSheet.create({
   },
 
   joinDescription: {
-    fontFamily: 'SpoqaHanSansNeo-Regular',
+    fontFamily: 'Pretendard-Regular',
     color: '#8A8A8A',
     fontSize: 14,
   },
 
   joinText: {
-    fontFamily: 'SpoqaHanSansNeo-Bold',
+    fontFamily: 'Pretendard-Bold',
     color: '#FF7F5C',
     fontSize: 14,
     marginLeft: 8,

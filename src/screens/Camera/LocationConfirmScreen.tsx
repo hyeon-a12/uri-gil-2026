@@ -21,7 +21,7 @@ import { AppText as Text } from "@/components/AppText";
 import KakaoMapView, {
   KakaoMapPin,
 } from "@/components/KakaoMapView";
-import { COLORS as APP_COLORS } from "@/constants/color";
+import { COLORS as APP_COLORS, RADIUS } from "@/constants/color";
 import { saveRecording } from "@/services/recordingService";
 import { useTripStore } from "@/store/useTripStore";
 
@@ -36,7 +36,7 @@ const COLORS = {
   textTertiary: APP_COLORS.textSecondary,
   border: APP_COLORS.border,
   divider: APP_COLORS.border,
-  sheet: APP_COLORS.sheetBackground,
+  surface: APP_COLORS.surface,
   disabled: APP_COLORS.locationButtonDisabled,
   dragHandle: APP_COLORS.locationDragHandle,
   shadow: APP_COLORS.shadow,
@@ -46,7 +46,6 @@ const { height: SCREEN_HEIGHT } = Dimensions.get("window");
 const MIN_SHEET_HEIGHT = SCREEN_HEIGHT * 0.42;
 const MAX_SHEET_HEIGHT = SCREEN_HEIGHT * 0.88;
 const DEFAULT_SHEET_HEIGHT = SCREEN_HEIGHT * 0.59;
-const SEARCH_RADIUS_METERS = 3000;
 
 type CapturedCoordinates = {
   latitude: number;
@@ -223,9 +222,7 @@ export default function LocationConfirmScreen() {
   const [shootingCoordinates, setShootingCoordinates] =
     useState<CapturedCoordinates | null>(routeCoordinates);
   const [locationMessage, setLocationMessage] = useState(
-    routeCoordinates
-      ? "촬영한 위치 주변 3km를 검색합니다."
-      : "촬영 위치를 확인하고 있어요.",
+    routeCoordinates ? "" : "촬영 위치를 확인하고 있어요.",
   );
   const [query, setQuery] = useState("");
   const [places, setPlaces] = useState<KakaoPlace[]>([]);
@@ -294,7 +291,7 @@ export default function LocationConfirmScreen() {
         latitude: position.coords.latitude,
         longitude: position.coords.longitude,
       });
-      setLocationMessage("현재 기기 위치 주변 3km를 검색합니다.");
+      setLocationMessage("");
     } catch (error) {
       console.warn("[LocationConfirm] 위치를 가져오지 못했습니다:", error);
       setLocationMessage(
@@ -330,7 +327,6 @@ export default function LocationConfirmScreen() {
           query: keyword,
           x: String(coordinates.longitude),
           y: String(coordinates.latitude),
-          radius: String(SEARCH_RADIUS_METERS),
           sort: "distance",
           size: "15",
         });
@@ -422,8 +418,9 @@ export default function LocationConfirmScreen() {
   }, [manualAddress, manualPlaceName, shootingCoordinates]);
 
   const placeToSave = selectedPlace ?? manuallyAddedPlace;
-  // 검색 결과가 있어도 원하는 장소가 없을 수 있어, 로딩 중이 아니면 목록 맨 아래에 항상 노출합니다.
-  const showManualEntry = !isLoadingPlaces;
+  // 검색어를 입력한 뒤에만 "나만의 장소 추가"를 노출합니다 — 결과가 있어도
+  // 항상 검색 결과 목록 맨 아래에 위치합니다.
+  const showManualEntry = query.trim().length > 0 && !isLoadingPlaces;
 
   const mapPins = useMemo(
     () => buildMapPins(places, selectedPlace?.id),
@@ -562,12 +559,13 @@ export default function LocationConfirmScreen() {
                   >
                     완료
                   </Text>
-                  <Ionicons name="arrow-forward" size={15} color="#FFFFFF" />
                 </Pressable>
               </View>
-              <Text allowFontScaling={false} style={styles.sheetDescription}>
-                {locationMessage}
-              </Text>
+              {locationMessage ? (
+                <Text allowFontScaling={false} style={styles.sheetDescription}>
+                  {locationMessage}
+                </Text>
+              ) : null}
             </View>
 
             <View style={styles.searchField}>
@@ -583,6 +581,7 @@ export default function LocationConfirmScreen() {
                   setSelectedPlace(null);
                   setIsManualEntryOpen(false);
                 }}
+                placeholder="장소, 주소로 검색"
                 placeholderTextColor={COLORS.textSecondary}
                 returnKeyType="search"
                 autoCorrect={false}
@@ -607,17 +606,6 @@ export default function LocationConfirmScreen() {
             >
               {query.trim().length === 0 ? null : (
                 <>
-                  <View style={styles.resultHeader}>
-                    <Text style={styles.resultTitle}>
-                      “{query.trim()}” 검색 결과
-                    </Text>
-                    {shootingCoordinates && (
-                      <Text style={styles.resultRange}>
-                        반경 {SEARCH_RADIUS_METERS / 1000}km
-                      </Text>
-                    )}
-                  </View>
-
                   {isMockData && !isLoadingPlaces ? (
                     <View style={styles.mockNotice}>
                       <Ionicons
@@ -729,10 +717,9 @@ export default function LocationConfirmScreen() {
                       setIsManualEntryOpen((opened) => !opened);
                       setSelectedPlace(null);
                     }}
-                    style={({ pressed }) => [
+                    style={[
                       styles.manualAddTrigger,
                       isManualEntryOpen && styles.manualAddTriggerOpen,
-                      pressed && styles.manualAddTriggerPressed,
                     ]}
                   >
                     <View style={styles.manualAddIcon}>
@@ -814,7 +801,9 @@ const styles = StyleSheet.create({
   // 지도는 박스 안에 갇히지 않고 화면 폭 전체를 그대로 채웁니다(홈 화면과 동일한 패턴).
   // 시트가 위로 끌어올려지면 flex:1이 자동으로 줄어들어 지도가 함께 줄고,
   // 시트를 내리면 그만큼 지도가 위로 넓게 드러납니다.
-  mapArea: { flex: 1, overflow: "hidden" },
+  // 지도를 화면 전체에 깔고 시트를 그 위에 절대 위치로 띄워야, 시트의
+  // 둥근 모서리 안쪽으로 지도가 비쳐서 라운드 처리가 실제로 보입니다.
+  mapArea: { ...StyleSheet.absoluteFillObject, overflow: "hidden" },
   backButton: {
     position: "absolute",
     left: 16,
@@ -839,18 +828,15 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   sheet: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
     paddingHorizontal: 20,
     paddingBottom: 18,
-    backgroundColor: COLORS.sheet,
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    borderTopWidth: 1,
-    borderColor: COLORS.border,
-    shadowColor: COLORS.shadow,
-    shadowOffset: { width: 0, height: -5 },
-    shadowOpacity: 0.08,
-    shadowRadius: 14,
-    elevation: 12,
+    backgroundColor: COLORS.background,
+    borderTopLeftRadius: RADIUS.sheet,
+    borderTopRightRadius: RADIUS.sheet,
   },
   dragHandleArea: {
     width: "100%",
@@ -927,28 +913,17 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 10,
     borderRadius: 16,
-    backgroundColor: COLORS.card,
-    borderWidth: 1,
-    borderColor: COLORS.border,
+    backgroundColor: COLORS.surface,
   },
   searchInput: {
     flex: 1,
     color: COLORS.textPrimary,
     fontSize: 14,
-    fontWeight: "600",
+    fontFamily: "Pretendard-SemiBold",
     padding: 0,
   },
   listScroll: { flex: 1, marginTop: 12 },
   listContent: { gap: 9, paddingBottom: 20 },
-  resultHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 3,
-    marginBottom: 2,
-  },
-  resultTitle: { color: COLORS.textPrimary, fontSize: 14, fontWeight: "800" },
-  resultRange: { color: COLORS.textSecondary, fontSize: 12, fontWeight: "600" },
   statusRow: {
     minHeight: 72,
     paddingHorizontal: 16,
@@ -956,9 +931,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 10,
     borderRadius: 16,
-    backgroundColor: COLORS.card,
-    borderWidth: 1,
-    borderColor: COLORS.border,
+    backgroundColor: "#FBFBFA",
   },
   statusText: {
     flex: 1,
@@ -988,12 +961,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 12,
     borderRadius: 17,
-    backgroundColor: COLORS.card,
-    borderWidth: 1,
-    borderColor: COLORS.border,
+    backgroundColor: "#FBFBFA",
   },
   placeCardSelected: {
-    borderColor: COLORS.primary,
     backgroundColor: COLORS.primarySoft,
   },
   placeCardPressed: { opacity: 0.8, transform: [{ scale: 0.995 }] },
@@ -1052,15 +1022,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 11,
     borderRadius: 17,
-    borderWidth: 1,
-    borderColor: COLORS.border,
     backgroundColor: "#FFF9F6",
   },
   manualAddTriggerOpen: {
-    borderColor: COLORS.primary,
-  },
-  manualAddTriggerPressed: {
-    opacity: 0.8,
+    backgroundColor: COLORS.primarySoft,
   },
   manualAddIcon: {
     width: 40,
@@ -1102,12 +1067,10 @@ const styles = StyleSheet.create({
     height: 46,
     paddingHorizontal: 13,
     borderRadius: 12,
-    borderWidth: 1,
-    borderColor: COLORS.border,
     color: COLORS.textPrimary,
     fontSize: 13,
-    fontWeight: "600",
-    backgroundColor: "#FFFFFF",
+    fontFamily: "Pretendard-SemiBold",
+    backgroundColor: COLORS.surface,
   },
   manualNotice: {
     flexDirection: "row",
