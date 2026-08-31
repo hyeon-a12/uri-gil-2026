@@ -5,7 +5,6 @@ import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { AppText as Text } from '@/components/AppText';
 import { colors } from '@/constants/menu-theme';
 import { ScreenHeader } from '@/components/common';
-import { RouteMapPreview } from '@/components/RouteMapPreview';
 import { RoutePlanView } from '@/components/RoutePlanView';
 import NewTripModal from '@/components/NewTripModal';
 import {
@@ -183,11 +182,6 @@ export default function TripDetailScreen() {
         }
       />
 
-      {/* 실제 좌표 지도는 아직 연결 전이라, 목업 이미지로만 위치를 잡아둡니다. */}
-      <View style={styles.mapWrapper}>
-        <RouteMapPreview height={200} />
-      </View>
-
       <RoutePlanView
         hasTrip
         tripId={trip.id}
@@ -195,6 +189,7 @@ export default function TripDetailScreen() {
         dayNumbers={dayNumbers}
         tripStartDate={tripStartDate}
         onReorderStops={handleReorderStops}
+        enableStopTools={false}
       />
 
       <NewTripModal
@@ -213,5 +208,4 @@ export default function TripDetailScreen() {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   errorText: { padding: 16, fontSize: 13, color: colors.textSub },
-  mapWrapper: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 4 },
 });

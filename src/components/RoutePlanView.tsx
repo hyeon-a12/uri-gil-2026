@@ -116,6 +116,12 @@ export type RoutePlanViewProps = {
   dayNumbers: number[];
   tripStartDate: Date | null;
   onReorderStops: (day: number, orderedIds: string[]) => void;
+  /**
+   * 메모 남기기 / 장소 추가 기능을 보여줄지 여부입니다. my-route.tsx(경로
+   * 탭바)에는 이 기능이 계속 있어야 해서 기본값은 true이고, 여행 상세 화면
+   * (trip-detail/[tripId].tsx)에서만 false로 넘겨 숨깁니다.
+   */
+  enableStopTools?: boolean;
 };
 
 // stops/dayNumbers는 활성 여행의 실제 클립(recordingService)에서
@@ -127,6 +133,7 @@ export function RoutePlanView({
   dayNumbers,
   tripStartDate,
   onReorderStops,
+  enableStopTools = true,
 }: RoutePlanViewProps) {
   const [selectedDay, setSelectedDay] = useState(dayNumbers[0] ?? 1);
 
@@ -366,15 +373,25 @@ export function RoutePlanView({
                   </View>
 
                   {memo ? (
-                    <Pressable
-                      onPress={() => openMemoEditor(stop)}
-                      style={({ pressed }) => [styles.planStopMemoBox, pressed && styles.cardPressed]}
-                    >
-                      <Text numberOfLines={3} allowFontScaling={false} style={styles.planStopMemoText}>
-                        {memo}
-                      </Text>
-                    </Pressable>
-                  ) : (
+                    enableStopTools ? (
+                      <Pressable
+                        onPress={() => openMemoEditor(stop)}
+                        style={({ pressed }) => [styles.planStopMemoBox, pressed && styles.cardPressed]}
+                      >
+                        <Text numberOfLines={3} allowFontScaling={false} style={styles.planStopMemoText}>
+                          {memo}
+                        </Text>
+                      </Pressable>
+                    ) : (
+                      // 경로 탭바에서 적은 메모는 이 화면(여행 상세)에서도 그대로
+                      // 보여야 해서, 여기서는 편집 진입점 없이 내용만 표시합니다.
+                      <View style={styles.planStopMemoBox}>
+                        <Text numberOfLines={3} allowFontScaling={false} style={styles.planStopMemoText}>
+                          {memo}
+                        </Text>
+                      </View>
+                    )
+                  ) : enableStopTools ? (
                     <Pressable
                       onPress={() => openMemoEditor(stop)}
                       style={({ pressed }) => [
@@ -388,41 +405,45 @@ export function RoutePlanView({
                         메모 남기기
                       </Text>
                     </Pressable>
-                  )}
+                  ) : null}
                 </Pressable>
               </View>
             );
           })}
 
-          <View style={styles.planAddRow}>
-            <Pressable
-              onPress={() => {
-                if (!tripId) return;
-                router.push({
-                  pathname: '/add-place',
-                  params: { tripId, day: String(selectedDay) },
-                });
-              }}
-              style={({ pressed }) => [styles.planAddButton, pressed && styles.cardPressed]}
-            >
-              <Ionicons name="add" size={16} color={COLORS.textSecondary} />
+          {enableStopTools ? (
+            <View style={styles.planAddRow}>
+              <Pressable
+                onPress={() => {
+                  if (!tripId) return;
+                  router.push({
+                    pathname: '/add-place',
+                    params: { tripId, day: String(selectedDay) },
+                  });
+                }}
+                style={({ pressed }) => [styles.planAddButton, pressed && styles.cardPressed]}
+              >
+                <Ionicons name="add" size={16} color={COLORS.textSecondary} />
 
-              <Text allowFontScaling={false} style={styles.planAddButtonText}>
-                장소 추가
-              </Text>
-            </Pressable>
-          </View>
+                <Text allowFontScaling={false} style={styles.planAddButtonText}>
+                  장소 추가
+                </Text>
+              </Pressable>
+            </View>
+          ) : null}
         </View>
       </ScrollView>
 
-      <MemoEditorModal
-        visible={memoModalVisible}
-        stopName={activeStop?.name ?? null}
-        draft={memoDraft}
-        onChangeDraft={setMemoDraft}
-        onSave={saveMemo}
-        onClose={closeMemoEditor}
-      />
+      {enableStopTools ? (
+        <MemoEditorModal
+          visible={memoModalVisible}
+          stopName={activeStop?.name ?? null}
+          draft={memoDraft}
+          onChangeDraft={setMemoDraft}
+          onSave={saveMemo}
+          onClose={closeMemoEditor}
+        />
+      ) : null}
     </View>
   );
 }
