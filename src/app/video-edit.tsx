@@ -21,8 +21,6 @@ import { useVideoPlayer, VideoView } from 'expo-video';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS as SHARED_COLORS } from '@/constants/color';
 import { getRecordingsByFolder } from '@/services/recordingService';
-import { getAllFolders } from '@/services/folderService';
-import { apiFetch } from '@/services/api';
 
 const COLORS = {
   background: SHARED_COLORS.background,
@@ -807,31 +805,6 @@ export default function VideoEditScreen() {
             const result = await renderVideo(exportData);
 
             setIsExporting(false);
-
-            if (result.success) {
-              // 서버에도 영상 메타데이터 기록 시도 (실패해도 갤러리 저장은 이미 끝났으니 무시)
-              try {
-                const folders = await getAllFolders();
-                const folder = folders.find((f) => f.id === folderId);
-
-                if (folder?.routeId) {
-                  await apiFetch('/videos/', {
-                    method: 'POST',
-                    body: JSON.stringify({
-                      route_id: folder.routeId,
-                      video_url: result.videoUri ?? '',
-                      thumbnail_url: clips[0]?.thumbnailUri ?? null,
-                      is_public: false,
-                    }),
-                  });
-                } else {
-                  console.warn('[handleExport] routeId가 없어 서버에 영상 기록을 건너뜁니다.');
-                }
-              } catch (dbError) {
-                console.error('[handleExport] 영상 DB 저장 실패:', dbError);
-              }
-            }
-
 
             if (result.success) {
               Alert.alert(
