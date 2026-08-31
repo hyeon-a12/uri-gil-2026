@@ -10,9 +10,6 @@ class User(Base):
     email = Column(String, unique=True, nullable=False)
     password = Column(String, nullable=False)
     nickname = Column(String, nullable=False)
-    marketing_consent = Column(Boolean, default=False)
-    sms_consent = Column(Boolean, default=False)
-    email_consent = Column(Boolean, default=False)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 class Route(Base):
