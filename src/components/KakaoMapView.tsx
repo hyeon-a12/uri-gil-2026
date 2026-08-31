@@ -25,9 +25,10 @@ import { WebView, WebViewMessageEvent } from 'react-native-webview';
  * 배포할 필요 없이 URL 쿼리 파라미터로 넘겨줍니다.
  *
  * 호스팅된 페이지 소스는 이 저장소 안의 docs/urigil-kakao-map/index.html
- * 이고, 이 저장소(uri-gil-2026)의 GitHub Pages(main 브랜치 /docs 폴더)로
+ * 이고, 이 저장소(uri-gil-2026)의 GitHub Pages(develop 브랜치 /docs 폴더)로
  * 배포됩니다 — 더는 다른 개인 저장소에 의존하지 않습니다. 지도 페이지를
- * 고칠 땐 그 파일을 수정해서 main에 푸시하면 됩니다.
+ * 고칠 땐 그 파일을 수정해서 develop에 푸시하면 됩니다. (실제 배포 소스
+ * 브랜치는 저장소 Settings > Pages에서 확인/변경할 수 있습니다.)
  *
  * 카카오 디벨로퍼스 콘솔 > 플랫폼 > Web에는 아래 MAP_PAGE_ORIGIN을
  * 등록해야 합니다(등록된 origin은 그대로라 이번 이전으로 재등록은 필요 없음).
