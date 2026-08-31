@@ -270,7 +270,7 @@ app.post('/process-video', upload.array('videos', 20), async(req, res) => {
     const downloadUrl = `/download/${path.basename(outputPath)}`;
     res.json({
       success: true,
-      downloadUrl: `http://${req.headers.host}${downloadUrl}`,
+      downloadUrl: `https://${req.headers.host}${downloadUrl}`,
     });
 
     setTimeout(() => {
