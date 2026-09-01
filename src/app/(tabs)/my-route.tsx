@@ -8,7 +8,10 @@ import {
 } from "@/services/trip-schedule-service";
 import { getStopOrder, saveStopOrder, type StopOrderMap } from "@/services/stop-order-service";
 import { buildPlanData, type PlanStop } from "@/services/tripPlanService";
+import { navigateToCamera } from "@/navigation/recordingNavigation";
 import type { RecordingData } from "@/types/recording";
+import type { ClipItem } from "@/types/home";
+import { ClipPreviewModal } from "@/components/ClipPreview/ClipPreviewModal";
 import { useTripStore } from "@/store/useTripStore";
 import {
   Alert,
@@ -86,11 +89,13 @@ function MapControlButtons({ onPressLocate }: { onPressLocate: () => void }) {
 interface ClipThumbnailProps {
   thumbnail: string;
   duration: string;
+  onPress: () => void;
 }
 
-function ClipThumbnail({ thumbnail, duration }: ClipThumbnailProps) {
+function ClipThumbnail({ thumbnail, duration, onPress }: ClipThumbnailProps) {
   return (
     <Pressable
+      onPress={onPress}
       style={({ pressed }) => [
         styles.clipThumbnail,
         pressed && styles.cardPressed,
@@ -118,9 +123,10 @@ function ClipThumbnail({ thumbnail, duration }: ClipThumbnailProps) {
 
 interface SelectedStopCardProps {
   stop: PlanStop;
+  onPreviewClip: (clip: ClipItem) => void;
 }
 
-function SelectedStopCard({ stop }: SelectedStopCardProps) {
+function SelectedStopCard({ stop, onPreviewClip }: SelectedStopCardProps) {
   return (
     <View style={styles.stopCard}>
       <View style={styles.stopCardHeader}>
@@ -176,15 +182,35 @@ function SelectedStopCard({ stop }: SelectedStopCardProps) {
             key={clip.id}
             thumbnail={clip.thumbnail}
             duration={clip.duration}
+            onPress={() =>
+              onPreviewClip({
+                id: clip.id,
+                title: stop.name,
+                recordedAt: clip.recordedAt,
+                durationSeconds: clip.durationMs ? clip.durationMs / 1000 : undefined,
+                thumbnail: clip.thumbnail,
+                uri: clip.uri,
+              })
+            }
           />
         ))}
 
         <Pressable
           onPress={() => {
-            Alert.alert(
-              "클립 추가",
-              `${stop.name}에 새 클립을 추가할 예정입니다.`,
-            );
+            if (stop.latitude === null || stop.longitude === null) {
+              // 좌표를 모르는 스톱은 바로 저장할 장소를 특정할 수 없어
+              // 기존처럼 카메라 → 장소 확인 화면 흐름으로 보냅니다.
+              navigateToCamera();
+              return;
+            }
+
+            navigateToCamera({
+              quickAddPlace: {
+                name: stop.name,
+                latitude: stop.latitude,
+                longitude: stop.longitude,
+              },
+            });
           }}
           style={({ pressed }) => [
             styles.addClipButton,
@@ -525,6 +551,7 @@ export default function MyRouteScreen() {
     TripScheduleStop[]
   >([]);
   const [stopOrder, setStopOrder] = useState<StopOrderMap>({});
+  const [previewClip, setPreviewClip] = useState<ClipItem | null>(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -802,7 +829,7 @@ export default function MyRouteScreen() {
                   .sort((a, b) => a.order - b.order)
                   .map((stop) => (
                     <View key={stop.id} style={styles.stopCardSlide}>
-                      <SelectedStopCard stop={stop} />
+                      <SelectedStopCard stop={stop} onPreviewClip={setPreviewClip} />
                     </View>
                   ))}
               </ScrollView>
@@ -843,6 +870,11 @@ export default function MyRouteScreen() {
         bottomInset={insets.bottom}
         onClose={() => setIsShareSheetVisible(false)}
         onNativeShare={handleNativeShare}
+      />
+
+      <ClipPreviewModal
+        clip={previewClip}
+        onClose={() => setPreviewClip(null)}
       />
     </View>
   );

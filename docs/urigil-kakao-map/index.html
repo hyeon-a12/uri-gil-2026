@@ -172,16 +172,24 @@
           bounds.extend(position);
 
           var color = pin.color || DEFAULT_ACCENT;
+          // 물방울(teardrop) 핀: 정사각형 div를 45도 회전시켜 아래쪽만
+          // 뾰족하게 만드는 방식. 회전한 사각형은 실제 레이아웃 크기(28px)
+          // 밖으로 튀어나오므로, 바깥 wrapper를 세로로 더 크게(34px) 잡아
+          // 뾰족한 끝이 잘리지 않게 여유를 둡니다. 라벨(숫자)은 회전하면
+          // 같이 기울어지므로 반대로 45도 되돌려서 똑바로 보이게 합니다.
           var content =
-            '<div style="width:24px;height:24px;border-radius:12px;background:' + color + ';border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,0.25);display:flex;align-items:center;justify-content:center;font-family:\'Pretendard\',sans-serif;font-size:10px;color:#fff;font-weight:700;">' +
-            (pin.label || '') +
+            '<div style="position:relative;width:28px;height:34px;">' +
+              '<div style="position:absolute;top:0;left:0;width:28px;height:28px;border-radius:50% 50% 50% 0;background:' + color + ';border:2px solid #fff;box-shadow:0 2px 4px rgba(0,0,0,0.25);transform:rotate(-45deg);"></div>' +
+              '<div style="position:absolute;top:0;left:0;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-family:\'Pretendard\',sans-serif;font-size:11px;color:#fff;font-weight:700;">' +
+                (pin.label || '') +
+              '</div>' +
             '</div>';
 
           new kakao.maps.CustomOverlay({
             map: map,
             position: position,
             content: content,
-            yAnchor: 0.5,
+            yAnchor: 1,
             xAnchor: 0.5,
           });
         });

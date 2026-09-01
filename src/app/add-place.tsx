@@ -55,6 +55,8 @@ function buildMapPins(places: { id: string; latitude: number; longitude: number 
     lat: place.latitude,
     lng: place.longitude,
     color: place.id === selectedPlaceId ? COLORS.primary : '#B9BFC9',
+    // 검색 결과 핀은 아직 경로가 아니라 후보일 뿐이라 서로 잇는 선이 필요 없음
+    excludeFromPath: true,
   }));
 }
 
@@ -311,9 +313,6 @@ export default function AddPlaceScreen() {
                       pressed && styles.placeCardPressed,
                     ]}
                   >
-                    <View style={[styles.placeIcon, selected && styles.placeIconSelected]}>
-                      <Ionicons name="location" size={20} color={selected ? '#FFFFFF' : COLORS.primary} />
-                    </View>
                     <View style={styles.placeTextBox}>
                       <View style={styles.placeNameRow}>
                         <Text numberOfLines={1} style={styles.placeName}>
@@ -327,9 +326,6 @@ export default function AddPlaceScreen() {
                       <Text numberOfLines={1} style={styles.placeAddress}>
                         {place.address}
                       </Text>
-                    </View>
-                    <View style={[styles.radio, selected && styles.radioSelected]}>
-                      {selected && <View style={styles.radioDot} />}
                     </View>
                   </Pressable>
                 );
@@ -505,17 +501,12 @@ const styles = StyleSheet.create({
   },
   placeCardSelected: { backgroundColor: COLORS.primarySoft },
   placeCardPressed: { opacity: 0.8, transform: [{ scale: 0.995 }] },
-  placeIcon: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.primarySoft },
-  placeIconSelected: { backgroundColor: COLORS.primary },
   placeTextBox: { flex: 1, gap: 3 },
   placeNameRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
   placeName: { flex: 1, color: COLORS.textPrimary, fontSize: 15, fontWeight: '800' },
   distanceText: { color: COLORS.primary, fontSize: 12, fontWeight: '800' },
   placeCategory: { color: COLORS.textSecondary, fontSize: 12, fontWeight: '600' },
   placeAddress: { color: COLORS.textSecondary, fontSize: 11, fontWeight: '500' },
-  radio: { width: 22, height: 22, borderRadius: 11, borderWidth: 1.5, borderColor: COLORS.border, alignItems: 'center', justifyContent: 'center' },
-  radioSelected: { borderColor: COLORS.primary },
-  radioDot: { width: 12, height: 12, borderRadius: 6, backgroundColor: COLORS.primary },
   manualAddSection: { gap: 8 },
   manualAddTrigger: {
     minHeight: 72,

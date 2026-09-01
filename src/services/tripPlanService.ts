@@ -25,6 +25,10 @@ export interface PlanStop {
     id: string;
     thumbnail: string;
     duration: string;
+    /** 클립 관리 화면과 동일한 영상 미리보기(ClipPreviewModal)를 열기 위한 정보 */
+    uri: string;
+    recordedAt: string;
+    durationMs?: number;
   }[];
 }
 
@@ -103,6 +107,9 @@ export function buildPlanData(
       id: recording.id,
       thumbnail: recording.thumbnail,
       duration: formatClipDuration(recording.durationMs),
+      uri: recording.videoUri,
+      recordedAt: recording.recordedAt,
+      durationMs: recording.durationMs,
     };
 
     if (!placeName) {
@@ -148,11 +155,29 @@ export function buildPlanData(
     clips: [],
   }));
 
+  // 이미 확정된 스톱(AI 추천/직접 추가)과 같은 날짜 + 같은 장소명으로 촬영된
+  // 클립은 새 스톱을 따로 만들지 않고 원래 스톱에 합칩니다. 이걸 안 하면
+  // (예: 내 루트 지도 카드의 "클립 추가"로 이미 있는 스톱에 찍었을 때) 같은
+  // 장소인데 클립이 없는 원래 카드와 방금 찍은 클립만 든 새 카드가 따로
+  // 생겨서, 클립이 저장은 됐는데도 원래 보던 카드엔 안 보이는 것처럼 보입니다.
+  const unmatchedRecordedStops: PlanStop[] = [];
+  for (const recorded of recordedStops) {
+    const matchingAiStop = aiStops.find(
+      (ai) => ai.day === recorded.day && ai.name.trim() === recorded.name.trim(),
+    );
+    if (matchingAiStop) {
+      matchingAiStop.clips.push(...recorded.clips);
+      matchingAiStop.time = recorded.time;
+      continue;
+    }
+    unmatchedRecordedStops.push(recorded);
+  }
+
   // 같은 day 안에서는 기본적으로 확정된 장소(AI 추천/직접 추가)가 먼저, 실제 촬영
   // 기록이 뒤에 오지만, 사용자가 드래그로 순서를 바꿔서 저장해뒀다면(stopOrderOverrides)
   // 그 순서를 day별로 우선 적용한 뒤 전체 순번을 다시 매깁니다.
   const byDay = new Map<number, PlanStop[]>();
-  for (const stop of [...aiStops, ...recordedStops]) {
+  for (const stop of [...aiStops, ...unmatchedRecordedStops]) {
     const list = byDay.get(stop.day) ?? [];
     list.push(stop);
     byDay.set(stop.day, list);

@@ -1870,7 +1870,11 @@ function PlaceDetailModal({
             </Pressable>
             {viewExtraInfo?.placeUrl ? (
               <Pressable
-                onPress={() => Linking.openURL(viewExtraInfo.placeUrl!)}
+                onPress={() => {
+                  Linking.openURL(viewExtraInfo.placeUrl!).catch((err) => {
+                    console.warn('링크를 열 수 없어요:', err);
+                  });
+                }}
                 style={({ pressed }) => [
                   styles.placeDetailMapButton,
                   pressed && styles.aiConfirmButtonPressed,

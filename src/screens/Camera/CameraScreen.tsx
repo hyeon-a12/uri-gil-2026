@@ -5,8 +5,8 @@ import {
   type CameraType,
 } from 'expo-camera';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
+import { router, useLocalSearchParams } from 'expo-router';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -22,6 +22,7 @@ import { AppText as Text } from '@/components/AppText';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { navigateToLocationConfirm } from '@/navigation/recordingNavigation';
+import { saveRecording } from '@/services/recordingService';
 import { useTripStore } from '@/store/useTripStore';
 import { type ShootingStyleId } from '@/services/folderService';
 import CameraChangeIcon from '@/assets/images/camera_change.svg';
@@ -365,6 +366,25 @@ export default function CameraScreen() {
 
   const currentTrip = useTripStore((state) => state.currentTrip);
 
+  // 내 루트의 스톱 카드 "클립 추가" 버튼처럼 장소가 이미 정해진 상태로 들어온
+  // 경우에만 채워집니다 — 있으면 촬영 후 location-confirm 화면을 건너뛰고
+  // 이 장소로 바로 저장합니다.
+  const { quickAddPlaceName, quickAddLatitude, quickAddLongitude } =
+    useLocalSearchParams<{
+      quickAddPlaceName?: string;
+      quickAddLatitude?: string;
+      quickAddLongitude?: string;
+    }>();
+
+  const quickAddPlace = useMemo(() => {
+    const latitude = Number(quickAddLatitude);
+    const longitude = Number(quickAddLongitude);
+    if (!quickAddPlaceName || !Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+      return null;
+    }
+    return { name: quickAddPlaceName, latitude, longitude };
+  }, [quickAddPlaceName, quickAddLatitude, quickAddLongitude]);
+
   // 촬영 스타일은 여행 만들기 단계가 아니라 이 화면에서 그때그때 고릅니다
   // (추후 다시 수정할 예정 — 지금은 촬영 세션 동안만 쓰이는 로컬 상태예요).
   const [shootingStyle, setShootingStyle] = useState<ShootingStyleId>('basic');
@@ -523,7 +543,30 @@ export default function CameraScreen() {
         Math.min(currentCount + 1, MAX_CLIPS),
       );
 
-      navigateToLocationConfirm(video.uri, undefined, durationMs);
+      if (quickAddPlace) {
+        // 장소가 이미 정해져 있으므로 location-confirm 화면 없이 바로 저장합니다.
+        try {
+          await saveRecording({
+            recordedAt: new Date().toISOString(),
+            videoUri: video.uri,
+            thumbnail: video.uri,
+            durationMs,
+            folderId: currentTrip.id,
+            userId: 'guest',
+            location: {
+              latitude: quickAddPlace.latitude,
+              longitude: quickAddPlace.longitude,
+              placeName: quickAddPlace.name,
+            },
+          });
+          router.back();
+        } catch (error) {
+          console.error('[Camera] 빠른 추가 저장 실패:', error);
+          Alert.alert('저장에 실패했습니다', '잠시 후 다시 시도해주세요.');
+        }
+      } else {
+        navigateToLocationConfirm(video.uri, undefined, durationMs);
+      }
     } catch (error) {
       console.error('Video recording failed:', error);
       Alert.alert('촬영에 실패했습니다', '잠시 후 다시 촬영해주세요.');
