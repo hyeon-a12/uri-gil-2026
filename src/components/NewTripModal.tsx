@@ -907,7 +907,7 @@ const styles = StyleSheet.create({
     // 크기만큼 그냥 늘어나 버려 실제로는 스크롤이 안 되고, 화면 밖(안드로이드
     // 하단 탭바 영역)으로 버튼이 그냥 넘쳐 흘렀습니다. 고정 height로 바꿔서
     // ScrollView가 진짜 스크롤 가능한 영역을 갖게 합니다.
-    height: SCREEN_HEIGHT * 0.88,
+    height: SCREEN_HEIGHT * 0.6,
   },
   // 성공 화면은 내용이 짧아서 위 고정 height를 그대로 쓰면 카드 아래쪽에
   // 빈 공간이 많이 남아 UI가 불필요하게 길어 보였습니다. height를 다시
