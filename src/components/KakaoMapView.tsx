@@ -45,6 +45,9 @@ export type KakaoMapPin = {
   label?: string;
   /** 핀 색상. 기본값은 앱 포인트 컬러 */
   color?: string;
+  /** true면 마커는 그대로 찍히되, 다른 핀들과 잇는 경로선(폴리라인)에는
+   * 안 낍니다 — 여행 경로가 아니라 "미리보기로 찍어본" 핀일 때 씁니다. */
+  excludeFromPath?: boolean;
 };
 
 export type KakaoMapCurrentLocation = {

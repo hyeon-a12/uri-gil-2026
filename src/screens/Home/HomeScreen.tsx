@@ -13,6 +13,7 @@ import { appendTripScheduleStops } from '@/services/trip-schedule-service';
 import { useTripStore } from '@/store/useTripStore';
 import { ClipItem } from '@/types/home';
 import type { RecordingData } from '@/types/recording';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import * as Location from 'expo-location';
@@ -21,10 +22,13 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Alert,
   Animated,
+  BackHandler,
   Dimensions,
   Keyboard,
+  Linking,
   Modal,
   PanResponder,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -32,6 +36,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const COLORS = {
   accent: SHARED_COLORS.accent, // Point/Accent — 메인 CTA, 강조 액션
@@ -44,7 +49,132 @@ const COLORS = {
   record: SHARED_COLORS.danger,
 };
 
-const { height: SCREEN_HEIGHT } = Dimensions.get("window");
+//추천장소 로직추가
+const KAKAO_REST_API_KEY = process.env.EXPO_PUBLIC_KAKAO_REST_API_KEY;
+const TOUR_API_KEY = process.env.EXPO_PUBLIC_TOUR_API_KEY;
+
+const IS_TEST_MODE = true; 
+const TEST_COORDS = { latitude: 35.81477744329797, longitude: 127.15255700142177 };
+
+function getDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
+  const R = 6371.0;
+  const dLat = (lat2 - lat1) * (Math.PI / 180);
+  const dLon = (lon2 - lon1) * (Math.PI / 180);
+  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+// data.go.kr가 요청 한도 초과 시 돌려주는 응답은 정상 응답과 형태가 완전히
+// 달라서(response.body.items 대신 OpenAPI_ServiceResponse.cmmMsgHeader), 이걸
+// "결과 없음"과 구분해야 캐시에 빈 결과를 저장해버리는 걸 막을 수 있습니다.
+const TOUR_API_ERROR = 'TOUR_API_ERROR' as const;
+
+async function fetchSpotPhoto(keyword: string) {
+  if (!TOUR_API_KEY) return null;
+  try {
+    const url = `http://apis.data.go.kr/B551011/PhotoGalleryService1/gallerySearchList1?serviceKey=${TOUR_API_KEY}&numOfRows=1&pageNo=1&MobileOS=ETC&MobileApp=AppTest&_type=json&keyword=${encodeURIComponent(keyword)}`;
+    const response = await fetch(url);
+    const data = await response.json();
+    if (data?.OpenAPI_ServiceResponse?.cmmMsgHeader) return TOUR_API_ERROR;
+    const items = data?.response?.body?.items?.item;
+    return Array.isArray(items) && items.length > 0 ? items[0] : (items || null);
+  } catch { return null; }
+}
+
+type KakaoPlaceInfo = {
+  address: string;
+  category: string;
+  phone?: string;
+  placeUrl?: string;
+};
+
+// 정보 팝업(PlaceDetailModal)이 어떤 출처(추천 장소 카드 vs. 태그 검색 결과)에서
+// 열리든 같은 모양으로 다룰 수 있도록 통일한 뷰 모델입니다. distanceMeters는
+// 항상 m 단위로 미리 정규화해서 넘깁니다(출처마다 원본 단위가 다르기 때문 —
+// 관광공사 쪽은 km, 카카오 검색 쪽은 원래부터 m).
+type PlaceDetailView = {
+  id: string;
+  name: string;
+  lat: number;
+  lng: number;
+  imageUrl?: string;
+  distanceMeters?: number;
+  // 태그 검색 결과(카카오 API)는 이 세 값을 이미 갖고 있어서 추가 API 호출이
+  // 필요 없습니다. undefined면 추천 장소 카드 출처라는 뜻이라, 팝업이 열릴 때
+  // fetchKakaoPlaceInfo로 보충합니다.
+  address?: string;
+  category?: string;
+  phone?: string;
+  placeUrl?: string;
+};
+
+// 관광공사 API는 이름/사진/거리 외 정보가 없어서, 정보 팝업에 보여줄 주소·
+// 카테고리·전화번호는 카카오 로컬 키워드 검색으로 따로 채웁니다(usePlaceSearch.ts와
+// 같은 엔드포인트·필드명 — 이미 검증된 값이라 그대로 재사용).
+async function fetchKakaoPlaceInfo(
+  name: string,
+  lat: number,
+  lng: number,
+): Promise<KakaoPlaceInfo | null> {
+  if (!KAKAO_REST_API_KEY) return null;
+  try {
+    const params = new URLSearchParams({
+      query: name,
+      x: String(lng),
+      y: String(lat),
+      sort: 'distance',
+      size: '1',
+    });
+    const response = await fetch(
+      `https://dapi.kakao.com/v2/local/search/keyword.json?${params.toString()}`,
+      { headers: { Authorization: `KakaoAK ${KAKAO_REST_API_KEY}` } },
+    );
+    if (!response.ok) return null;
+    const data = await response.json();
+    const doc = data?.documents?.[0];
+    if (!doc) return null;
+    return {
+      address: doc.road_address_name || doc.address_name || '',
+      category: doc.category_group_name || doc.category_name || '',
+      phone: doc.phone || undefined,
+      placeUrl: doc.place_url || undefined,
+    };
+  } catch {
+    return null;
+  }
+}
+
+// 관광공사 API(data.go.kr) 키는 일일 요청 한도가 있어서, 같은 지역이면 하루
+// 동안은 캐시된 추천 결과를 재사용하고 API를 다시 호출하지 않습니다.
+const TOUR_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+
+type TourCacheEntry = { timestamp: number; places: RecommendedPlace[] };
+
+async function readTourCache(cacheKey: string): Promise<TourCacheEntry | null> {
+  try {
+    const raw = await AsyncStorage.getItem(cacheKey);
+    return raw ? (JSON.parse(raw) as TourCacheEntry) : null;
+  } catch {
+    return null;
+  }
+}
+
+async function writeTourCache(cacheKey: string, places: RecommendedPlace[]) {
+  try {
+    await AsyncStorage.setItem(cacheKey, JSON.stringify({ timestamp: Date.now(), places }));
+  } catch {
+    // 캐시 저장 실패는 무시 — 다음에 다시 API를 호출하면 됩니다.
+  }
+}
+
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
+
+// 추천 장소 카드 2개를 정확히 절반씩 배치하기 위한 고정 픽셀 너비.
+// %(퍼센트) 지정은 일부 기기/RN 버전 조합에서 flex·aspectRatio와 함께 쓰일 때
+// 실제 화면보다 훨씬 작게 계산되는 문제가 있어, 화면 너비에서 좌우 여백과
+// 카드 사이 간격을 직접 빼서 정확한 px 값으로 계산합니다.
+const PLACE_CARD_GAP = 12;
+const PLACE_CARD_WIDTH = (SCREEN_WIDTH - SPACING.screenH * 2 - PLACE_CARD_GAP) / 2;
 
 // 바텀시트가 다 접혔을 때(peek) 화면에 보이는 높이,
 // 다 펼쳤을 때(expanded) 화면 상단에서 남겨둘 여백.
@@ -114,9 +244,14 @@ function buildTodayMoments(recordings: RecordingData[]): ClipItem[] {
 interface RecommendedPlace {
   id: string;
   name: string;
+  imageUrl?: string;
+  distance?: number;
+  lat: number;
+  lng: number;
+  category?: string;
 }
 
-const RECOMMENDED_PLACES: RecommendedPlace[] = [];
+//const RECOMMENDED_PLACES: RecommendedPlace[] = [];
 
 /** "오늘의 순간들" 가로 스크롤에 들어가는 클립 하나. 실제 썸네일 이미지가
  * 없어서 지금은 색상 placeholder로 대체했어요 — 나중에
@@ -166,9 +301,11 @@ type SearchResultItem = {
   longitude: number;
   category: string;
   distance?: number;
+  phone?: string;
+  placeUrl?: string;
 };
 
-type SearchCategory = "AI" | "OL7" | "FD6" | "CE7" | "CS2";
+type SearchCategory = "AI" | "OL7" | "FD6" | "CE7" | "CS2" | "AT4" | "AD5" | "CT1" | "PK6";
 
 type HomeTopBarProps = {
   query: string;
@@ -495,16 +632,31 @@ function HomeTopBar({
   );
 }
 
-function RecommendedPlaceCard({ place }: { place: RecommendedPlace }) {
+function RecommendedPlaceCard({ place, onPress }: { place: RecommendedPlace, onPress?: () => void }) {
   return (
-    <HapticPressable style={styles.placeCard}>
+    <HapticPressable style={styles.placeCard} onPress={onPress}>
       <View style={styles.placeImagePlaceholder}>
-        <Ionicons name="image-outline" size={24} color={COLORS.textSecondary} />
+        {place.imageUrl ? (
+          <Image 
+            source={{ uri: place.imageUrl }} 
+            style={styles.placeImage} 
+            contentFit="cover" 
+          />
+        ) : (
+          <Ionicons name="image-outline" size={24} color={COLORS.textSecondary} />
+        )}
         <View style={styles.placePinBadge}>
           <Ionicons name="location" size={12} color={COLORS.white} />
         </View>
+        {place.category ? (
+          <View style={styles.placeCategoryBadge}>
+            <Text style={styles.placeCategoryBadgeText} numberOfLines={1}>
+              {place.category}
+            </Text>
+          </View>
+        ) : null}
       </View>
-      <Text style={styles.placeName}>{place.name}</Text>
+      <Text style={styles.placeName} numberOfLines={1}>{place.name}</Text>
     </HapticPressable>
   );
 }
@@ -528,6 +680,10 @@ type PullUpSheetProps = {
   selectedCategory: Exclude<SearchCategory, "AI"> | null;
   categoryResults: SearchResultItem[];
   isSearchingCategory: boolean;
+  recommendedPlaces: RecommendedPlace[];
+  isTourLoading: boolean;
+  onPressPlace: (place: RecommendedPlace) => void;
+  onPressCategoryResult: (item: SearchResultItem) => void;
   onPressCategory: (category: Exclude<SearchCategory, "AI">) => void;
   onPressCompass: () => void;
 };
@@ -537,10 +693,14 @@ const CATEGORY_TAGS: {
   label: string;
   icon: React.ComponentProps<typeof Ionicons>['name'];
 }[] = [
-  { id: "OL7", label: "주유소", icon: "car-sport" },
-  { id: "FD6", label: "음식점", icon: "restaurant" },
-  { id: "CE7", label: "카페", icon: "cafe" },
-  { id: "CS2", label: "편의점", icon: "storefront" },
+  { id: "AT4", label: "관광명소", icon: "flag-outline" },
+  { id: "FD6", label: "음식점", icon: "restaurant-outline" },
+  { id: "CE7", label: "카페", icon: "cafe-outline" },
+  { id: "CS2", label: "편의점", icon: "storefront-outline" },
+  { id: "CT1", label: "문화시설", icon: "color-palette-outline" },
+  { id: "AD5", label: "숙박", icon: "bed-outline" },
+  { id: "OL7", label: "주유소", icon: "car-sport-outline" },
+  { id: "PK6", label: "주차장", icon: "car-outline" },
 ];
 
 function PullUpSheet({
@@ -548,6 +708,10 @@ function PullUpSheet({
   selectedCategory,
   categoryResults,
   isSearchingCategory,
+  recommendedPlaces,
+  isTourLoading,
+  onPressPlace,
+  onPressCategoryResult,
   onPressCategory,
   onPressCompass,
 }: PullUpSheetProps) {
@@ -743,33 +907,41 @@ function PullUpSheet({
           </ScrollView>
 
           {selectedCategory ? (
-            <View style={styles.categoryResultList}>
+            <View style={styles.categoryResultSection}>
               {isSearchingCategory ? (
                 <Text style={styles.emptyMomentsText}>
                   주변 장소를 불러오는 중이에요...
                 </Text>
               ) : categoryResults.length > 0 ? (
-                categoryResults.map((place, index) => (
-                  <View
-                    key={place.id}
-                    style={[
-                      styles.categoryResultItem,
-                      index !== categoryResults.length - 1 &&
-                        styles.categoryResultItemBorder,
-                    ]}
-                  >
-                    <View style={styles.categoryResultIcon}>
-                      <Ionicons
-                        name="location-outline"
-                        size={18}
-                        color={COLORS.accent}
-                      />
-                    </View>
-                    <View style={styles.categoryResultTextArea}>
-                      <Text style={styles.categoryResultTitle} numberOfLines={1}>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.categoryResultRow}
+                >
+                  {categoryResults.map((place) => (
+                    <HapticPressable
+                      key={place.id}
+                      style={styles.categoryResultCard}
+                      onPress={() => onPressCategoryResult(place)}
+                    >
+                      <View style={styles.categoryResultCardImage}>
+                        <Ionicons
+                          name="location-outline"
+                          size={22}
+                          color={COLORS.textSecondary}
+                        />
+                        {place.category ? (
+                          <View style={styles.placeCategoryBadge}>
+                            <Text style={styles.placeCategoryBadgeText} numberOfLines={1}>
+                              {place.category}
+                            </Text>
+                          </View>
+                        ) : null}
+                      </View>
+                      <Text style={styles.categoryResultCardTitle} numberOfLines={1}>
                         {place.title}
                       </Text>
-                      <Text style={styles.categoryResultSubtitle} numberOfLines={1}>
+                      <Text style={styles.categoryResultCardSubtitle} numberOfLines={1}>
                         {place.subtitle}
                         {place.distance !== undefined
                           ? ` · ${
@@ -779,9 +951,9 @@ function PullUpSheet({
                             }`
                           : ""}
                       </Text>
-                    </View>
-                  </View>
-                ))
+                    </HapticPressable>
+                  ))}
+                </ScrollView>
               ) : (
                 <View style={styles.emptyPlaceContainer}>
                   <NoPlaceIcon
@@ -798,11 +970,24 @@ function PullUpSheet({
             </View>
           ) : null}
 
-          <View style={styles.placeRow}>
-            {RECOMMENDED_PLACES.map((place) => (
-              <RecommendedPlaceCard key={place.id} place={place} />
-            ))}
-          </View>
+          {selectedCategory ? null : (
+            <View style={styles.placeRow}>
+              {isTourLoading ? (
+                <>
+                  <RecommendedPlaceCard place={{ id: 'loading1', name: '장소 찾는 중...', lat: 0, lng: 0 }} />
+                  <RecommendedPlaceCard place={{ id: 'loading2', name: '장소 찾는 중...', lat: 0, lng: 0 }} />
+                </>
+              ) : recommendedPlaces.length > 0 ? (
+                recommendedPlaces.slice(0, 2).map((place) => (
+                  <RecommendedPlaceCard key={place.id} place={place} onPress={() => onPressPlace(place)} />
+                ))
+              ) : (
+                <Text style={{ color: COLORS.textSecondary, fontSize: 13, paddingVertical: 20 }}>
+                  주변에 추천할 만한 관광지가 없습니다.
+                </Text>
+              )}
+            </View>
+          )}
 
           <View style={[styles.sectionHeaderRow, { marginTop: SPACING.xl }]}>
             <Text style={styles.sectionTitle}>오늘의 순간들</Text>
@@ -1500,7 +1685,215 @@ function AiPlanConfirmModal({
   );
 }
 
+function placeDetailFromRecommended(place: RecommendedPlace): PlaceDetailView {
+  return {
+    id: place.id,
+    name: place.name,
+    lat: place.lat,
+    lng: place.lng,
+    imageUrl: place.imageUrl,
+    distanceMeters: place.distance !== undefined ? place.distance * 1000 : undefined,
+  };
+}
+
+function placeDetailFromSearchResult(item: SearchResultItem): PlaceDetailView {
+  return {
+    id: item.id,
+    name: item.title,
+    lat: item.latitude,
+    lng: item.longitude,
+    distanceMeters: item.distance,
+    address: item.subtitle,
+    category: item.category,
+    phone: item.phone,
+    placeUrl: item.placeUrl,
+  };
+}
+
+type PlaceDetailModalProps = {
+  place: PlaceDetailView | null;
+  extraInfo: KakaoPlaceInfo | null;
+  isLoadingExtraInfo: boolean;
+  onClose: () => void;
+};
+
+// 추천 장소 카드 / 태그 검색 결과 카드 어느 쪽을 눌러도 같은 팝업으로 정보를
+// 보여줍니다. 태그 검색 결과는 이미 주소·카테고리·전화번호를 갖고 있고,
+// 추천 장소는 카카오 로컬 검색으로 그 정보를 보충해서 채웁니다(둘 다 이
+// 컴포넌트에 도달할 땐 extraInfo로 통일되어 있어요).
+//
+// RN의 <Modal>을 쓰지 않고 화면 트리 안에 직접 그리는 오버레이로 구현했습니다
+// — <Modal>은 항상 별도의 네이티브 레이어라 열려있는 동안 뒤쪽(지도 등)이
+// 터치 자체를 아예 못 받았는데, 이렇게 바꾸면 시트가 덮지 않은 영역(위쪽
+// 지도)은 pointerEvents="box-none" 덕분에 계속 조작할 수 있습니다. 대신
+// 뒤로가기 버튼 처리와 슬라이드 애니메이션을 직접 구현해야 합니다.
+function PlaceDetailModal({
+  place,
+  extraInfo,
+  isLoadingExtraInfo,
+  onClose,
+}: PlaceDetailModalProps) {
+  // 하단 탭바((tabs)/_layout.tsx)가 화면 콘텐츠를 밀어내는 게 아니라
+  // position:'absolute'로 그 위에 떠 있는 방식이라, 우리 화면의 콘텐츠
+  // 영역은 탭바 높이가 전혀 빠지지 않은 "창 전체 높이"입니다. 그래서 이
+  // 팝업도 탭바 높이만큼 바닥에서 띄워주지 않으면 버튼이 탭바 뒤에 깔려서
+  // 안 보입니다 — 탭바 쪽과 똑같은 공식으로 높이를 계산합니다.
+  const insets = useSafeAreaInsets();
+  const tabBarHeight = 105 + (Platform.OS === 'android' ? insets.bottom * 0.1 : 0);
+
+  const [mounted, setMounted] = useState(false);
+  const [snapshot, setSnapshot] = useState<{
+    place: PlaceDetailView;
+    extraInfo: KakaoPlaceInfo | null;
+    isLoading: boolean;
+  } | null>(null);
+  const translateY = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
+  const wasOpenRef = useRef(false);
+
+  // place가 닫히는 순간(null) 바로 내용이 비어버리면 슬라이드 다운 도중
+  // 텅 빈 카드가 보여서, 마지막으로 봤던 내용을 스냅샷으로 붙잡아둡니다.
+  useEffect(() => {
+    if (place) {
+      setSnapshot({ place, extraInfo, isLoading: isLoadingExtraInfo });
+    }
+
+    if (place && !wasOpenRef.current) {
+      wasOpenRef.current = true;
+      setMounted(true);
+      translateY.setValue(SCREEN_HEIGHT);
+      Animated.timing(translateY, {
+        toValue: 0,
+        duration: 260,
+        useNativeDriver: true,
+      }).start();
+    } else if (!place && wasOpenRef.current) {
+      wasOpenRef.current = false;
+      Animated.timing(translateY, {
+        toValue: SCREEN_HEIGHT,
+        duration: 220,
+        useNativeDriver: true,
+      }).start(() => setMounted(false));
+    }
+  }, [place, extraInfo, isLoadingExtraInfo, translateY]);
+
+  useEffect(() => {
+    if (!place) return;
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      onClose();
+      return true;
+    });
+    return () => subscription.remove();
+  }, [place, onClose]);
+
+  if (!mounted || !snapshot) return null;
+
+  const viewPlace = snapshot.place;
+  const viewExtraInfo = snapshot.extraInfo;
+  const viewIsLoading = snapshot.isLoading;
+
+  return (
+    <View
+      style={[styles.placeDetailBackdrop, { bottom: tabBarHeight }]}
+      pointerEvents="box-none"
+    >
+      <Animated.View
+        style={[styles.placeDetailSheet, { transform: [{ translateY }] }]}
+      >
+        <ScrollView
+          contentContainerStyle={styles.placeDetailScrollContent}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.placeDetailImage}>
+            {viewPlace.imageUrl ? (
+              <Image
+                source={{ uri: viewPlace.imageUrl }}
+                style={styles.placeDetailImagePhoto}
+                contentFit="cover"
+              />
+            ) : (
+              <Ionicons name="image-outline" size={32} color={COLORS.textSecondary} />
+            )}
+          </View>
+
+          <Text style={styles.placeDetailTitle} numberOfLines={2}>
+            {viewPlace.name}
+          </Text>
+          <View style={styles.placeDetailDistanceRow}>
+            <Ionicons name="location" size={14} color={COLORS.accent} />
+            <Text style={styles.placeDetailDistanceText}>
+              {formatPlaceDistance(viewPlace.distanceMeters)}
+            </Text>
+          </View>
+
+          <View style={styles.placeDetailInfoList}>
+            {viewIsLoading ? (
+              <Text style={styles.placeDetailInfoLoading}>정보를 불러오는 중...</Text>
+            ) : viewExtraInfo ? (
+              <>
+                {viewExtraInfo.category ? (
+                  <View style={styles.placeDetailInfoRow}>
+                    <Ionicons name="pricetag-outline" size={14} color={COLORS.textSecondary} />
+                    <Text style={styles.placeDetailInfoText} numberOfLines={1}>
+                      {viewExtraInfo.category}
+                    </Text>
+                  </View>
+                ) : null}
+                {viewExtraInfo.address ? (
+                  <View style={styles.placeDetailInfoRow}>
+                    <Ionicons name="navigate-outline" size={14} color={COLORS.textSecondary} />
+                    <Text style={styles.placeDetailInfoText} numberOfLines={2}>
+                      {viewExtraInfo.address}
+                    </Text>
+                  </View>
+                ) : null}
+                {viewExtraInfo.phone ? (
+                  <View style={styles.placeDetailInfoRow}>
+                    <Ionicons name="call-outline" size={14} color={COLORS.textSecondary} />
+                    <Text style={styles.placeDetailInfoText}>{viewExtraInfo.phone}</Text>
+                  </View>
+                ) : null}
+              </>
+            ) : (
+              <Text style={styles.placeDetailInfoLoading}>상세 정보를 찾지 못했어요</Text>
+            )}
+          </View>
+
+          <View style={styles.aiConfirmActionRow}>
+            <Pressable
+              onPress={onClose}
+              style={({ pressed }) => [
+                styles.aiConfirmCancelButton,
+                pressed && styles.aiConfirmButtonPressed,
+              ]}
+            >
+              <Text style={styles.aiConfirmCancelText}>닫기</Text>
+            </Pressable>
+            {viewExtraInfo?.placeUrl ? (
+              <Pressable
+                onPress={() => Linking.openURL(viewExtraInfo.placeUrl!)}
+                style={({ pressed }) => [
+                  styles.placeDetailMapButton,
+                  pressed && styles.aiConfirmButtonPressed,
+                ]}
+              >
+                <Text style={styles.placeDetailMapButtonText}>카카오맵에서 보기</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        </ScrollView>
+      </Animated.View>
+    </View>
+  );
+}
+
 export default function TripHomeScreen() {
+  const [recommendedPlaces, setRecommendedPlaces] = useState<RecommendedPlace[]>([]);
+  const [isTourLoading, setIsTourLoading] = useState(true);
+  const [selectedTourSpot, setSelectedTourSpot] = useState<KakaoMapPin | null>(null);
+  const [viewingPlace, setViewingPlace] = useState<PlaceDetailView | null>(null);
+  const [placeExtraInfo, setPlaceExtraInfo] = useState<KakaoPlaceInfo | null>(null);
+  const [isLoadingPlaceInfo, setIsLoadingPlaceInfo] = useState(false);
+
   const router = useRouter();
   const currentTrip = useTripStore((state) => state.currentTrip);
 
@@ -1562,6 +1955,8 @@ export default function TripHomeScreen() {
     longitude: Number(place.x),
     category: place.category_group_name || place.category_name || "장소",
     distance: place.distance ? Number(place.distance) : undefined,
+    phone: place.phone || undefined,
+    placeUrl: place.place_url || undefined,
   });
 
   const searchCategoryAround = async (
@@ -1829,25 +2224,150 @@ export default function TripHomeScreen() {
 
 
   const fetchCurrentLocation = useCallback(async () => {
+    if (IS_TEST_MODE) {
+      setCurrentLocation({ lat: TEST_COORDS.latitude, lng: TEST_COORDS.longitude });
+      return;
+    }
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== "granted") {
-        Alert.alert("위치 권한 필요", "설정에서 위치 접근을 허용해주세요.");
-        return;
-      }
-
+      if (status !== "granted") { Alert.alert("위치 권한 필요", "설정에서 위치 접근을 허용해주세요."); return; }
       const { coords } = await Location.getCurrentPositionAsync({});
       setCurrentLocation({ lat: coords.latitude, lng: coords.longitude });
-    } catch (error) {
-      // 위치는 지도를 보정하는 용도라, 실패해도 화면 자체는 그대로 동작해야 해서
-      // 조용히 무시합니다(경로 핀 기준으로 지도가 뜹니다).
-      console.warn("현재 위치를 가져오지 못했습니다:", error);
-    }
+    } catch (error) { console.warn("현재 위치를 가져오지 못했습니다:", error); }
   }, []);
 
   useEffect(() => {
     void fetchCurrentLocation();
   }, [fetchCurrentLocation]);
+
+  useEffect(() => {
+    let isMounted = true;
+    (async () => {
+      if (!currentLocation) return;
+      try {
+        setIsTourLoading(true);
+        if (!KAKAO_REST_API_KEY || !TOUR_API_KEY) return;
+        
+        const { lat, lng } = currentLocation;
+        const kakaoRes = await fetch(`https://dapi.kakao.com/v2/local/geo/coord2regioncode.json?x=${lng}&y=${lat}`, { headers: { Authorization: `KakaoAK ${KAKAO_REST_API_KEY}` } });
+        const kakaoData = await kakaoRes.json();
+        const doc = kakaoData.documents?.find((item: any) => item.region_type === "B") || kakaoData.documents?.[0];
+        if (!doc) return;
+
+        const areaCd = doc.code.substring(0, 2);
+        const signguCd = doc.code.substring(0, 5);
+
+        const cacheKey = `tour_recommend_cache_v1_${areaCd}_${signguCd}`;
+        const cached = await readTourCache(cacheKey);
+        if (cached && Date.now() - cached.timestamp < TOUR_CACHE_TTL_MS) {
+          if (isMounted) setRecommendedPlaces(cached.places);
+          return;
+        }
+
+        let items: any[] = [];
+        let hadApiError = false;
+        const date = new Date();
+        let year = date.getFullYear();
+        let month = date.getMonth() + 1;
+
+        for (let i = 0; i < 12; i++) {
+          const baseYm = `${year}${String(month).padStart(2, '0')}`;
+          const tourRes = await fetch(`http://apis.data.go.kr/B551011/LocgoHubTarService1/areaBasedList1?serviceKey=${TOUR_API_KEY}&numOfRows=100&pageNo=1&MobileOS=ETC&MobileApp=AppTest&baseYm=${baseYm}&areaCd=${areaCd}&signguCd=${signguCd}&_type=json`);
+          const tourData = await tourRes.json();
+
+          // 요청 한도 초과 같은 API 자체 에러는 "이번 달엔 데이터 없음"과 다르게
+          // 취급해서 바로 중단합니다 — 안 그러면 이미 막힌 키로 11번을 더 낭비해요.
+          if (tourData?.OpenAPI_ServiceResponse?.cmmMsgHeader) {
+            hadApiError = true;
+            console.warn('관광공사 API 에러:', tourData.OpenAPI_ServiceResponse.cmmMsgHeader.errMsg);
+            break;
+          }
+
+          let fetchedItems = tourData?.response?.body?.items?.item || [];
+          if (!Array.isArray(fetchedItems)) fetchedItems = [fetchedItems];
+
+          if (fetchedItems.length > 0) {
+            items = fetchedItems;
+            break;
+          }
+          month -= 1;
+          if (month === 0) { month = 12; year -= 1; }
+        }
+
+        if (hadApiError) {
+          // API가 막혀있으면, 기간이 지난 캐시라도 있으면 빈 화면 대신 그걸 보여줍니다.
+          if (cached && isMounted) setRecommendedPlaces(cached.places);
+          return;
+        }
+
+        const sortedSpots = items
+          .filter((item: any) => item.mapY && item.mapX)
+          .map((item: any) => ({ ...item, distance: getDistance(lat, lng, parseFloat(item.mapY), parseFloat(item.mapX)) }))
+          .sort((a: any, b: any) => a.distance - b.distance)
+          .slice(0, 10);
+
+        let hadPhotoApiError = false;
+        const placesWithPhotos = await Promise.all(
+          sortedSpots.map(async (spot: any, index: number) => {
+            const photoInfo = await fetchSpotPhoto(spot.hubTatsNm);
+            if (photoInfo === TOUR_API_ERROR) hadPhotoApiError = true;
+            return {
+              id: `${spot.hubTatsNm}_${index}`,
+              name: spot.hubTatsNm,
+              imageUrl: photoInfo && photoInfo !== TOUR_API_ERROR ? photoInfo.galWebImageUrl : undefined,
+              distance: spot.distance,
+              lat: parseFloat(spot.mapY),
+              lng: parseFloat(spot.mapX),
+              // 두루누비 API가 주는 카테고리(중분류가 더 구체적이라 우선, 없으면
+              // 대분류로 대체) — 예: "역사관광", "쇼핑", "문화관광".
+              category: spot.hubCtgryMclsNm || spot.hubCtgryLclsNm || undefined,
+            };
+          })
+        );
+        if (isMounted) setRecommendedPlaces(placesWithPhotos);
+
+        // 사진 API까지 막힌 상태에서 저장하면 이미지 없는 결과가 하루 종일 캐시에
+        // 박제되니, 완전히 성공했을 때만 캐시에 씁니다.
+        if (!hadPhotoApiError) {
+          void writeTourCache(cacheKey, placesWithPhotos);
+        }
+      } catch (error) { console.warn('관광지 추천 실패:', error); }
+      finally { if (isMounted) setIsTourLoading(false); }
+    })();
+    return () => { isMounted = false; };
+  }, [currentLocation]);
+
+  // 정보 팝업이 열릴 때(viewingPlace가 바뀔 때)만 동작합니다. 태그 검색 결과
+  // 출처면 주소/카테고리가 이미 있어서 바로 보여주고, 추천 장소 카드 출처면
+  // (관광공사 API엔 그 정보가 없어서) 카카오 로컬 검색으로 보충합니다 —
+  // 추천 목록을 불러올 때 전부 미리 가져오면 안 볼 장소까지 낭비되니 여기서만 호출.
+  useEffect(() => {
+    let isMounted = true;
+    (async () => {
+      if (!viewingPlace) {
+        setPlaceExtraInfo(null);
+        return;
+      }
+      if (viewingPlace.address !== undefined) {
+        setPlaceExtraInfo({
+          address: viewingPlace.address,
+          category: viewingPlace.category ?? '',
+          phone: viewingPlace.phone,
+          placeUrl: viewingPlace.placeUrl,
+        });
+        setIsLoadingPlaceInfo(false);
+        return;
+      }
+      setIsLoadingPlaceInfo(true);
+      setPlaceExtraInfo(null);
+      const info = await fetchKakaoPlaceInfo(viewingPlace.name, viewingPlace.lat, viewingPlace.lng);
+      if (isMounted) {
+        setPlaceExtraInfo(info);
+        setIsLoadingPlaceInfo(false);
+      }
+    })();
+    return () => { isMounted = false; };
+  }, [viewingPlace]);
 
   // "내 위치로" 버튼을 눌렀을 때만 지도 중심을 내 위치로 옮기라는 신호를
   // KakaoMapView에 넘겨줍니다(my-route.tsx의 locateToken과 동일한 이유 —
@@ -1859,18 +2379,24 @@ export default function TripHomeScreen() {
     setLocateToken((prev) => prev + 1);
   }, [fetchCurrentLocation]);
 
+  let displayPins = aiRoutePins.length > 0 ? aiRoutePins : routePins;
+  if (selectedTourSpot) {
+    displayPins = [...displayPins, selectedTourSpot];
+  }
+
   return (
     <View style={styles.screen}>
       {/* 지도는 네모 박스 안에 갇히지 않고 화면 전체 폭을 그대로 채웁니다.
           여행 선택 바/시트는 전부 그 위에 떠 있는 오버레이예요. */}
       <View style={styles.map}>
-        <KakaoMapView
-          pins={aiRoutePins.length > 0 ? aiRoutePins : routePins}
-          currentLocation={currentLocation}
-          height={SCREEN_HEIGHT}
-          pathColor={COLORS.accent}
-          focusOnLocationToken={locateToken || undefined}
-          centerOffsetY={LOCATION_FOCUS_OFFSET_Y}
+        {/* displayPins 렌더링 적용 */}
+        <KakaoMapView 
+          pins={displayPins} 
+          currentLocation={currentLocation} 
+          height={SCREEN_HEIGHT} 
+          pathColor={COLORS.accent} 
+          focusOnLocationToken={locateToken || undefined} 
+          centerOffsetY={LOCATION_FOCUS_OFFSET_Y} 
         />
       </View>
 
@@ -1881,6 +2407,31 @@ export default function TripHomeScreen() {
         selectedCategory={selectedCategory}
         categoryResults={categoryResults}
         isSearchingCategory={isSearching}
+        recommendedPlaces={recommendedPlaces} // 추가
+        isTourLoading={isTourLoading}         // 추가
+        //클릭 시 핀 설정 + 정보 팝업 표시
+        onPressPlace={(place) => {
+          setSelectedTourSpot({
+            id: place.id,
+            label: '⭐', // 지도 위에 뜰 텍스트
+            lat: place.lat,
+            lng: place.lng,
+            color: '#7B61FF', // 강조하기 위해 보라색 지정
+            excludeFromPath: true, // 여행 경로가 아니라 미리보기 핀이라 선으로 안 이어야 함
+          });
+          setViewingPlace(placeDetailFromRecommended(place));
+        }}
+        onPressCategoryResult={(item) => {
+          setSelectedTourSpot({
+            id: item.id,
+            label: '⭐',
+            lat: item.latitude,
+            lng: item.longitude,
+            color: '#7B61FF',
+            excludeFromPath: true,
+          });
+          setViewingPlace(placeDetailFromSearchResult(item));
+        }}
         onPressCategory={(category) => void handleCategorySearch(category)}
         onPressCompass={() => void handlePressCompass()}
       />
@@ -1906,6 +2457,16 @@ export default function TripHomeScreen() {
         saving={isAiPlanSaving}
         onClose={() => setAiPlanConfirmVisible(false)}
         onConfirm={() => void confirmAiPlan()}
+      />
+
+      <PlaceDetailModal
+        place={viewingPlace}
+        extraInfo={placeExtraInfo}
+        isLoadingExtraInfo={isLoadingPlaceInfo}
+        onClose={() => {
+          setViewingPlace(null);
+          setSelectedTourSpot(null);
+        }}
       />
 
     </View>
@@ -2387,20 +2948,33 @@ const styles = StyleSheet.create({
   },
 
   // 추천 장소
-  placeRow: {
-    marginTop: SPACING.md,
-    flexDirection: "row",
-    gap: SPACING.sm,
+  placeRow: { 
+    marginTop: 12, 
+    flexDirection: "row", 
+    gap: PLACE_CARD_GAP,
   },
-  placeCard: {
-    flex: 1,
+  
+  // 개별 카드 (화면 너비를 기준으로 계산한 고정 px 너비 → 항상 정확히 절반씩 배치)
+  placeCard: { 
+    width: PLACE_CARD_WIDTH, 
   },
-  placeImagePlaceholder: {
-    height: 90,
-    borderRadius: RADIUS.card,
-    backgroundColor: COLORS.surface,
-    alignItems: "center",
+  
+  // 이미지 틀 (가로로 넓은 직사각형, 카드 너비에 비례해서 높이가 결정됨)
+  placeImagePlaceholder: { 
+    width: '100%',
+    aspectRatio: 4 / 3, // ⭐️ 고정 height 대신 비율로 지정해 기기/카드 너비가 달라져도 사진이 항상 적절한 크기로 보임
+    borderRadius: 14, 
+    backgroundColor: COLORS.surface, 
+    alignItems: "center", 
     justifyContent: "center",
+    overflow: 'hidden', // 둥근 모서리 밖으로 삐져나가는 사진 차단
+  },
+  
+  // ⭐️ 사진이 틀에 완벽히 꽉 차도록 강제
+  placeImage: {
+    width: '100%',
+    height: '100%',
+    position: 'absolute',
   },
   placePinBadge: {
     position: "absolute",
@@ -2411,12 +2985,31 @@ const styles = StyleSheet.create({
     borderRadius: 11,
     backgroundColor: COLORS.accent,
     alignItems: "center",
-    justifyContent: "center",
+    justifyContent: "center"
   },
-  placeName: {
-    marginTop: SPACING.sm,
-    fontSize: 13,
-    fontWeight: "300",
+
+  // 카드 이미지 위 카테고리 태그 (추천 장소 / 태그 검색 결과 카드 공용)
+  placeCategoryBadge: {
+    position: "absolute",
+    top: 8,
+    left: 8,
+    maxWidth: '80%',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+    backgroundColor: "rgba(0,0,0,0.55)",
+  },
+  placeCategoryBadgeText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: COLORS.white,
+  },
+
+  // 관광지 이름 텍스트
+  placeName: { 
+    marginTop: 8, 
+    fontSize: 13, 
+    fontWeight: "700", 
     color: COLORS.textPrimary,
   },
 
@@ -2447,38 +3040,34 @@ const styles = StyleSheet.create({
   categoryTagTextSelected: {
     color: COLORS.white,
   },
-  categoryResultList: {
+  categoryResultSection: {
     marginTop: SPACING.sm,
   },
-  categoryResultItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: SPACING.sm,
-    paddingVertical: SPACING.sm,
+  categoryResultRow: {
+    gap: PLACE_CARD_GAP,
+    paddingVertical: SPACING.xs,
   },
-  categoryResultItemBorder: {
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
+  // 추천 장소 카드와 크기를 맞추기 위해 같은 고정 너비(PLACE_CARD_WIDTH)를 씁니다.
+  categoryResultCard: {
+    width: PLACE_CARD_WIDTH,
   },
-  categoryResultIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: RADIUS.banner,
+  categoryResultCardImage: {
+    width: '100%',
+    aspectRatio: 4 / 3,
+    borderRadius: 14,
+    backgroundColor: COLORS.surface,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: COLORS.accentTint,
   },
-  categoryResultTextArea: {
-    flex: 1,
-  },
-  categoryResultTitle: {
-    fontSize: 14,
+  categoryResultCardTitle: {
+    marginTop: 8,
+    fontSize: 13,
     fontWeight: "700",
     color: COLORS.textPrimary,
   },
-  categoryResultSubtitle: {
-    marginTop: SPACING.xs,
-    fontSize: 12,
+  categoryResultCardSubtitle: {
+    marginTop: 2,
+    fontSize: 11,
     color: COLORS.textSecondary,
   },
 
@@ -3082,5 +3671,100 @@ const styles = StyleSheet.create({
   },
   aiConfirmButtonPressed: {
     opacity: 0.74,
+  },
+
+  // 추천 장소 카드 눌렀을 때 뜨는 정보 팝업
+  // 뒤에 딤 처리된 배경 없이, 팝업 시트 자체를 크게 키워서 홈 화면의
+  // 바텀시트(PullUpSheet)를 완전히 덮어버립니다. 지도 위에 뜨는 다른
+  // 오버레이보다 항상 위에 있어야 해서, 파일에서 가장 큰 zIndex(AI 추천
+  // 전체화면의 300)보다도 높게 잡습니다.
+  placeDetailBackdrop: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: "flex-end",
+    backgroundColor: "transparent",
+    zIndex: 400,
+    elevation: 400,
+  },
+  // 고정 height 대신 maxHeight를 씁니다 — 버튼이 이제 스크롤 콘텐츠의
+  // 마지막 항목이라(상세 정보 바로 아래), 카드 자체가 내용물 크기에 맞춰
+  // 줄어들고(짧은 내용이면 버튼이 바로 붙어서 보임), 내용이 길 때만 이
+  // 최대 높이에서 스크롤됩니다.
+  placeDetailSheet: {
+    backgroundColor: "#FFFFFF",
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    maxHeight: '50%',
+    overflow: 'hidden',
+    paddingHorizontal: SPACING.screenH,
+    paddingTop: SPACING.lg,
+    width: "100%",
+  },
+  placeDetailScrollContent: {
+    paddingBottom: SPACING.xl,
+  },
+  placeDetailImage: {
+    width: '100%',
+    aspectRatio: 16 / 9,
+    borderRadius: 16,
+    backgroundColor: COLORS.surface,
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: 'hidden',
+    marginTop: SPACING.md,
+  },
+  placeDetailImagePhoto: {
+    width: '100%',
+    height: '100%',
+  },
+  placeDetailTitle: {
+    marginTop: SPACING.md,
+    fontSize: 20,
+    fontWeight: "800",
+    color: COLORS.textPrimary,
+  },
+  placeDetailDistanceRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: SPACING.xs,
+    marginTop: SPACING.xs,
+  },
+  placeDetailDistanceText: {
+    fontSize: 13,
+    color: COLORS.textSecondary,
+  },
+  placeDetailInfoList: {
+    marginTop: SPACING.md,
+    gap: SPACING.sm,
+  },
+  placeDetailInfoRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: SPACING.xs,
+  },
+  placeDetailInfoText: {
+    flex: 1,
+    fontSize: 13,
+    color: COLORS.textPrimary,
+  },
+  placeDetailInfoLoading: {
+    fontSize: 13,
+    color: COLORS.textSecondary,
+  },
+  placeDetailMapButton: {
+    alignItems: "center",
+    backgroundColor: COLORS.accent,
+    borderRadius: RADIUS.card,
+    flex: 1,
+    height: 50,
+    justifyContent: "center",
+  },
+  placeDetailMapButtonText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "800",
   },
 });

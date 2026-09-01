@@ -146,8 +146,13 @@
           level: level,
         });
 
-        if (pins.length >= 2) {
-          var linePath = pins.map(function (p) {
+        // excludeFromPath: true인 핀(예: 추천 장소 미리보기 핑)은 경로선에
+        // 안 끼도록 따로 빼고 연결합니다 — 마커 자체는 아래 pins.forEach에서
+        // 그대로 그려지니 지도엔 계속 보입니다.
+        var pathPins = pins.filter(function (p) { return !p.excludeFromPath; });
+
+        if (pathPins.length >= 2) {
+          var linePath = pathPins.map(function (p) {
             return new kakao.maps.LatLng(p.lat, p.lng);
           });
           var polyline = new kakao.maps.Polyline({
