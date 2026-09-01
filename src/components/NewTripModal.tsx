@@ -422,7 +422,10 @@ export default function NewTripModal({
     const { startDate, endDate } = form;
     if (!startDate || !endDate) return;
     onCreated({ ...form, startDate, endDate });
-    setStep('success');
+    // '여행 생성 완료' 팝업(success 스텝)을 주석 처리해서, 지금은 저장(handleSave)과
+    // 동일하게 만들자마자 바로 닫습니다.
+    // setStep('success');
+    handleClose();
   }
 
   function handleSave() {
@@ -812,7 +815,7 @@ export default function NewTripModal({
             </ScrollView>
           )}
 
-          {/* ── SUCCESS: 여행 생성 완료 ───────────────────── */}
+          {/* ── SUCCESS: 여행 생성 완료 ─────────────────────
           {step === 'success' && (
             <View style={styles.successBody}>
               <View style={styles.mascotPlaceholder} />
@@ -833,6 +836,7 @@ export default function NewTripModal({
               />
             </View>
           )}
+          */}
         </View>
       </View>
     </Modal>
