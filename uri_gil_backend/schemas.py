@@ -108,3 +108,11 @@ class RouteSpotResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+# ========== 비밀번호 재설정 ==========
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str
