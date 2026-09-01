@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useFocusEffect, useLocalSearchParams } from "expo-router";
 import { parseDateRange, type FolderItem } from "@/services/folderService";
 import { getRecordingsByFolder } from "@/services/recordingService";
@@ -35,6 +35,8 @@ import KakaoMapView, { type KakaoMapPin } from '@/components/KakaoMapView';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
+import * as MediaLibrary from 'expo-media-library';
+import { captureRef } from 'react-native-view-shot';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS as SHARED_COLORS, RADIUS, SPACING } from '@/constants/color';
 
@@ -351,6 +353,31 @@ function TravelShareSheet({
   onClose,
   onNativeShare,
 }: TravelShareSheetProps) {
+  const previewCardRef = useRef<View>(null);
+  const isSavingImageRef = useRef(false);
+
+  const handleSaveImage = async () => {
+    if (isSavingImageRef.current || !previewCardRef.current) return;
+    isSavingImageRef.current = true;
+
+    try {
+      const { status } = await MediaLibrary.requestPermissionsAsync(true);
+      if (status !== 'granted') {
+        Alert.alert('권한 필요', '이미지를 저장하려면 갤러리 접근 권한이 필요해요.');
+        return;
+      }
+
+      const uri = await captureRef(previewCardRef, { format: 'png', quality: 1 });
+      await MediaLibrary.createAssetAsync(uri);
+      Alert.alert('저장 완료', '여행 카드 이미지를 갤러리에 저장했어요.');
+    } catch (error) {
+      console.error('[TravelShareSheet] 이미지 저장 실패:', error);
+      Alert.alert('저장 실패', '이미지를 저장하지 못했어요. 잠시 후 다시 시도해주세요.');
+    } finally {
+      isSavingImageRef.current = false;
+    }
+  };
+
   return (
     <Modal
       animationType="slide"
@@ -385,7 +412,7 @@ function TravelShareSheet({
             showsVerticalScrollIndicator={false}
             contentContainerStyle={styles.shareScrollContent}
           >
-            <View style={styles.sharePreviewCard}>
+            <View ref={previewCardRef} collapsable={false} style={styles.sharePreviewCard}>
               <View pointerEvents="none" style={styles.shareMapPreview}>
                 <KakaoMapView pins={mapPins} height={126} pathColor={COLORS.primary} />
               </View>
@@ -400,58 +427,7 @@ function TravelShareSheet({
                 <Text style={styles.sharePreviewMeta}>
                   여행 경로를 친구들과 함께 확인해보세요
                 </Text>
-
-                <Pressable
-                  onPress={onNativeShare}
-                  style={({ pressed }) => [
-                    styles.shareInlineButton,
-                    pressed && styles.sharePressed,
-                  ]}
-                >
-                  <Ionicons name="link-outline" size={18} color="#555555" />
-                  <Text style={styles.shareInlineButtonText}>
-                    공유 링크 보내기
-                  </Text>
-                </Pressable>
               </View>
-            </View>
-
-            <View style={styles.shareAppsRow}>
-              <ShareAppButton
-                label="카카오톡"
-                color="#F9DD00"
-                icon="chatbubble-ellipses"
-                iconColor="#3C2C00"
-                onPress={onNativeShare}
-              />
-              <ShareAppButton
-                label="메시지"
-                color="#54D965"
-                icon="chatbubble"
-                iconColor="#FFFFFF"
-                onPress={onNativeShare}
-              />
-              <ShareAppButton
-                label="인스타그램"
-                color="#D94A87"
-                icon="camera"
-                iconColor="#FFFFFF"
-                onPress={onNativeShare}
-              />
-              <ShareAppButton
-                label="페이스북"
-                color="#3779D4"
-                icon="logo-facebook"
-                iconColor="#FFFFFF"
-                onPress={onNativeShare}
-              />
-              <ShareAppButton
-                label="더보기"
-                color="#F0F0F0"
-                icon="ellipsis-horizontal"
-                iconColor="#4E4E4E"
-                onPress={onNativeShare}
-              />
             </View>
 
             <View style={styles.shareActionList}>
@@ -461,24 +437,9 @@ function TravelShareSheet({
                 onPress={onNativeShare}
               />
               <ShareActionRow
-                icon="qr-code-outline"
-                label="QR 코드로 공유"
-                onPress={() =>
-                  Alert.alert(
-                    "QR 코드 공유",
-                    "QR 코드 기능을 연결할 수 있습니다.",
-                  )
-                }
-              />
-              <ShareActionRow
                 icon="download-outline"
                 label="이미지로 저장"
-                onPress={() =>
-                  Alert.alert(
-                    "이미지로 저장",
-                    "이미지 저장 기능을 연결할 수 있습니다.",
-                  )
-                }
+                onPress={() => void handleSaveImage()}
                 isLast
               />
             </View>
@@ -486,39 +447,6 @@ function TravelShareSheet({
         </View>
       </View>
     </Modal>
-  );
-}
-
-function ShareAppButton({
-  label,
-  color,
-  icon,
-  iconColor,
-  onPress,
-}: {
-  label: string;
-  color: string;
-  icon: React.ComponentProps<typeof Ionicons>["name"];
-  iconColor: string;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={`${label}으로 공유하기`}
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.shareAppButton,
-        pressed && styles.sharePressed,
-      ]}
-    >
-      <View style={[styles.shareAppIcon, { backgroundColor: color }]}>
-        <Ionicons name={icon} size={27} color={iconColor} />
-      </View>
-      <Text numberOfLines={1} style={styles.shareAppLabel}>
-        {label}
-      </Text>
-    </Pressable>
   );
 }
 
@@ -1840,48 +1768,10 @@ const styles = StyleSheet.create({
     lineHeight: 19,
     marginTop: SPACING.xs,
   },
-  shareInlineButton: {
-    alignItems: "center",
-    alignSelf: "flex-start",
-    borderColor: "#E3E3E3",
-    borderRadius: 20,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: SPACING.sm,
-    marginTop: SPACING.sm,
-    paddingHorizontal: 13,
-    paddingVertical: SPACING.sm,
-  },
-  shareInlineButtonText: {
-    color: "#555555",
-    fontSize: 13,
-    fontWeight: "700",
-  },
-  shareAppsRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: SPACING.lg,
-    marginTop: 28,
-  },
-  shareAppButton: {
-    alignItems: "center",
-    width: 59,
-  },
-  shareAppIcon: {
-    alignItems: "center",
-    borderRadius: RADIUS.banner,
-    height: 55,
-    justifyContent: "center",
-    width: 55,
-  },
-  shareAppLabel: {
-    color: "#5C5C5C",
-    fontSize: 11,
-    marginTop: SPACING.sm,
-  },
   shareActionList: {
     backgroundColor: '#FBFBFA',
     borderRadius: RADIUS.banner,
+    marginTop: SPACING.lg,
     overflow: "hidden",
   },
   shareActionRow: {

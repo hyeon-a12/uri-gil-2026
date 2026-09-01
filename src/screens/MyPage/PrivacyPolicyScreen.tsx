@@ -5,11 +5,13 @@ import { AppText as Text } from '@/components/AppText';
 import { colors } from '@/constants/menu-theme';
 import { Card, ListRow, SectionLabel, Toggle, ScreenHeader } from '@/components/common';
 
-// 실제 약관 URL로 교체 필요
+// 위치/개인정보/서비스 약관을 노션 페이지 하나에 통합해서 관리합니다.
+const NOTION_TERMS_URL = 'https://rectangular-random-c6d.notion.site/444eee87fea883bc854a81944d60553c';
+
 const URLS = {
-  locationTerms: 'https://uri-gil.example.com/terms/location',
-  privacyPolicy: 'https://uri-gil.example.com/privacy',
-  serviceTerms: 'https://uri-gil.example.com/terms/service',
+  locationTerms: NOTION_TERMS_URL,
+  privacyPolicy: NOTION_TERMS_URL,
+  serviceTerms: NOTION_TERMS_URL,
   openSourceLicense: 'https://uri-gil.example.com/licenses',
 };
 
