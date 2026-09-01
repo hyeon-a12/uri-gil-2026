@@ -18,6 +18,7 @@ import { Ionicons, Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as MediaLibrary from 'expo-media-library';
 
 import { ClipPreviewModal } from '@/components/ClipPreview/ClipPreviewModal'
+import { HapticPressable } from '@/components/common';
 import { deleteRecording, getRecordingsByFolder } from '@/services/recordingService';
 import { useTripStore } from '@/store/useTripStore';
 import { ClipItem } from '@/types/home';
@@ -526,15 +527,16 @@ export default function ClipSelectScreen() {
           </View>
         </View>
 
-        <TouchableOpacity
+        <HapticPressable
           style={[
             styles.createButton,
             selectedCount === 0 && styles.createButtonDisabled,
           ]}
           disabled={selectedCount === 0}
-          onPress={handleComplete}>
-            <Text style={styles.createButtonText}>영상 생성</Text>
-          </TouchableOpacity>
+          onPress={handleComplete}
+        >
+          <Text style={styles.createButtonText}>영상 생성</Text>
+        </HapticPressable>
       </View>
 
       <Modal

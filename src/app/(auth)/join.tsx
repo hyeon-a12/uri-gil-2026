@@ -13,6 +13,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { HapticPressable } from '@/components/common';
 
 const API_URL = 'https://uri-gil-2026-production.up.railway.app';
 
@@ -252,13 +253,9 @@ export default function JoinScreen() {
               <TermRow checked={agreeAge} onToggle={() => setAgreeAge(!agreeAge)} label="[필수] 만 14세 이상입니다." />
             </View>
 
-            <TouchableOpacity
-              style={styles.joinButton}
-              activeOpacity={0.85}
-              onPress={handleJoin}
-            >
+            <HapticPressable style={styles.joinButton} onPress={handleJoin}>
               <Text style={styles.joinButtonText}>회원가입</Text>
-            </TouchableOpacity>
+            </HapticPressable>
           </View>
 
           <View style={styles.loginRow}>

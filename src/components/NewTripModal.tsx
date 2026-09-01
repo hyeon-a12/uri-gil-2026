@@ -17,6 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { ShootingStyleId } from '@/services/folderService';
+import { HapticPressable } from '@/components/common';
 import { COLORS as SHARED_COLORS, RADIUS, SPACING } from '@/constants/color';
 
 const COLORS = {
@@ -242,12 +243,12 @@ function PrimaryButton({
     );
   }
   return (
-    <TouchableOpacity activeOpacity={0.85} onPress={onPress} style={style}>
-      <View style={[styles.primaryButton, { backgroundColor: COLORS.accent }]}>
-
-        <Text style={styles.primaryButtonText}>{label}</Text>
-      </View>
-    </TouchableOpacity>
+    <HapticPressable
+      onPress={onPress}
+      style={[styles.primaryButton, { backgroundColor: COLORS.accent }, style]}
+    >
+      <Text style={styles.primaryButtonText}>{label}</Text>
+    </HapticPressable>
   );
 }
 

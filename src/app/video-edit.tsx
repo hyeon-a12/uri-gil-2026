@@ -19,6 +19,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { HapticPressable } from '@/components/common';
 import { COLORS as SHARED_COLORS } from '@/constants/color';
 import { getRecordingsByFolder } from '@/services/recordingService';
 
@@ -846,15 +847,11 @@ export default function VideoEditScreen() {
           <Ionicons name="chevron-back" size={22} color={COLORS.black} />
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.exportButton}
-          activeOpacity={0.85}
-          onPress={handleExport}
-        >
+        <HapticPressable style={styles.exportButton} onPress={handleExport}>
           <Text allowFontScaling={false} style={styles.exportButtonText}>
             생성하기
           </Text>
-        </TouchableOpacity>
+        </HapticPressable>
       </View>
 
       {/* 프리뷰 — 빈 배경을 탭하면 선택된 클립을 해제합니다 */}

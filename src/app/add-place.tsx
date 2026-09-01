@@ -18,6 +18,7 @@ import * as Location from 'expo-location';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppText as Text } from '@/components/AppText';
+import { HapticPressable } from '@/components/common';
 import KakaoMapView, { KakaoMapPin } from '@/components/KakaoMapView';
 import { COLORS as APP_COLORS, RADIUS } from '@/constants/color';
 import { appendTripScheduleStops } from '@/services/trip-schedule-service';
@@ -224,19 +225,18 @@ export default function AddPlaceScreen() {
                 <Text allowFontScaling={false} numberOfLines={1} style={styles.sheetTitle}>
                   {getDayLabel(day, tripStartDate)}에 추가할 장소
                 </Text>
-                <Pressable
+                <HapticPressable
                   onPress={handleComplete}
                   disabled={!placeToSave || isSaving}
-                  style={({ pressed }) => [
+                  style={[
                     styles.inlineNextButton,
                     (!placeToSave || isSaving) && styles.inlineNextButtonDisabled,
-                    pressed && placeToSave && !isSaving && styles.inlineNextButtonPressed,
                   ]}
                 >
                   <Text allowFontScaling={false} style={styles.inlineNextButtonText}>
                     완료
                   </Text>
-                </Pressable>
+                </HapticPressable>
               </View>
               {locationMessage ? (
                 <Text allowFontScaling={false} style={styles.sheetDescription}>
@@ -462,7 +462,6 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     elevation: 3,
   },
-  inlineNextButtonPressed: { backgroundColor: COLORS.primaryDark, transform: [{ scale: 0.97 }] },
   inlineNextButtonDisabled: { backgroundColor: COLORS.disabled, shadowOpacity: 0, elevation: 0 },
   inlineNextButtonText: { color: '#FFFFFF', fontSize: 13, lineHeight: 18, fontWeight: '800' },
   sheetDescription: { marginTop: 8, marginLeft: 48, color: COLORS.textSecondary, fontSize: 13, lineHeight: 19, fontWeight: '500' },

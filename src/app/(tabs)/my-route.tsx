@@ -12,6 +12,12 @@ import { navigateToCamera } from "@/navigation/recordingNavigation";
 import type { RecordingData } from "@/types/recording";
 import type { ClipItem } from "@/types/home";
 import { ClipPreviewModal } from "@/components/ClipPreview/ClipPreviewModal";
+import {
+  PlaceDetailModal,
+  fetchKakaoPlaceInfo,
+  type KakaoPlaceInfo,
+  type PlaceDetailView,
+} from "@/components/PlaceDetail/PlaceDetailModal";
 import { useTripStore } from "@/store/useTripStore";
 import {
   Alert,
@@ -124,9 +130,10 @@ function ClipThumbnail({ thumbnail, duration, onPress }: ClipThumbnailProps) {
 interface SelectedStopCardProps {
   stop: PlanStop;
   onPreviewClip: (clip: ClipItem) => void;
+  onPressDetail: (stop: PlanStop) => void;
 }
 
-function SelectedStopCard({ stop, onPreviewClip }: SelectedStopCardProps) {
+function SelectedStopCard({ stop, onPreviewClip, onPressDetail }: SelectedStopCardProps) {
   return (
     <View style={styles.stopCard}>
       <View style={styles.stopCardHeader}>
@@ -157,10 +164,19 @@ function SelectedStopCard({ stop, onPreviewClip }: SelectedStopCardProps) {
         <Pressable
           hitSlop={10}
           onPress={() => {
-            Alert.alert(
-              stop.name,
-              "장소 상세 정보 화면으로 연결할 예정입니다.",
-            );
+            if (stop.source === "manual") {
+              // 직접 추가한 장소는 실제 API로 검증된 정보가 아니라 상세
+              // 정보를 보여줄 수 없습니다.
+              Alert.alert(stop.name, "직접 추가한 장소는 상세 정보가 없어요.");
+              return;
+            }
+
+            if (stop.latitude === null || stop.longitude === null) {
+              Alert.alert(stop.name, "위치 정보가 없어 상세 정보를 볼 수 없어요.");
+              return;
+            }
+
+            onPressDetail(stop);
           }}
           style={styles.stopCardMoreButton}
         >
@@ -552,6 +568,35 @@ export default function MyRouteScreen() {
   >([]);
   const [stopOrder, setStopOrder] = useState<StopOrderMap>({});
   const [previewClip, setPreviewClip] = useState<ClipItem | null>(null);
+  const [viewingPlace, setViewingPlace] = useState<PlaceDetailView | null>(null);
+  const [placeExtraInfo, setPlaceExtraInfo] = useState<KakaoPlaceInfo | null>(null);
+  const [isLoadingPlaceInfo, setIsLoadingPlaceInfo] = useState(false);
+
+  // 정보 팝업이 열릴 때(viewingPlace가 바뀔 때)만 카카오 로컬 검색으로
+  // 주소·카테고리·전화번호를 채웁니다 — 홈 화면의 정보 팝업과 동일한 방식.
+  useEffect(() => {
+    let isMounted = true;
+    (async () => {
+      if (!viewingPlace) {
+        setPlaceExtraInfo(null);
+        return;
+      }
+      setIsLoadingPlaceInfo(true);
+      setPlaceExtraInfo(null);
+      const info = await fetchKakaoPlaceInfo(
+        viewingPlace.name,
+        viewingPlace.lat,
+        viewingPlace.lng,
+      );
+      if (isMounted) {
+        setPlaceExtraInfo(info);
+        setIsLoadingPlaceInfo(false);
+      }
+    })();
+    return () => {
+      isMounted = false;
+    };
+  }, [viewingPlace]);
 
   useFocusEffect(
     useCallback(() => {
@@ -829,7 +874,18 @@ export default function MyRouteScreen() {
                   .sort((a, b) => a.order - b.order)
                   .map((stop) => (
                     <View key={stop.id} style={styles.stopCardSlide}>
-                      <SelectedStopCard stop={stop} onPreviewClip={setPreviewClip} />
+                      <SelectedStopCard
+                        stop={stop}
+                        onPreviewClip={setPreviewClip}
+                        onPressDetail={(pressedStop) =>
+                          setViewingPlace({
+                            id: pressedStop.id,
+                            name: pressedStop.name,
+                            lat: pressedStop.latitude!,
+                            lng: pressedStop.longitude!,
+                          })
+                        }
+                      />
                     </View>
                   ))}
               </ScrollView>
@@ -875,6 +931,13 @@ export default function MyRouteScreen() {
       <ClipPreviewModal
         clip={previewClip}
         onClose={() => setPreviewClip(null)}
+      />
+
+      <PlaceDetailModal
+        place={viewingPlace}
+        extraInfo={placeExtraInfo}
+        isLoadingExtraInfo={isLoadingPlaceInfo}
+        onClose={() => setViewingPlace(null)}
       />
     </View>
   );

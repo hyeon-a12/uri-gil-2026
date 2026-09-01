@@ -12,6 +12,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { HapticPressable } from '@/components/common';
 
 // ─── 단계 타입 ────────────────────────────────────────────────────────────────
 type Step = 'email' | 'verify' | 'reset';
@@ -230,16 +231,15 @@ export default function FindPasswordScreen() {
                 returnKeyType="done"
                 onSubmitEditing={handleSendCode}
               />
-              <TouchableOpacity
+              <HapticPressable
                 style={[styles.primaryButton, isSending && styles.buttonDisabled]}
-                activeOpacity={0.85}
                 onPress={handleSendCode}
                 disabled={isSending}
               >
                 <Text style={styles.primaryButtonText}>
                   {isSending ? '전송 중...' : '인증코드 받기'}
                 </Text>
-              </TouchableOpacity>
+              </HapticPressable>
             </View>
           )}
 
@@ -269,13 +269,9 @@ export default function FindPasswordScreen() {
                 <Text style={styles.resendText}>인증코드 재전송</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity
-                style={styles.primaryButton}
-                activeOpacity={0.85}
-                onPress={handleVerifyCode}
-              >
+              <HapticPressable style={styles.primaryButton} onPress={handleVerifyCode}>
                 <Text style={styles.primaryButtonText}>확인</Text>
-              </TouchableOpacity>
+              </HapticPressable>
             </View>
           )}
 
@@ -340,13 +336,12 @@ export default function FindPasswordScreen() {
                 </Text>
               )}
 
-              <TouchableOpacity
+              <HapticPressable
                 style={[styles.primaryButton, { marginTop: 28 }]}
-                activeOpacity={0.85}
                 onPress={handleResetPassword}
               >
                 <Text style={styles.primaryButtonText}>비밀번호 변경하기</Text>
-              </TouchableOpacity>
+              </HapticPressable>
             </View>
           )}
         </ScrollView>

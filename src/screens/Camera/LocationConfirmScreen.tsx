@@ -18,6 +18,7 @@ import * as Location from "expo-location";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppText as Text } from "@/components/AppText";
+import { HapticPressable } from "@/components/common";
 import KakaoMapView, {
   KakaoMapPin,
 } from "@/components/KakaoMapView";
@@ -546,13 +547,12 @@ export default function LocationConfirmScreen() {
                 >
                   어디에서 촬영했나요?
                 </Text>
-                <Pressable
+                <HapticPressable
                   onPress={handleComplete}
                   disabled={!placeToSave}
-                  style={({ pressed }) => [
+                  style={[
                     styles.inlineNextButton,
                     !placeToSave && styles.inlineNextButtonDisabled,
-                    pressed && placeToSave && styles.inlineNextButtonPressed,
                   ]}
                 >
                   <Text
@@ -561,7 +561,7 @@ export default function LocationConfirmScreen() {
                   >
                     완료
                   </Text>
-                </Pressable>
+                </HapticPressable>
               </View>
               {locationMessage ? (
                 <Text allowFontScaling={false} style={styles.sheetDescription}>
@@ -867,10 +867,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.22,
     shadowRadius: 6,
     elevation: 3,
-  },
-  inlineNextButtonPressed: {
-    backgroundColor: COLORS.primaryDark,
-    transform: [{ scale: 0.97 }],
   },
   inlineNextButtonDisabled: {
     backgroundColor: COLORS.disabled,
