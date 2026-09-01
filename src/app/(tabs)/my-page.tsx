@@ -113,21 +113,18 @@ export default function MyPageScreen() {
               onPress={() => router.push('/profile-edit')}
               style={styles.menuRow}
             />
+            {/* 알림 설정: 아직 실제 알림 로직에 연결되지 않아 화면에서 숨겨둡니다.
             <ListRow
               title="알림 설정"
               onPress={() => router.push('/notification-settings')}
               style={styles.menuRow}
             />
+            */}
             <ListRow
+              isLast
               title="위치 정보 및 개인정보 처리방침"
               onPress={() => router.push('/privacy-policy')}
               numberOfLines={1}
-              style={styles.menuRow}
-            />
-            <ListRow
-              isLast
-              title="공지사항"
-              onPress={() => router.push('/notice')}
               style={styles.menuRow}
             />
           </Card>

@@ -56,9 +56,6 @@ const COLORS = {
 const KAKAO_REST_API_KEY = process.env.EXPO_PUBLIC_KAKAO_REST_API_KEY;
 const TOUR_API_KEY = process.env.EXPO_PUBLIC_TOUR_API_KEY;
 
-const IS_TEST_MODE = true; 
-const TEST_COORDS = { latitude: 35.81477744329797, longitude: 127.15255700142177 };
-
 function getDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
   const R = 6371.0;
   const dLat = (lat2 - lat1) * (Math.PI / 180);
@@ -2057,10 +2054,6 @@ export default function TripHomeScreen() {
 
 
   const fetchCurrentLocation = useCallback(async () => {
-    if (IS_TEST_MODE) {
-      setCurrentLocation({ lat: TEST_COORDS.latitude, lng: TEST_COORDS.longitude });
-      return;
-    }
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== "granted") { Alert.alert("위치 권한 필요", "설정에서 위치 접근을 허용해주세요."); return; }

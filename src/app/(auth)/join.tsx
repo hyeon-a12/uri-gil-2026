@@ -3,9 +3,9 @@ import { useState } from 'react';
 import {
   Alert,
   KeyboardAvoidingView,
+  Linking,
   Platform,
   SafeAreaView,
-  Modal,
   ScrollView,
   StyleSheet,
   Text,
@@ -16,6 +16,10 @@ import {
 import { HapticPressable } from '@/components/common';
 
 const API_URL = 'https://uri-gil-2026-production.up.railway.app';
+
+// 위치/개인정보/서비스 약관을 노션 페이지 하나에 통합해서 관리합니다
+// (PrivacyPolicyScreen.tsx와 동일한 페이지).
+const NOTION_TERMS_URL = 'https://rectangular-random-c6d.notion.site/444eee87fea883bc854a81944d60553c';
 
 export default function JoinScreen() {
   const [nickname, setNickname] = useState('');
@@ -28,7 +32,14 @@ export default function JoinScreen() {
   const [agreeService, setAgreeService] = useState(false);
   const [agreePrivacy, setAgreePrivacy] = useState(false);
   const [agreeAge, setAgreeAge] = useState(false);
-  const [termsModal, setTermsModal] = useState<'service' | 'privacy' | null>(null);
+
+  const openTerms = async () => {
+    try {
+      await Linking.openURL(NOTION_TERMS_URL);
+    } catch (err) {
+      console.warn('약관 링크를 열 수 없어요:', err);
+    }
+  };
 
   const requiredAgreed = agreeService && agreePrivacy && agreeAge;
   const allAgreed = requiredAgreed;
@@ -248,8 +259,8 @@ export default function JoinScreen() {
 
               <View style={styles.divider} />
 
-              <TermRow checked={agreeService} onToggle={() => setAgreeService(!agreeService)} label="[필수] 이용약관 동의" onView={() => setTermsModal('service')} />
-              <TermRow checked={agreePrivacy} onToggle={() => setAgreePrivacy(!agreePrivacy)} label="[필수] 개인정보 수집 및 이용 동의" onView={() => setTermsModal('privacy')} />
+              <TermRow checked={agreeService} onToggle={() => setAgreeService(!agreeService)} label="[필수] 이용약관 동의" onView={openTerms} />
+              <TermRow checked={agreePrivacy} onToggle={() => setAgreePrivacy(!agreePrivacy)} label="[필수] 개인정보 수집 및 이용 동의" onView={openTerms} />
               <TermRow checked={agreeAge} onToggle={() => setAgreeAge(!agreeAge)} label="[필수] 만 14세 이상입니다." />
             </View>
 
@@ -269,23 +280,6 @@ export default function JoinScreen() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
-
-      <Modal visible={termsModal !== null} transparent animationType="slide" onRequestClose={() => setTermsModal(null)}>
-        <View style={styles.modalBackdrop}>
-          <TouchableOpacity style={styles.modalDismissArea} activeOpacity={1} onPress={() => setTermsModal(null)} />
-          <View style={styles.bottomSheet}>
-            <View style={styles.sheetHandle} />
-            <View style={styles.sheetHeader}>
-              <Text style={styles.sheetTitle}>{termsModal === 'service' ? '이용약관' : '개인정보 수집 및 이용 동의'}</Text>
-              <TouchableOpacity onPress={() => setTermsModal(null)}><Text style={styles.closeText}>×</Text></TouchableOpacity>
-            </View>
-            <ScrollView style={styles.termsContent} showsVerticalScrollIndicator={false}>
-              <Text style={styles.termsBody}>{termsModal === 'service' ? '서비스 이용약관 내용을 여기에 연결해주세요.' : '개인정보 수집·이용 목적, 수집 항목, 보유 및 이용 기간 등의 내용을 여기에 연결해주세요.'}</Text>
-            </ScrollView>
-            <TouchableOpacity style={styles.sheetButton} onPress={() => setTermsModal(null)}><Text style={styles.sheetButtonText}>확인</Text></TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
     </SafeAreaView>
   );
 }
@@ -504,15 +498,4 @@ const styles = StyleSheet.create({
   termText: { flex: 1, color: '#555555', fontSize: 13, fontFamily: 'Pretendard-Regular' },
   viewTermsButton: { paddingVertical: 10, paddingLeft: 12 },
   viewTermsText: { color: '#8A8A8A', fontSize: 12, fontFamily: 'Pretendard-Medium', textDecorationLine: 'underline' },
-  modalBackdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.35)' },
-  modalDismissArea: { flex: 1 },
-  bottomSheet: { maxHeight: '72%', minHeight: 420, backgroundColor: '#FFFFFF', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 24, paddingTop: 10, paddingBottom: 24 },
-  sheetHandle: { width: 40, height: 4, borderRadius: 2, backgroundColor: '#D8D8D8', alignSelf: 'center', marginBottom: 18 },
-  sheetHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 },
-  sheetTitle: { flex: 1, color: '#222222', fontSize: 19, fontFamily: 'Pretendard-Bold', paddingRight: 12 },
-  closeText: { color: '#333333', fontSize: 32, lineHeight: 32, fontFamily: 'Pretendard-Regular' },
-  termsContent: { flexGrow: 0, marginBottom: 20 },
-  termsBody: { color: '#666666', fontSize: 13, lineHeight: 22, fontFamily: 'Pretendard-Regular' },
-  sheetButton: { height: 54, borderRadius: 16, backgroundColor: '#FF7F5C', alignItems: 'center', justifyContent: 'center' },
-  sheetButtonText: { color: '#FFFFFF', fontSize: 15, fontFamily: 'Pretendard-Bold' },
 });
