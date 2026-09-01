@@ -25,6 +25,8 @@ import KakaoMapView, {
 import { COLORS as APP_COLORS, RADIUS } from "@/constants/color";
 import { saveRecording } from "@/services/recordingService";
 import { useTripStore } from "@/store/useTripStore";
+import { getAllFolders } from "@/services/folderService";
+import { apiFetch } from "@/services/api";
 
 const COLORS = {
   background: APP_COLORS.background,
@@ -447,24 +449,50 @@ export default function LocationConfirmScreen() {
       return;
     }
 
+    const recordedAt = new Date().toISOString();
+    const placeName =
+      placeToSave.id === "manual-place" && manualAddress.trim()
+        ? `${placeToSave.name} · ${placeToSave.address}`
+        : placeToSave.name;
+
     try {
       await saveRecording({
-        recordedAt: new Date().toISOString(),
+        recordedAt,
         videoUri,
         thumbnail: videoUri,
         durationMs,
         folderId: currentTrip.id,
         userId: "guest",
         location: {
-          // 검색 결과의 Kakao 좌표 또는 직접 입력 장소의 촬영 좌표를 저장합니다.
           latitude: placeToSave.latitude,
           longitude: placeToSave.longitude,
-          placeName:
-            placeToSave.id === "manual-place" && manualAddress.trim()
-              ? `${placeToSave.name} · ${placeToSave.address}`
-              : placeToSave.name,
+          placeName,
         },
       });
+
+      // 서버에도 클립 메타데이터 저장 시도 (실패해도 로컬 저장은 이미 끝났으니 무시)
+      try {
+        const folders = await getAllFolders();
+        const folder = folders.find((f) => f.id === currentTrip.id);
+
+        if (folder?.routeId) {
+          await apiFetch("/clips/", {
+            method: "POST",
+            body: JSON.stringify({
+              route_id: folder.routeId,
+              spot_name: placeName,
+              clip_url: videoUri,
+              latitude: placeToSave.latitude,
+              longitude: placeToSave.longitude,
+              recorded_at: recordedAt,
+            }),
+          });
+        } else {
+          console.warn("[LocationConfirm] routeId가 없어 서버 저장을 건너뜁니다.");
+        }
+      } catch (serverError) {
+        console.error("[LocationConfirm] 서버 클립 저장 실패:", serverError);
+      }
 
       Alert.alert(
         "클립이 저장되었습니다",
