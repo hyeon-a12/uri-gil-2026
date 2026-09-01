@@ -107,6 +107,30 @@ async function writeTourCache(cacheKey: string, places: RecommendedPlace[]) {
   }
 }
 
+// 태그(카테고리) 검색 결과 캐시. 여행 중엔 위치가 계속 바뀌어서 관광지
+// 추천(TOUR_CACHE_TTL_MS, 24시간)만큼 길게 잡으면 재사용 효과가 크지 않아,
+// 2시간으로 짧게 둡니다 — 같은 자리에서 태그를 여러 번 눌러볼 때만 캐시가 맞습니다.
+const CATEGORY_CACHE_TTL_MS = 2 * 60 * 60 * 1000;
+
+type GenericCacheEntry<T> = { timestamp: number; data: T };
+
+async function readCache<T>(cacheKey: string): Promise<GenericCacheEntry<T> | null> {
+  try {
+    const raw = await AsyncStorage.getItem(cacheKey);
+    return raw ? (JSON.parse(raw) as GenericCacheEntry<T>) : null;
+  } catch {
+    return null;
+  }
+}
+
+async function writeCache<T>(cacheKey: string, data: T) {
+  try {
+    await AsyncStorage.setItem(cacheKey, JSON.stringify({ timestamp: Date.now(), data }));
+  } catch {
+    // 캐시 저장 실패는 무시 — 다음에 다시 API를 호출하면 됩니다.
+  }
+}
+
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
 // 추천 장소 카드 2개를 정확히 절반씩 배치하기 위한 고정 픽셀 너비.
@@ -243,6 +267,9 @@ type SearchResultItem = {
   distance?: number;
   phone?: string;
   placeUrl?: string;
+  // 카카오 로컬 검색은 사진을 안 주기 때문에, 장소 이름으로 관광공사
+  // 사진 API(fetchSpotPhoto)를 따로 호출해 채워넣습니다. 못 찾으면 undefined.
+  imageUrl?: string;
 };
 
 type SearchCategory = "AI" | "OL7" | "FD6" | "CE7" | "CS2" | "AT4" | "AD5" | "CT1" | "PK6";
@@ -865,11 +892,19 @@ function PullUpSheet({
                       onPress={() => onPressCategoryResult(place)}
                     >
                       <View style={styles.categoryResultCardImage}>
-                        <Ionicons
-                          name="location-outline"
-                          size={22}
-                          color={COLORS.textSecondary}
-                        />
+                        {place.imageUrl ? (
+                          <Image
+                            source={{ uri: place.imageUrl }}
+                            style={styles.placeImage}
+                            contentFit="cover"
+                          />
+                        ) : (
+                          <Ionicons
+                            name="location-outline"
+                            size={22}
+                            color={COLORS.textSecondary}
+                          />
+                        )}
                         {place.category ? (
                           <View style={styles.placeCategoryBadge}>
                             <Text style={styles.placeCategoryBadgeText} numberOfLines={1}>
@@ -911,22 +946,30 @@ function PullUpSheet({
           ) : null}
 
           {selectedCategory ? null : (
-            <View style={styles.placeRow}>
-              {isTourLoading ? (
-                <>
-                  <RecommendedPlaceCard place={{ id: 'loading1', name: '장소 찾는 중...', lat: 0, lng: 0 }} />
-                  <RecommendedPlaceCard place={{ id: 'loading2', name: '장소 찾는 중...', lat: 0, lng: 0 }} />
-                </>
-              ) : recommendedPlaces.length > 0 ? (
-                recommendedPlaces.slice(0, 2).map((place) => (
-                  <RecommendedPlaceCard key={place.id} place={place} onPress={() => onPressPlace(place)} />
-                ))
-              ) : (
+            recommendedPlaces.length === 0 && !isTourLoading ? (
+              <View style={styles.placeRow}>
                 <Text style={{ color: COLORS.textSecondary, fontSize: 13, paddingVertical: 20 }}>
                   주변에 추천할 만한 관광지가 없습니다.
                 </Text>
-              )}
-            </View>
+              </View>
+            ) : (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.placeRow}
+              >
+                {isTourLoading ? (
+                  <>
+                    <RecommendedPlaceCard place={{ id: 'loading1', name: '장소 찾는 중...', lat: 0, lng: 0 }} />
+                    <RecommendedPlaceCard place={{ id: 'loading2', name: '장소 찾는 중...', lat: 0, lng: 0 }} />
+                  </>
+                ) : (
+                  recommendedPlaces.slice(0, 10).map((place) => (
+                    <RecommendedPlaceCard key={place.id} place={place} onPress={() => onPressPlace(place)} />
+                  ))
+                )}
+              </ScrollView>
+            )
           )}
 
           <View style={[styles.sectionHeaderRow, { marginTop: SPACING.xl }]}>
@@ -1724,7 +1767,7 @@ export default function TripHomeScreen() {
 
   const searchCategoryAround = async (
     categoryCode: Exclude<SearchCategory, "AI">,
-    size = 15,
+    size = 10,
     radius = 3000,
   ): Promise<SearchResultItem[]> => {
     const apiKey = process.env.EXPO_PUBLIC_KAKAO_REST_API_KEY;
@@ -1784,8 +1827,35 @@ export default function TripHomeScreen() {
       setIsSearching(true);
       setSelectedCategory(category);
 
+      // 위치를 약 1km 격자로 반올림해서 캐시 키를 만듭니다 — 정확한 좌표로
+      // 키를 잡으면 GPS가 미세하게 흔들릴 때마다 캐시가 다 어긋나버립니다.
+      const gridLat = currentLocation.lat.toFixed(2);
+      const gridLng = currentLocation.lng.toFixed(2);
+      const cacheKey = `category_search_cache_v1_${category}_${gridLat}_${gridLng}`;
+
+      const cached = await readCache<SearchResultItem[]>(cacheKey);
+      if (cached && Date.now() - cached.timestamp < CATEGORY_CACHE_TTL_MS) {
+        setCategoryResults(cached.data);
+        return;
+      }
+
       const places = await searchCategoryAround(category);
-      setCategoryResults(places);
+      // 카카오 검색 결과 자체엔 사진이 없어서, 이름으로 관광공사 사진 API를
+      // 하나씩 더 호출해 채웁니다. 한도 소모를 줄이려고 거리순 상위 5개만
+      // 조회하고, 나머지는 API 호출 없이 바로 아이콘으로 남깁니다.
+      const PHOTO_LOOKUP_LIMIT = 5;
+      const placesWithPhotos = await Promise.all(
+        places.map(async (place, index) => {
+          if (index >= PHOTO_LOOKUP_LIMIT) return place;
+          const photoInfo = await fetchSpotPhoto(place.title);
+          return {
+            ...place,
+            imageUrl: photoInfo && photoInfo !== TOUR_API_ERROR ? photoInfo.galWebImageUrl : undefined,
+          };
+        }),
+      );
+      setCategoryResults(placesWithPhotos);
+      void writeCache(cacheKey, placesWithPhotos);
     } catch (error) {
       console.error("[HomeScreen] 카테고리 검색 실패:", error);
       Alert.alert("검색 실패", "주변 장소를 불러오지 못했습니다.");
@@ -2821,6 +2891,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.surface,
     alignItems: "center",
     justifyContent: "center",
+    overflow: 'hidden',
   },
   categoryResultCardTitle: {
     marginTop: 8,

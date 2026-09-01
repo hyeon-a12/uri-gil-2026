@@ -107,7 +107,6 @@ export default function ProfileEditScreen() {
               </View>
             </Pressable>
             <Text style={styles.name}>{nickname}</Text>
-            <Text style={styles.joinDate}>가입일 2026.03.02</Text>
           </View>
 
           <Field label="닉네임" value={nickname} onChangeText={setNickname} />
@@ -193,7 +192,6 @@ const styles = StyleSheet.create({
     borderColor: colors.card,
   },
   name: { fontSize: 15, fontWeight: '700', color: colors.text },
-  joinDate: { fontSize: 12, color: colors.textSub, marginTop: 2 },
   fieldWrap: { marginBottom: 14 },
   fieldLabel: { fontSize: 13, color: colors.text, fontWeight: '600', marginBottom: 6 },
   fieldBox: {
