@@ -72,7 +72,9 @@ const TOUR_API_ERROR = 'TOUR_API_ERROR' as const;
 async function fetchSpotPhoto(keyword: string) {
   if (!TOUR_API_KEY) return null;
   try {
-    const url = `http://apis.data.go.kr/B551011/PhotoGalleryService1/gallerySearchList1?serviceKey=${TOUR_API_KEY}&numOfRows=1&pageNo=1&MobileOS=ETC&MobileApp=AppTest&_type=json&keyword=${encodeURIComponent(keyword)}`;
+    // http://로 부르면 릴리즈 빌드(API 28+ 기본 정책)에서 cleartext 트래픽이
+    // 차단돼 조용히 실패합니다(Expo Go는 예외적으로 허용해서 dev 중엔 안 드러남).
+    const url = `https://apis.data.go.kr/B551011/PhotoGalleryService1/gallerySearchList1?serviceKey=${TOUR_API_KEY}&numOfRows=1&pageNo=1&MobileOS=ETC&MobileApp=AppTest&_type=json&keyword=${encodeURIComponent(keyword)}`;
     const response = await fetch(url);
     const data = await response.json();
     if (data?.OpenAPI_ServiceResponse?.cmmMsgHeader) return TOUR_API_ERROR;
@@ -2098,7 +2100,7 @@ export default function TripHomeScreen() {
 
         for (let i = 0; i < 12; i++) {
           const baseYm = `${year}${String(month).padStart(2, '0')}`;
-          const tourRes = await fetch(`http://apis.data.go.kr/B551011/LocgoHubTarService1/areaBasedList1?serviceKey=${TOUR_API_KEY}&numOfRows=100&pageNo=1&MobileOS=ETC&MobileApp=AppTest&baseYm=${baseYm}&areaCd=${areaCd}&signguCd=${signguCd}&_type=json`);
+          const tourRes = await fetch(`https://apis.data.go.kr/B551011/LocgoHubTarService1/areaBasedList1?serviceKey=${TOUR_API_KEY}&numOfRows=100&pageNo=1&MobileOS=ETC&MobileApp=AppTest&baseYm=${baseYm}&areaCd=${areaCd}&signguCd=${signguCd}&_type=json`);
           const tourData = await tourRes.json();
 
           // 요청 한도 초과 같은 API 자체 에러는 "이번 달엔 데이터 없음"과 다르게
