@@ -412,6 +412,12 @@ export default function VideoEditScreen() {
   // safe area(insets.top)에 따라 기기마다 달라져서 고정 숫자로 계산할 수 없어,
   // onLayout으로 실제 위치를 재서 바텀시트 높이를 거기 맞춰 늘립니다.
   const [previewBottomY, setPreviewBottomY] = useState<number | null>(null);
+  // 시트 높이를 Dimensions.get('window').height(SCREEN_HEIGHT)로 계산하면, 안드로이드
+  // 엣지투엣지 기기에서 시스템 내비게이션 바 유무에 따라 실제 렌더링 영역과 몇 px씩
+  // 어긋나서 시트 상단이 프리뷰 하단까지 정확히 안 닿는 경우가 있었습니다. 그래서
+  // SCREEN_HEIGHT 대신, 루트 컨테이너 자체의 실측 높이(onLayout)를 기준으로 삼습니다 —
+  // previewBottomY와 같은 측정 방식(onLayout)이라 항상 같은 좌표계로 딱 맞습니다.
+  const [screenHeight, setScreenHeight] = useState(SCREEN_HEIGHT);
 
   const [editingClipId, setEditingClipId] = useState<string | null>(null);
 
@@ -836,7 +842,10 @@ export default function VideoEditScreen() {
   }
 
   return (
-    <View style={styles.screen}>
+    <View
+      style={styles.screen}
+      onLayout={(e) => setScreenHeight(e.nativeEvent.layout.height)}
+    >
       {/* 상단 바 */}
       <View style={[styles.headerRow, { paddingTop: insets.top + 10 }]}>
         <TouchableOpacity
@@ -1154,12 +1163,13 @@ export default function VideoEditScreen() {
               styles.sheet,
               {
                 paddingBottom: insets.bottom || 16,
-                // 시트 상단이 프리뷰 하단과 정확히 맞닿도록, 화면 전체 높이에서
+                // 시트 상단이 프리뷰 하단과 정확히 맞닿도록, 실측한 화면 높이에서
                 // 실측한 프리뷰 하단 위치를 뺀 만큼을 시트 높이로 쓰되, 프리뷰와
-                // 딱 붙지 않도록 3px 간격을 남깁니다.
+                // 딱 붙지 않도록 5px 간격을 남깁니다. 둘 다 onLayout 실측값이라
+                // Dimensions 기반 SCREEN_HEIGHT를 쓸 때와 달리 좌표계가 항상 일치합니다.
                 height:
                   previewBottomY !== null
-                    ? SCREEN_HEIGHT - previewBottomY - 5
+                    ? screenHeight - previewBottomY - 5
                     : undefined,
                 transform: [{ translateY: sheetTranslateY }],
               },
