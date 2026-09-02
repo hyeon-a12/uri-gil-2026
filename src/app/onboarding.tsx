@@ -41,9 +41,9 @@ const onboardingPages: OnboardingPage[] = [
   },
   {
     image: require('../../assets/images/onboarding/onboarding4.png'),
-    title: '나만의 길을 만들고,\n새로운 길을 발견하세요',
+    title: '완성된 여행,\n소중한 사람과 나눠보세요',
     description:
-      '내가 걸은 여행은 누군가의 다음 여행이 되고,\n다른 사람의 길은 새로운 여정이 됩니다.',
+      '내가 걸은 길을 이미지로 만들어\n친구들에게 바로 공유할 수 있어요.',
   },
 ];
 

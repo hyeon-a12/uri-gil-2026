@@ -42,7 +42,7 @@ export default function PrivacyPolicyScreen() {
           <ListRow isLast title="오픈소스 라이선스" onPress={() => router.push('/open-source-license')} />
         </Card>
 
-        <Text style={styles.footNote}>우리길 v3.5.1{'\n'}ⓒ 2026 우리길팀</Text>
+        <Text style={styles.footNote}>ⓒ 2026 우리길팀</Text>
       </ScrollView>
     </View>
   );
