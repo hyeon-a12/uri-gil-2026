@@ -60,6 +60,14 @@
       ],
       "expo-secure-store",
       [
+        "expo-media-library",
+        {
+          "photosPermission": "촬영한 영상을 갤러리에 저장하기 위해 접근이 필요합니다.",
+          "savePhotosPermission": "촬영한 영상을 갤러리에 저장하기 위해 접근이 필요합니다.",
+          "granularPermissions": []
+        }
+      ],
+      [
         "expo-build-properties",
         {
           "android": {

@@ -19,13 +19,10 @@ export default function ProfileEditScreen() {
   const [bio, setBio] = useState(profile.bio);
   const [avatarUri, setAvatarUri] = useState(profile.avatarUri);
 
+  // 시스템 사진 선택 도구(Android Photo Picker/iOS PHPicker)는 앱에 갤러리
+  // 읽기 권한을 주지 않고도 동작해서, 프로필 사진처럼 가끔 한 번 고르는
+  // 용도로는 권한 요청 없이 바로 열면 됩니다.
   const pickAvatar = async () => {
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) {
-      Alert.alert('권한 필요', '프로필 사진을 바꾸려면 사진 접근 권한이 필요해요.');
-      return;
-    }
-
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       allowsEditing: true,
