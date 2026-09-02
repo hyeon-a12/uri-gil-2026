@@ -268,9 +268,14 @@ app.post('/process-video', upload.array('videos', 20), async(req, res) => {
     });
 
     const downloadUrl = `/download/${path.basename(outputPath)}`;
+    // http://로 내려주면 릴리즈 빌드(안드로이드 API 28+ 기본 정책)에서 cleartext
+    // 트래픽이 차단돼 다운로드가 조용히 실패합니다(HomeScreen.tsx의 같은 이슈 참고).
+    // Railway 등 배포 환경은 TLS를 프록시 앞단에서 종료하기 때문에 req.headers.host로
+    // 들어오는 요청은 원래 https였어도 서버 입장에선 http로 보여서, 프로토콜을
+    // req.headers.host로부터 유추하지 않고 항상 https로 고정합니다.
     res.json({
       success: true,
-      downloadUrl: `http://${req.headers.host}${downloadUrl}`,
+      downloadUrl: `https://${req.headers.host}${downloadUrl}`,
     });
 
     setTimeout(() => {
