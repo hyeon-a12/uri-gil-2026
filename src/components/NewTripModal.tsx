@@ -51,7 +51,6 @@ const CALENDAR_CELL_WIDTH = (SCREEN_WIDTH - CARD_HORIZONTAL_PADDING * 2) / 7;
 
 // ── 데이터 상수 ──────────────────────────────────────────────
 // 실제로는 KTO API 등에서 받아오겠지만, 지금은 시안에 나온 값 그대로 하드코딩.
-const REGIONS = ['전주'];
 const THEMES = [
   '맛집탐방',
   '카페투어',
@@ -388,10 +387,6 @@ export default function NewTripModal({
     onClose();
   }
 
-  function toggleRegion(region: string) {
-    setForm((prev) => ({ ...prev, region }));
-  }
-
   function toggleTheme(theme: string) {
     setForm((prev) => {
       const has = prev.themes.includes(theme);
@@ -449,7 +444,7 @@ export default function NewTripModal({
     ]);
   }
 
-  const isStep1Valid = form.name.trim().length > 0 && !!form.region;
+  const isStep1Valid = form.name.trim().length > 0;
   const isStep2Valid = !!form.startDate && !!form.endDate;
 
   return (
@@ -511,22 +506,6 @@ export default function NewTripModal({
                   }
                 />
                 <Text style={styles.charCount}>{form.name.length}/24</Text>
-              </View>
-
-              <Text style={styles.fieldLabel}>
-                여행 지역 <Text style={styles.required}>*</Text>
-              </Text>
-              <View style={styles.chipWrap}>
-                {REGIONS.map((region) => (
-                  <SelectableChip
-                    key={region}
-                    label={region}
-                    selected={form.region === region}
-                    onPress={() => toggleRegion(region)}
-                    showPinIcon
-                    style={styles.regionChip}
-                  />
-                ))}
               </View>
 
               <View style={{ height: 24 }} />
@@ -778,7 +757,6 @@ export default function NewTripModal({
               <Text style={[styles.fieldLabel, { marginTop: SPACING.lg }]}>여행 요약</Text>
               <View style={styles.summaryCard}>
                 <SummaryRow icon="pencil-outline" label="여행 이름" value={form.name || '-'} />
-                <SummaryRow icon="location-outline" label="지역" value={form.region || '-'} />
                 <SummaryRow
                   icon="calendar-outline"
                   label="일정"
@@ -1038,10 +1016,6 @@ const styles = StyleSheet.create({
   },
   chipSelected: {
     backgroundColor: COLORS.accent,
-  },
-  // 여행 이름 입력창(textInput)과 높이를 맞추기 위한 '여행 지역' 칩 전용 여백.
-  regionChip: {
-    paddingVertical: SPACING.sm * 1.8,
   },
   // '여행 테마' 칩만 기본 크기의 1.5배로.
   themeChip: {
