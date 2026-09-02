@@ -49,6 +49,14 @@ example
 # Secret files
 .env
 
+# EAS 서명키 백업 (eas credentials로 다운로드된 것)
+credentials.json
+credentials/
+
+# 빌드 산출물 (eas build 결과 다운로드한 apk/aab)
+*.aab
+*.apk
+
 # 영상 렌더링 서버 임시/산출물 파일
 server/uploads/
 server/output/
