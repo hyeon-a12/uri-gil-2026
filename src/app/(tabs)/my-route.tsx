@@ -332,12 +332,63 @@ function getTripDisplayName(trip: FolderItem | null): string {
     : `여행 ${trip.id}`;
 }
 
+const WEEKDAY_LABELS = ["일", "월", "화", "수", "목", "금", "토"];
+
+/** 일정표 그리드의 Day 열 머리글에 쓰는 날짜 라벨. 여행 시작일을 모르면 "Day n"만 보여줍니다. */
+function getDayDateLabel(day: number, tripStartDate: Date | null): string | null {
+  if (!tripStartDate) return null;
+  const date = new Date(tripStartDate);
+  date.setDate(date.getDate() + (day - 1));
+  return `${date.getMonth() + 1}.${date.getDate()}(${WEEKDAY_LABELS[date.getDay()]})`;
+}
+
+type ScheduleGridCell = { id: string; order: number; name: string };
+
+/** PlanStop 목록을 "시간(행) × Day(열)" 그리드로 변환합니다. 클립 시간이 없는
+ * 스톱(AI 추천/직접 추가로만 있고 아직 촬영 안 한 곳)은 배치할 시간이 없어서 제외합니다. */
+function buildScheduleGrid(
+  stops: PlanStop[],
+): { hours: number[]; cellsByHourDay: Map<string, ScheduleGridCell[]> } {
+  const TIME_PATTERN = /^\d{2}:\d{2}$/;
+  const timedStops = stops.filter((stop) => TIME_PATTERN.test(stop.time));
+
+  const cellsByHourDay = new Map<string, ScheduleGridCell[]>();
+  if (timedStops.length === 0) {
+    return { hours: [], cellsByHourDay };
+  }
+
+  let minHour = 23;
+  let maxHour = 0;
+  for (const stop of timedStops) {
+    const hour = Number(stop.time.slice(0, 2));
+    minHour = Math.min(minHour, hour);
+    maxHour = Math.max(maxHour, hour);
+
+    const key = `${hour}:${stop.day}`;
+    const cells = cellsByHourDay.get(key) ?? [];
+    cells.push({ id: stop.id, order: stop.order, name: stop.name });
+    cellsByHourDay.set(key, cells);
+  }
+
+  for (const cells of cellsByHourDay.values()) {
+    cells.sort((a, b) => a.order - b.order);
+  }
+
+  const hours: number[] = [];
+  for (let hour = minHour; hour <= maxHour; hour++) hours.push(hour);
+
+  return { hours, cellsByHourDay };
+}
+
 type TravelShareSheetProps = {
   visible: boolean;
   tripName: string;
   tripSummary: string;
   placeCount: number;
   mapPins: KakaoMapPin[];
+  stops: PlanStop[];
+  dayNumbers: number[];
+  tripStartDate: Date | null;
   bottomInset: number;
   onClose: () => void;
   onNativeShare: () => void;
@@ -349,16 +400,28 @@ function TravelShareSheet({
   tripSummary,
   placeCount,
   mapPins,
+  stops,
+  dayNumbers,
+  tripStartDate,
   bottomInset,
   onClose,
   onNativeShare,
 }: TravelShareSheetProps) {
-  const previewCardRef = useRef<View>(null);
-  const isSavingImageRef = useRef(false);
+  const scheduleGridRef = useRef<View>(null);
+  const isSavingScheduleRef = useRef(false);
 
-  const handleSaveImage = async () => {
-    if (isSavingImageRef.current || !previewCardRef.current) return;
-    isSavingImageRef.current = true;
+  const { hours, cellsByHourDay } = useMemo(
+    () => buildScheduleGrid(stops),
+    [stops],
+  );
+
+  const handleSaveScheduleImage = async () => {
+    if (isSavingScheduleRef.current || !scheduleGridRef.current) return;
+    if (hours.length === 0) {
+      Alert.alert('저장할 일정이 없어요', '촬영된 클립이 있어야 시간대별 일정표를 만들 수 있어요.');
+      return;
+    }
+    isSavingScheduleRef.current = true;
 
     try {
       const { status } = await MediaLibrary.requestPermissionsAsync(true);
@@ -367,14 +430,14 @@ function TravelShareSheet({
         return;
       }
 
-      const uri = await captureRef(previewCardRef, { format: 'png', quality: 1 });
+      const uri = await captureRef(scheduleGridRef, { format: 'png', quality: 1 });
       await MediaLibrary.createAssetAsync(uri);
-      Alert.alert('저장 완료', '여행 카드 이미지를 갤러리에 저장했어요.');
+      Alert.alert('저장 완료', '일정표 이미지를 갤러리에 저장했어요.');
     } catch (error) {
-      console.error('[TravelShareSheet] 이미지 저장 실패:', error);
+      console.error('[TravelShareSheet] 일정표 이미지 저장 실패:', error);
       Alert.alert('저장 실패', '이미지를 저장하지 못했어요. 잠시 후 다시 시도해주세요.');
     } finally {
-      isSavingImageRef.current = false;
+      isSavingScheduleRef.current = false;
     }
   };
 
@@ -412,7 +475,7 @@ function TravelShareSheet({
             showsVerticalScrollIndicator={false}
             contentContainerStyle={styles.shareScrollContent}
           >
-            <View ref={previewCardRef} collapsable={false} style={styles.sharePreviewCard}>
+            <View style={styles.sharePreviewCard}>
               <View pointerEvents="none" style={styles.shareMapPreview}>
                 <KakaoMapView pins={mapPins} height={126} pathColor={COLORS.primary} />
               </View>
@@ -430,6 +493,64 @@ function TravelShareSheet({
               </View>
             </View>
 
+            {hours.length > 0 && (
+              <>
+                <Text style={styles.scheduleGridSectionLabel}>일정표 미리보기</Text>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={styles.scheduleGridScroll}
+                >
+                  <View ref={scheduleGridRef} collapsable={false} style={styles.scheduleGridCard}>
+                    <Text numberOfLines={1} style={styles.scheduleGridTitle}>
+                      {tripName}
+                    </Text>
+
+                    <View style={[styles.scheduleGridRow, styles.scheduleGridHeaderRow]}>
+                      <View style={styles.scheduleGridHourCol} />
+                      {dayNumbers.map((day) => (
+                        <View key={day} style={styles.scheduleGridDayCol}>
+                          <Text style={styles.scheduleGridDayLabel}>Day {day}</Text>
+                          {getDayDateLabel(day, tripStartDate) ? (
+                            <Text style={styles.scheduleGridDateLabel}>
+                              {getDayDateLabel(day, tripStartDate)}
+                            </Text>
+                          ) : null}
+                        </View>
+                      ))}
+                    </View>
+
+                    {hours.map((hour) => (
+                      <View key={hour} style={styles.scheduleGridRow}>
+                        <View style={styles.scheduleGridHourCol}>
+                          <Text style={styles.scheduleGridHourText}>
+                            {String(hour).padStart(2, '0')}:00
+                          </Text>
+                        </View>
+                        {dayNumbers.map((day) => {
+                          const cells = cellsByHourDay.get(`${hour}:${day}`) ?? [];
+                          return (
+                            <View key={day} style={styles.scheduleGridDayCol}>
+                              {cells.map((cell) => (
+                                <View key={cell.id} style={styles.scheduleGridChip}>
+                                  <View style={styles.scheduleGridChipOrderBadge}>
+                                    <Text style={styles.scheduleGridChipOrderText}>{cell.order}</Text>
+                                  </View>
+                                  <Text numberOfLines={1} style={styles.scheduleGridChipText}>
+                                    {cell.name}
+                                  </Text>
+                                </View>
+                              ))}
+                            </View>
+                          );
+                        })}
+                      </View>
+                    ))}
+                  </View>
+                </ScrollView>
+              </>
+            )}
+
             <View style={styles.shareActionList}>
               <ShareActionRow
                 icon="link-outline"
@@ -437,9 +558,9 @@ function TravelShareSheet({
                 onPress={onNativeShare}
               />
               <ShareActionRow
-                icon="download-outline"
-                label="이미지로 저장"
-                onPress={() => void handleSaveImage()}
+                icon="calendar-outline"
+                label="일정표 이미지로 저장"
+                onPress={() => void handleSaveScheduleImage()}
                 isLast
               />
             </View>
@@ -851,6 +972,9 @@ export default function MyRouteScreen() {
         tripSummary={tripSummary}
         placeCount={planData.stops.length}
         mapPins={mapPins}
+        stops={planData.stops}
+        dayNumbers={planData.dayNumbers}
+        tripStartDate={tripStartDate}
         bottomInset={insets.bottom}
         onClose={() => setIsShareSheetVisible(false)}
         onNativeShare={handleNativeShare}
@@ -1795,6 +1919,99 @@ const styles = StyleSheet.create({
   },
   shareActionPressed: {
     backgroundColor: "#F7F7F7",
+  },
+
+  // 일정표(시간 × Day) 그리드 미리보기 — 포인트 컬러(주황) 강조 스타일
+  scheduleGridSectionLabel: {
+    color: COLORS.textSecondary,
+    fontSize: 12,
+    fontWeight: "600",
+    marginTop: SPACING.lg,
+    marginBottom: SPACING.sm,
+  },
+  scheduleGridScroll: {
+    borderRadius: 18,
+  },
+  scheduleGridCard: {
+    backgroundColor: '#FBFBFA',
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    padding: 16,
+  },
+  scheduleGridTitle: {
+    color: COLORS.textPrimary,
+    fontSize: 15,
+    fontWeight: "700",
+    marginBottom: SPACING.md,
+  },
+  scheduleGridRow: {
+    flexDirection: "row",
+  },
+  scheduleGridHeaderRow: {
+    backgroundColor: COLORS.primarySoft,
+    borderRadius: 12,
+    paddingVertical: 8,
+    marginBottom: 8,
+  },
+  scheduleGridHourCol: {
+    width: 56,
+    paddingVertical: 6,
+    paddingHorizontal: 6,
+    justifyContent: "flex-start",
+  },
+  scheduleGridHourText: {
+    color: COLORS.textSecondary,
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  scheduleGridDayCol: {
+    width: 132,
+    paddingVertical: 6,
+    paddingHorizontal: 6,
+    borderLeftWidth: 1,
+    borderLeftColor: COLORS.border,
+  },
+  scheduleGridDayLabel: {
+    color: COLORS.primary,
+    fontSize: 13,
+    fontWeight: "800",
+  },
+  scheduleGridDateLabel: {
+    color: COLORS.textSecondary,
+    fontSize: 11,
+    marginTop: 2,
+  },
+  scheduleGridChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: COLORS.white,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: COLORS.primary,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    marginBottom: 8,
+  },
+  scheduleGridChipOrderBadge: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: COLORS.primary,
+    marginRight: 6,
+  },
+  scheduleGridChipOrderText: {
+    color: "#FFFFFF",
+    fontSize: 10,
+    fontWeight: "800",
+  },
+  scheduleGridChipText: {
+    flex: 1,
+    color: COLORS.textPrimary,
+    fontSize: 13,
+    fontWeight: "700",
   },
 
   // === '일정' 탭 스타일 끝 ===
