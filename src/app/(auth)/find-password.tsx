@@ -14,6 +14,8 @@ import {
 } from 'react-native';
 import { HapticPressable } from '@/components/common';
 import { apiFetch } from '@/services/api';
+import { isValidEmail } from '@/utils/validation';
+import { COLORS } from '@/constants/color';
 
 // 백엔드(uri_gil_backend/routers/auth.py)는 앱 안에서 인증코드를 확인하는 방식이
 // 아니라, 이메일로 재설정 링크를 보내고 그 링크가 별도 웹페이지
@@ -25,6 +27,19 @@ export default function FindPasswordScreen() {
   const [step, setStep] = useState<Step>('email');
   const [email, setEmail] = useState('');
   const [isSending, setIsSending] = useState(false);
+  const [emailError, setEmailError] = useState<string | null>(null);
+
+  const handleEmailChange = (text: string) => {
+    setEmail(text);
+    if (emailError) setEmailError(null);
+  };
+
+  const handleEmailBlur = () => {
+    const trimmed = email.trim();
+    if (trimmed && !isValidEmail(trimmed)) {
+      setEmailError('올바른 이메일 형식을 입력해주세요.');
+    }
+  };
 
   const submitEmail = async () => {
     const trimmed = email.trim();
@@ -32,8 +47,8 @@ export default function FindPasswordScreen() {
       Alert.alert('입력 확인', '이메일을 입력해주세요.');
       return;
     }
-    if (!trimmed.includes('@')) {
-      Alert.alert('입력 확인', '올바른 이메일 형식을 입력해주세요.');
+    if (!isValidEmail(trimmed)) {
+      setEmailError('올바른 이메일 형식을 입력해주세요.');
       return;
     }
 
@@ -46,7 +61,12 @@ export default function FindPasswordScreen() {
       setStep('sent');
     } catch (error) {
       console.error('[FindPassword] 재설정 이메일 발송 실패:', error);
-      Alert.alert('오류', '이메일 발송에 실패했습니다. 잠시 후 다시 시도해주세요.');
+      // apiFetch가 던지는 Error는 extractErrorMessage를 거쳐 항상 문자열
+      // message를 가지므로, 서버가 보낸 실제 사유를 그대로 보여줘도 안전합니다.
+      Alert.alert(
+        '오류',
+        error instanceof Error ? error.message : '이메일 발송에 실패했습니다. 잠시 후 다시 시도해주세요.',
+      );
     } finally {
       setIsSending(false);
     }
@@ -86,9 +106,10 @@ export default function FindPasswordScreen() {
               <View style={styles.form}>
                 <Text style={styles.label}>이메일</Text>
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, emailError && styles.inputError]}
                   value={email}
-                  onChangeText={setEmail}
+                  onChangeText={handleEmailChange}
+                  onBlur={handleEmailBlur}
                   placeholder="example@email.com"
                   placeholderTextColor="#8A8A8A"
                   keyboardType="email-address"
@@ -97,6 +118,7 @@ export default function FindPasswordScreen() {
                   returnKeyType="done"
                   onSubmitEditing={submitEmail}
                 />
+                {emailError && <Text style={styles.errorText}>{emailError}</Text>}
                 <HapticPressable
                   style={[styles.primaryButton, isSending && styles.buttonDisabled]}
                   onPress={submitEmail}
@@ -198,6 +220,18 @@ const styles = StyleSheet.create({
     fontSize: 15,
     letterSpacing: 0,
     marginBottom: 20,
+  },
+  inputError: {
+    borderColor: COLORS.danger,
+    marginBottom: 6,
+  },
+  errorText: {
+    fontFamily: 'Pretendard-Regular',
+    color: COLORS.danger,
+    fontSize: 12,
+    marginTop: -2,
+    marginBottom: 14,
+    marginLeft: 4,
   },
   resendButton: {
     alignSelf: 'center',

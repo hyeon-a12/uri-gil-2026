@@ -14,6 +14,9 @@ import {
   View,
 } from 'react-native';
 import { HapticPressable } from '@/components/common';
+import { extractErrorMessage } from '@/services/api';
+import { isValidEmail } from '@/utils/validation';
+import { COLORS } from '@/constants/color';
 
 const API_URL = 'https://uri-gil-2026-production.up.railway.app';
 
@@ -32,6 +35,19 @@ export default function JoinScreen() {
   const [agreeService, setAgreeService] = useState(false);
   const [agreePrivacy, setAgreePrivacy] = useState(false);
   const [agreeAge, setAgreeAge] = useState(false);
+  const [emailError, setEmailError] = useState<string | null>(null);
+
+  const handleEmailChange = (text: string) => {
+    setEmail(text);
+    if (emailError) setEmailError(null);
+  };
+
+  const handleEmailBlur = () => {
+    const trimmed = email.trim();
+    if (trimmed && !isValidEmail(trimmed)) {
+      setEmailError('올바른 이메일 형식을 입력해주세요.');
+    }
+  };
 
   const openTerms = async () => {
     try {
@@ -70,10 +86,8 @@ export default function JoinScreen() {
       return;
     }
 
-    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-    if (!emailPattern.test(trimmedEmail)) {
-      Alert.alert('입력 확인', '올바른 이메일 형식을 입력해주세요.');
+    if (!isValidEmail(trimmedEmail)) {
+      setEmailError('올바른 이메일 형식을 입력해주세요.');
       return;
     }
 
@@ -116,7 +130,7 @@ export default function JoinScreen() {
       const data = await response.json();
 
       if (!response.ok) {
-        Alert.alert('회원가입 실패', data.detail || '알 수 없는 오류가 발생했습니다.');
+        Alert.alert('회원가입 실패', extractErrorMessage(data, '알 수 없는 오류가 발생했습니다.'));
         return;
       }
 
@@ -180,9 +194,10 @@ export default function JoinScreen() {
             <Text style={styles.label}>이메일</Text>
 
             <TextInput
-              style={styles.input}
+              style={[styles.input, emailError && styles.inputError]}
               value={email}
-              onChangeText={setEmail}
+              onChangeText={handleEmailChange}
+              onBlur={handleEmailBlur}
               placeholder="example@email.com"
               placeholderTextColor="#8A8A8A"
               keyboardType="email-address"
@@ -190,6 +205,7 @@ export default function JoinScreen() {
               autoCorrect={false}
               returnKeyType="next"
             />
+            {emailError && <Text style={styles.errorText}>{emailError}</Text>}
 
             <Text style={styles.label}>비밀번호</Text>
 
@@ -368,6 +384,20 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontFamily: 'Pretendard-Regular',
     marginBottom: 20,
+  },
+
+  inputError: {
+    borderColor: COLORS.danger,
+    marginBottom: 6,
+  },
+
+  errorText: {
+    color: COLORS.danger,
+    fontSize: 12,
+    fontFamily: 'Pretendard-Regular',
+    marginTop: -2,
+    marginBottom: 14,
+    marginLeft: 4,
   },
 
   helperText: {
