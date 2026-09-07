@@ -1,17 +1,23 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+import { getCurrentUserId } from './authService';
+
 const STORAGE_PREFIX = 'stop-order:v1:';
 
 /** day(1부터) → 그 날짜 스톱들의 원하는 순서(id 배열). */
 export type StopOrderMap = Record<number, string[]>;
 
-function storageKey(tripId: string) {
-  return `${STORAGE_PREFIX}${tripId}`;
+// 계정별로 순서를 분리하기 위해 user_id를 키에 섞습니다.
+function storageKey(userId: string, tripId: string) {
+  return `${STORAGE_PREFIX}${userId}:${tripId}`;
 }
 
-/** 여행에 저장된 day별 커스텀 스톱 순서를 불러옵니다. 없으면 빈 객체. */
+/** 여행에 저장된 day별 커스텀 스톱 순서를 불러옵니다. 로그인 전이거나 없으면 빈 객체. */
 export async function getStopOrder(tripId: string): Promise<StopOrderMap> {
-  const raw = await AsyncStorage.getItem(storageKey(tripId));
+  const userId = await getCurrentUserId();
+  if (!userId) return {};
+
+  const raw = await AsyncStorage.getItem(storageKey(userId, tripId));
   if (!raw) return {};
 
   try {
@@ -28,9 +34,12 @@ export async function saveStopOrder(
   day: number,
   orderedIds: string[],
 ): Promise<StopOrderMap> {
+  const userId = await getCurrentUserId();
+  if (!userId) return {};
+
   const existing = await getStopOrder(tripId);
   const next: StopOrderMap = { ...existing, [day]: orderedIds };
-  await AsyncStorage.setItem(storageKey(tripId), JSON.stringify(next));
+  await AsyncStorage.setItem(storageKey(userId, tripId), JSON.stringify(next));
   return next;
 }
 

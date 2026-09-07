@@ -1,6 +1,12 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-const FOLDERS_KEY = '@folders/all';
+import { getCurrentUserId } from './authService';
+
+// 계정별로 여행 목록을 분리하기 위해 user_id를 키에 섞습니다.
+// (같은 기기에서 계정을 바꿔도 이전 계정의 여행이 보이지 않도록)
+function foldersKey(userId: string) {
+    return `@folders/${userId}`;
+}
 
 // NewTripModal의 촬영 스타일 선택지와 그대로 맞춰둔 타입 (원래 NewTripModal.tsx 안에서만
 // 쓰던 로컬 타입이었는데, 저장 스키마(FolderItem)에도 필요해져서 여기로 옮겼습니다).
@@ -60,8 +66,11 @@ export function getFolderStatus(
 }
 
 export async function getAllFolders(): Promise<FolderItem[]> {
+    const userId = await getCurrentUserId();
+    if (!userId) return [];
+
     try {
-        const raw = await AsyncStorage.getItem(FOLDERS_KEY);
+        const raw = await AsyncStorage.getItem(foldersKey(userId));
         if (!raw) return [];
         const parsed = JSON.parse(raw) as StoredFolder[];
         // 여행 목록은 만든 순서가 아니라 실제 여행 날짜(dateRange 시작일) 기준
@@ -78,28 +87,37 @@ export async function getAllFolders(): Promise<FolderItem[]> {
 }
 
 export async function saveFolder(folder: FolderItem): Promise<void> {
+    const userId = await getCurrentUserId();
+    if (!userId) return;
+
     const all = await getAllFolders();
     const updated = [
         folder, ...all.filter((f) => f.id !== folder.id),
     ];
     await AsyncStorage.setItem(
-        FOLDERS_KEY,
+        foldersKey(userId),
         JSON.stringify(updated),
     );
 }
 
 export async function deleteFolder(id: string): Promise<void> {
+    const userId = await getCurrentUserId();
+    if (!userId) return;
+
     const all = await getAllFolders();
     const updated = all.filter((f) => f.id !== id);
     await AsyncStorage.setItem(
-        FOLDERS_KEY, JSON.stringify(updated),
+        foldersKey(userId), JSON.stringify(updated),
     );
 }
 
 export async function updateFolder(id: string, updates: Partial<FolderItem>,): Promise<void> {
+    const userId = await getCurrentUserId();
+    if (!userId) return;
+
     const all = await getAllFolders();
     const updated = all.map((f) => f.id === id ? { ...f, ...updates } : f,);
     await AsyncStorage.setItem(
-        FOLDERS_KEY, JSON.stringify(updated),
+        foldersKey(userId), JSON.stringify(updated),
     );
 }

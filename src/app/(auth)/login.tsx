@@ -1,6 +1,7 @@
 import { getProfile } from '@/services/profileService';
 import { updateProfile } from '@/store/useProfileStore';
 import { useAuthStore } from '@/store/useAuthStore';
+import { hydrateCurrentTrip } from '@/store/useTripStore';
 import * as SecureStore from 'expo-secure-store';
 import { router } from 'expo-router';
 import { useState } from 'react';
@@ -66,12 +67,19 @@ export default function LoginScreen() {
       await SecureStore.setItemAsync('user_id', String(data.user_id));
       await SecureStore.setItemAsync('nickname', data.nickname);
 
-      // 기존에 저장된 프로필(bio, avatarUri)은 유지하고, 닉네임만 서버 값으로 갱신
+      // 기존에 저장된 프로필(bio, avatarUri)은 유지하고, 닉네임만 서버 값으로 갱신.
+      // getProfile()은 방금 SecureStore에 저장한 user_id 기준으로 조회되므로,
+      // 같은 기기에서 이전에 로그인했던 다른 계정의 프로필과 섞이지 않습니다.
       const existingProfile = await getProfile();
       await updateProfile({
         ...existingProfile,
         nickname: data.nickname,
       });
+
+      // useTripStore(currentTrip)는 메모리 캐시라 로그아웃해도 자동으로 비워지지
+      // 않습니다. 이 계정의 활성 여행으로 다시 채워서, 방금 전 계정의 여행이
+      // 화면에 잠깐이라도 남아 보이는 일이 없도록 합니다.
+      await hydrateCurrentTrip();
 
       useAuthStore.getState().setLoggedIn(true);
 

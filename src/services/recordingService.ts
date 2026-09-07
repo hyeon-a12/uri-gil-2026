@@ -2,8 +2,12 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system/legacy';
 
 import type { RecordingData } from '@/types/recording';
+import { getCurrentUserId } from './authService';
 
-const STORAGE_KEY = 'recordings';
+// 계정별로 촬영 클립 목록을 분리하기 위해 user_id를 키에 섞습니다.
+function storageKey(userId: string) {
+    return `recordings/${userId}`;
+}
 const VIDEO_DIR = FileSystem.documentDirectory + 'recordings/';
 
 async function ensureVideoDir(): Promise<void> {
@@ -23,6 +27,11 @@ async function persistVideoFile(tempUri: string, id: string): Promise<string> {
 export async function saveRecording(
     data: Omit<RecordingData, 'id' | 'videoUri'> & { videoUri: string },
 ): Promise<RecordingData> {
+    const userId = await getCurrentUserId();
+    if (!userId) {
+        throw new Error('[saveRecording] 로그인 상태가 아니어서 저장할 수 없습니다.');
+    }
+
     const id = `rec_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const persistedUri = await persistVideoFile(data.videoUri, id);
 
@@ -35,7 +44,7 @@ export async function saveRecording(
 
     const existing = await getAllRecordings();
     const updated = [...existing, record];
-    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+    await AsyncStorage.setItem(storageKey(userId), JSON.stringify(updated));
 
     console.log('[saveRecording] 저장 완료:', record.id);
     return record;
@@ -51,7 +60,10 @@ export async function getRecordingsByFolder(
 }
 
 export async function getAllRecordings(): Promise<RecordingData[]> {
-    const raw = await AsyncStorage.getItem(STORAGE_KEY);
+    const userId = await getCurrentUserId();
+    if (!userId) return [];
+
+    const raw = await AsyncStorage.getItem(storageKey(userId));
     if (!raw) return [];
     try {
         return JSON.parse(raw) as RecordingData[];
@@ -62,6 +74,9 @@ export async function getAllRecordings(): Promise<RecordingData[]> {
 }
 
 export async function deleteRecording(id: string): Promise<void> {
+    const userId = await getCurrentUserId();
+    if (!userId) return;
+
     const all = await getAllRecordings();
     const target = all.find((r) => r.id === id);
 
@@ -73,10 +88,13 @@ export async function deleteRecording(id: string): Promise<void> {
     }
 
     const filtered = all.filter((r) => r.id != id);
-    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(filtered));
+    await AsyncStorage.setItem(storageKey(userId), JSON.stringify(filtered));
 }
 
 export async function clearAllRecordings(): Promise<void> {
+    const userId = await getCurrentUserId();
+    if (!userId) return;
+
     const all = await getAllRecordings();
     for (const r of all) {
         const info = await FileSystem.getInfoAsync(r.videoUri);
@@ -84,5 +102,5 @@ export async function clearAllRecordings(): Promise<void> {
             await FileSystem.deleteAsync(r.videoUri);
         }
     }
-    await AsyncStorage.removeItem(STORAGE_KEY);
+    await AsyncStorage.removeItem(storageKey(userId));
 }

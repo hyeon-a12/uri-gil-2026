@@ -1,8 +1,17 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const NICKNAME_KEY = 'profile:nickname';
-const BIO_KEY = 'profile:bio';
-const AVATAR_KEY = 'profile:avatarUri';
+import { getCurrentUserId } from './authService';
+
+// 계정별로 프로필을 분리하기 위해 user_id를 키에 섞습니다.
+function nicknameKey(userId: string) {
+  return `profile:${userId}:nickname`;
+}
+function bioKey(userId: string) {
+  return `profile:${userId}:bio`;
+}
+function avatarKey(userId: string) {
+  return `profile:${userId}:avatarUri`;
+}
 
 export interface Profile {
   nickname: string;
@@ -17,10 +26,13 @@ export const DEFAULT_PROFILE: Profile = {
 };
 
 export async function getProfile(): Promise<Profile> {
+  const userId = await getCurrentUserId();
+  if (!userId) return DEFAULT_PROFILE;
+
   const [nickname, bio, avatarUri] = await Promise.all([
-    AsyncStorage.getItem(NICKNAME_KEY),
-    AsyncStorage.getItem(BIO_KEY),
-    AsyncStorage.getItem(AVATAR_KEY),
+    AsyncStorage.getItem(nicknameKey(userId)),
+    AsyncStorage.getItem(bioKey(userId)),
+    AsyncStorage.getItem(avatarKey(userId)),
   ]);
 
   return {
@@ -31,11 +43,14 @@ export async function getProfile(): Promise<Profile> {
 }
 
 export async function saveProfile(profile: Profile): Promise<void> {
+  const userId = await getCurrentUserId();
+  if (!userId) return;
+
   await Promise.all([
-    AsyncStorage.setItem(NICKNAME_KEY, profile.nickname),
-    AsyncStorage.setItem(BIO_KEY, profile.bio),
+    AsyncStorage.setItem(nicknameKey(userId), profile.nickname),
+    AsyncStorage.setItem(bioKey(userId), profile.bio),
     profile.avatarUri
-      ? AsyncStorage.setItem(AVATAR_KEY, profile.avatarUri)
-      : AsyncStorage.removeItem(AVATAR_KEY),
+      ? AsyncStorage.setItem(avatarKey(userId), profile.avatarUri)
+      : AsyncStorage.removeItem(avatarKey(userId)),
   ]);
 }
