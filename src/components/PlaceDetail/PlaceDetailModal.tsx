@@ -22,6 +22,10 @@ const COLORS = {
   textPrimary: SHARED_COLORS.textPrimary,
   textSecondary: SHARED_COLORS.textSecondary,
   surface: SHARED_COLORS.surface,
+  // 카카오맵 버튼 전용 — 앱 자체 팔레트가 아니라 카카오의 공식 브랜드 컬러(카카오
+  // 옐로우)를 그대로 씁니다. 어두운 텍스트를 짝지어야 카카오 가이드대로 대비가 나옵니다.
+  kakaoYellow: '#FEE500',
+  kakaoText: '#191919',
 };
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -373,14 +377,14 @@ const styles = StyleSheet.create({
   },
   placeDetailMapButton: {
     alignItems: 'center',
-    backgroundColor: COLORS.accent,
+    backgroundColor: COLORS.kakaoYellow,
     borderRadius: RADIUS.card,
     flex: 1,
     height: 50,
     justifyContent: 'center',
   },
   placeDetailMapButtonText: {
-    color: '#FFFFFF',
+    color: COLORS.kakaoText,
     fontSize: 14,
     fontWeight: '800',
   },
