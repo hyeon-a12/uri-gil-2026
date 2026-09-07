@@ -18,7 +18,7 @@ import * as Location from 'expo-location';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppText as Text } from '@/components/AppText';
-import { HapticPressable } from '@/components/common';
+import { HapticPressable, MapLocateButton, SectionLabel } from '@/components/common';
 import KakaoMapView, { KakaoMapPin } from '@/components/KakaoMapView';
 import { COLORS as APP_COLORS, RADIUS } from '@/constants/color';
 import { appendTripScheduleStops } from '@/services/trip-schedule-service';
@@ -94,10 +94,11 @@ export default function AddPlaceScreen() {
     query,
     changeQuery,
     clearQuery,
-    places,
-    isLoadingPlaces,
+    isBrowsingNearby,
+    displayedPlaces,
+    isLoadingDisplayed,
+    isDisplayedMockData,
     searchError,
-    isMockData,
     selectedPlace,
     selectPlace,
     isManualEntryOpen,
@@ -128,15 +129,21 @@ export default function AddPlaceScreen() {
     }),
   ).current;
 
-  const loadDeviceLocation = useCallback(async () => {
+  // notifyOnFailure: 최초 진입 시 조용히 시도할 때는 false, 사용자가 직접
+  // "내 위치로" 버튼을 눌렀을 때는 true로 넘겨 실패 사유를 알려줍니다
+  // (my-route.tsx의 handlePressLocate와 동일한 패턴).
+  const loadDeviceLocation = useCallback(async (notifyOnFailure = false) => {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
         setLocationMessage('위치 권한을 허용하면 주변 장소를 검색할 수 있어요.');
+        if (notifyOnFailure) {
+          Alert.alert('위치 권한이 필요해요', '설정에서 위치 접근을 허용해주세요.');
+        }
         return;
       }
 
-      const lastKnown = await Location.getLastKnownPositionAsync();
+      const lastKnown = notifyOnFailure ? null : await Location.getLastKnownPositionAsync();
       const position =
         lastKnown ?? (await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }));
 
@@ -148,6 +155,9 @@ export default function AddPlaceScreen() {
     } catch (error) {
       console.warn('[AddPlaceScreen] 위치를 가져오지 못했습니다:', error);
       setLocationMessage('위치를 확인하지 못했어요. 위치 권한을 확인해주세요.');
+      if (notifyOnFailure) {
+        Alert.alert('위치를 가져오지 못했어요', '잠시 후 다시 시도해주세요.');
+      }
     }
   }, []);
 
@@ -155,10 +165,22 @@ export default function AddPlaceScreen() {
     void loadDeviceLocation();
   }, [loadDeviceLocation]);
 
+  // 좌표가 이전과 완전히 같으면 지도 URL 문자열이 안 바뀌어서 WebView가 재로드를
+  // 건너뛰고 "내 위치로" 버튼이 반응 없는 것처럼 보입니다 — 누를 때마다 이 값을
+  // 증가시켜 항상 재중심이 일어나게 합니다.
+  const [locateToken, setLocateToken] = useState(0);
+  const handlePressLocate = useCallback(async () => {
+    await loadDeviceLocation(true);
+    setLocateToken((prev) => prev + 1);
+  }, [loadDeviceLocation]);
+
   // 검색어를 입력한 뒤에만 "나만의 장소 추가"를 노출합니다 — 결과가 있어도
   // 항상 검색 결과 목록 맨 아래에 위치합니다.
-  const showManualEntry = query.trim().length > 0 && !isLoadingPlaces;
-  const mapPins = useMemo(() => buildMapPins(places, selectedPlace?.id), [places, selectedPlace]);
+  const showManualEntry = query.trim().length > 0 && !isLoadingDisplayed;
+  const mapPins = useMemo(
+    () => buildMapPins(displayedPlaces, selectedPlace?.id),
+    [displayedPlaces, selectedPlace],
+  );
 
   const handleComplete = async () => {
     if (!placeToSave || !tripId) return;
@@ -200,6 +222,8 @@ export default function AddPlaceScreen() {
               currentLocation={coordinates ? { lat: coordinates.latitude, lng: coordinates.longitude } : null}
               height={SCREEN_HEIGHT}
               pathColor={COLORS.primary}
+              focusOnLocationToken={locateToken || undefined}
+              centerOffsetY={DEFAULT_SHEET_HEIGHT / 2}
             />
 
             <Pressable
@@ -210,6 +234,12 @@ export default function AddPlaceScreen() {
               <Ionicons name="chevron-back" size={20} color={COLORS.textPrimary} />
 
             </Pressable>
+
+            {/* "내 위치로" 버튼 — 시트를 드래그해도 항상 시트 바로 위에 떠 있도록
+                sheetHeight(Animated.Value)에 맞춰 bottom을 같이 움직입니다. */}
+            <Animated.View style={[styles.mapControls, { bottom: Animated.add(sheetHeight, 16) }]}>
+              <MapLocateButton onPress={handlePressLocate} color={COLORS.textPrimary} />
+            </Animated.View>
           </View>
 
           <Animated.View style={[styles.sheet, { height: sheetHeight }]}>
@@ -269,39 +299,43 @@ export default function AddPlaceScreen() {
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={false}
             >
-              {query.trim().length === 0 ? null : (
-                <>
-                  {isMockData && !isLoadingPlaces ? (
-                    <View style={styles.mockNotice}>
-                      <Ionicons name="information-circle-outline" size={16} color={COLORS.textSecondary} />
-                      <Text style={styles.mockNoticeText}>검색 API 연동 전이라 예시 데이터를 보여드리고 있어요.</Text>
-                    </View>
-                  ) : null}
+              {isBrowsingNearby && !isLoadingDisplayed && displayedPlaces.length > 0 ? (
+                <SectionLabel text="내 주변 장소" />
+              ) : null}
 
-                  {isLoadingPlaces ? (
-                    <View style={styles.statusRow}>
-                      <Ionicons name="ellipsis-horizontal" size={22} color={COLORS.primary} />
-                      <Text style={styles.statusText}>주변 장소를 찾고 있어요.</Text>
-                    </View>
-                  ) : null}
+              {isDisplayedMockData && !isLoadingDisplayed ? (
+                <View style={styles.mockNotice}>
+                  <Ionicons name="information-circle-outline" size={16} color={COLORS.textSecondary} />
+                  <Text style={styles.mockNoticeText}>검색 API 연동 전이라 예시 데이터를 보여드리고 있어요.</Text>
+                </View>
+              ) : null}
 
-                  {!isLoadingPlaces && searchError ? (
-                    <View style={styles.statusRow}>
-                      <Ionicons name="alert-circle-outline" size={21} color={COLORS.primary} />
-                      <Text style={styles.statusText}>{searchError}</Text>
-                    </View>
-                  ) : null}
+              {isLoadingDisplayed ? (
+                <View style={styles.statusRow}>
+                  <Ionicons name="ellipsis-horizontal" size={22} color={COLORS.primary} />
+                  <Text style={styles.statusText}>
+                    {isBrowsingNearby ? '내 주변 장소를 찾고 있어요.' : '주변 장소를 찾고 있어요.'}
+                  </Text>
+                </View>
+              ) : null}
 
-                  {!isLoadingPlaces && !searchError && places.length === 0 ? (
-                    <View style={styles.statusRow}>
-                      <Ionicons name="search-outline" size={21} color={COLORS.textSecondary} />
-                      <Text style={styles.statusText}>해당 검색어로 장소를 찾지 못했어요.</Text>
-                    </View>
-                  ) : null}
-                </>
-              )}
+              {!isLoadingDisplayed && !isBrowsingNearby && searchError ? (
+                <View style={styles.statusRow}>
+                  <Ionicons name="alert-circle-outline" size={21} color={COLORS.primary} />
+                  <Text style={styles.statusText}>{searchError}</Text>
+                </View>
+              ) : null}
 
-              {places.map((place) => {
+              {!isLoadingDisplayed && !searchError && displayedPlaces.length === 0 ? (
+                <View style={styles.statusRow}>
+                  <Ionicons name="search-outline" size={21} color={COLORS.textSecondary} />
+                  <Text style={styles.statusText}>
+                    {isBrowsingNearby ? '주변에서 장소를 찾지 못했어요.' : '해당 검색어로 장소를 찾지 못했어요.'}
+                  </Text>
+                </View>
+              ) : null}
+
+              {displayedPlaces.map((place) => {
                 const selected = selectedPlace?.id === place.id;
                 return (
                   <Pressable
@@ -417,6 +451,15 @@ const styles = StyleSheet.create({
   },
   backButtonPressed: { opacity: 0.7 },
   backLabel: { color: COLORS.textPrimary, fontSize: 13, lineHeight: 18, fontWeight: '700' },
+  // "내 위치로" 버튼 위치. bottom은 시트 높이(Animated.Value)에 맞춰 인라인으로 준다.
+  mapControls: {
+    position: 'absolute',
+    right: 16,
+    zIndex: 20,
+    // WebView(카카오맵)는 안드로이드에서 zIndex와 무관하게 형제 뷰 위로 겹쳐
+    // 보일 수 있어서 elevation도 같이 줘야 버튼이 지도 위로 확실히 올라옵니다.
+    elevation: 20,
+  },
   sheet: {
     position: 'absolute',
     left: 0,
