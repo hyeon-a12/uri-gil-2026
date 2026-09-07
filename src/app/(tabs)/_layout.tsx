@@ -185,21 +185,20 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     paddingBottom: 10,
 
-    borderTopWidth: 1,
-    borderTopColor: '#EFEDE8',
-
     borderRadius: 0,
     backgroundColor: BAR_BG,
 
-    elevation: 8,
+    // @react-navigation/bottom-tabs가 탭바 기본 스타일에 borderTopWidth(hairline)를
+    // 자체적으로 넣어두는데, 우리 tabBarStyle과 배열로 합쳐질 뿐이라 속성을 아예
+    // 안 쓰면(undefined) 그대로 남아있습니다. 없애려면 0으로 명시적으로 덮어써야 합니다.
+    borderTopWidth: 0,
 
+    // 선(border) 없이 아주 옅은 그림자만으로 콘텐츠와 경계를 구분합니다.
+    elevation: 2,
     shadowColor: '#000000',
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    shadowOffset: {
-      width: 0,
-      height: -2,
-    },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: -2 },
   },
 
   tabItem: {
@@ -245,14 +244,14 @@ const styles = StyleSheet.create({
     borderColor: BAR_BG,
 
     shadowColor: ACTIVE,
-    shadowOpacity: 0.22,
+    shadowOpacity: 0.11,
     shadowRadius: 7,
     shadowOffset: {
       width: 0,
       height: 4,
     },
 
-    elevation: 8,
+    elevation: 4,
   },
 
   cameraLabel: {
