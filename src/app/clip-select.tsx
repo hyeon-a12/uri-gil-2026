@@ -47,7 +47,8 @@ const COLORS = {
   overlay: 'rgba(0,0,0,0.25)',
 };
 
-const FOOTER_HEIGHT = 93;
+const FOOTER_HEIGHT = 105;
+const MIN_FOOTER_BOTTOM_PADDING = 20;
 
 function formatDuration(seconds: number) {
   const minutes = Math.floor(seconds / 60);
@@ -178,6 +179,10 @@ function ClipSelectionCard({
 
 export default function ClipSelectScreen() {
   const insets = useSafeAreaInsets();
+  const footerBottomPadding = Math.max(
+    insets.bottom,
+    MIN_FOOTER_BOTTOM_PADDING,
+  );
   const router = useRouter();
   const { id: paramFolderId, title: paramFolderTitle } = useLocalSearchParams<{
     id?: string;
@@ -305,7 +310,7 @@ export default function ClipSelectScreen() {
               <MaterialCommunityIcons
                 name="clock-outline"
                 size={12}
-                color={ COLORS?.textSecondary || '#8E8E93' }
+                color={COLORS?.textSecondary || '#8E8E93'}
               />
               <Text style={styles.durationText}>
                 {formatDuration(item.durationSeconds ?? 0)}
@@ -346,21 +351,22 @@ export default function ClipSelectScreen() {
       '다운로드',
       `${targetClip.title} 영상을 갤러리에 저장할까요?`,
       [
-        {text: '취소', style: 'cancel'},
-        {text: '저장', onPress: async () => {
-          try {
-            const {status} = await MediaLibrary.requestPermissionsAsync(true);
-            if (status !== 'granted') {
-              Alert.alert('권한 필요', '갤러리 접근 권한이 필요합니다.');
-              return;
-            }
+        { text: '취소', style: 'cancel' },
+        {
+          text: '저장', onPress: async () => {
+            try {
+              const { status } = await MediaLibrary.requestPermissionsAsync(true);
+              if (status !== 'granted') {
+                Alert.alert('권한 필요', '갤러리 접근 권한이 필요합니다.');
+                return;
+              }
 
-            if (!targetClip.uri) return;
-            await MediaLibrary.saveToLibraryAsync(targetClip.uri);
-            Alert.alert('저장 완료', '갤러리에 저장되었습니다.');
-          } catch (error) {
-            console.error('[handleDownloadClip] 실패:', error);
-            Alert.alert('저장 실패', '갤러리에 저장 중 문제가 발생했습니다.');
+              if (!targetClip.uri) return;
+              await MediaLibrary.saveToLibraryAsync(targetClip.uri);
+              Alert.alert('저장 완료', '갤러리에 저장되었습니다.');
+            } catch (error) {
+              console.error('[handleDownloadClip] 실패:', error);
+              Alert.alert('저장 실패', '갤러리에 저장 중 문제가 발생했습니다.');
             }
           },
         },
@@ -382,7 +388,7 @@ export default function ClipSelectScreen() {
       '클립 삭제',
       `${targetClip.title} 클립을 삭제할까요?`,
       [
-        {text: '취소', style: 'cancel'},
+        { text: '취소', style: 'cancel' },
         {
           text: '삭제', style: 'destructive', onPress: async () => {
             try {
@@ -426,7 +432,7 @@ export default function ClipSelectScreen() {
             const clipIdList = selectedClips
               .map((clip) => clip.id)
               .join(',');
-            
+
             router.push({
               pathname: '/video-edit',
               params: {
@@ -493,7 +499,7 @@ export default function ClipSelectScreen() {
         renderItem={({ item }) => renderSingleClip(item)}
         contentContainerStyle={[
           styles.listContent,
-          { paddingBottom: FOOTER_HEIGHT + insets.bottom + 16 },
+          { paddingBottom: FOOTER_HEIGHT + footerBottomPadding + 16 },
         ]}
       />
 
@@ -511,7 +517,12 @@ export default function ClipSelectScreen() {
         </View>
       )}
 
-      <View style={[styles.footer, { paddingBottom: insets.bottom }]}>
+      <View
+        style={[
+          styles.footer,
+          { paddingBottom: footerBottomPadding },
+        ]}
+      >
         <View style={styles.footerInfo}>
           <View style={styles.footerRow}>
             <Text style={styles.footerLabel}>클립 개수</Text>
@@ -609,7 +620,7 @@ const styles = StyleSheet.create({
 
     backgroundColor: COLORS.background,
   },
-    headerButton: {
+  headerButton: {
     width: 48,
     height: 42,
     alignItems: 'center',
@@ -722,9 +733,11 @@ const styles = StyleSheet.create({
   },
 
   thumbnailDim: {
-    ...StyleSheet.absoluteFillObject,
-
-    backgroundColor: 'rgba(0,0,0,0.12)',
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
   },
 
   playButton: {
@@ -1011,7 +1024,7 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.card,
     padding: SPACING.sm,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1},
+    shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.03,
     shadowRadius: 3,
     elevation: 1,
@@ -1029,7 +1042,11 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   playOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
     backgroundColor: 'rgba(0,0,0,0.25)',
     justifyContent: 'center',
     alignItems: 'center',
