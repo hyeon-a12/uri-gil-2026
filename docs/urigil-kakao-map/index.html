@@ -175,11 +175,16 @@
           // 물방울(teardrop) 핀: 정사각형 div를 45도 회전시켜 아래쪽만
           // 뾰족하게 만드는 방식. 회전한 사각형은 실제 레이아웃 크기(28px)
           // 밖으로 튀어나오므로, 바깥 wrapper를 세로로 더 크게(34px) 잡아
-          // 뾰족한 끝이 잘리지 않게 여유를 둡니다. 라벨(숫자)은 회전하면
-          // 같이 기울어지므로 반대로 45도 되돌려서 똑바로 보이게 합니다.
+          // 뾰족한 끝이 잘리지 않게 여유를 둡니다. 라벨(숫자/별)은 이 원과
+          // 별개의 형제 div라 회전에 영향받지 않고 항상 똑바로 보입니다.
+          //
+          // box-sizing:border-box를 꼭 지정해야 합니다 — 기본값(content-box)이면
+          // border(2px)가 width:28px 바깥에 더해져서 실제 렌더링 크기가
+          // 32px가 되고, top:0/left:0 기준으로 배치되다 보니 원의 실제 중심이
+          // (16,16)로 밀려서 라벨의 중심(14,14)과 어긋나 보입니다.
           var content =
             '<div style="position:relative;width:28px;height:34px;">' +
-              '<div style="position:absolute;top:0;left:0;width:28px;height:28px;border-radius:50% 50% 50% 0;background:' + color + ';border:2px solid #fff;box-shadow:0 2px 4px rgba(0,0,0,0.25);transform:rotate(-45deg);"></div>' +
+              '<div style="box-sizing:border-box;position:absolute;top:0;left:0;width:28px;height:28px;border-radius:50% 50% 50% 0;background:' + color + ';border:2px solid #fff;box-shadow:0 2px 4px rgba(0,0,0,0.25);transform:rotate(-45deg);"></div>' +
               '<div style="position:absolute;top:0;left:0;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-family:\'Pretendard\',sans-serif;font-size:11px;color:#fff;font-weight:700;">' +
                 (pin.label || '') +
               '</div>' +
@@ -201,7 +206,7 @@
           var myContent =
             '<div style="position:relative;width:18px;height:18px;">' +
             '<div style="position:absolute;top:-9px;left:-9px;width:36px;height:36px;border-radius:18px;background:' + CURRENT_LOCATION_COLOR + '33;"></div>' +
-            '<div style="width:18px;height:18px;border-radius:9px;background:' + CURRENT_LOCATION_COLOR + ';border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,0.3);"></div>' +
+            '<div style="box-sizing:border-box;width:18px;height:18px;border-radius:9px;background:' + CURRENT_LOCATION_COLOR + ';border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,0.3);"></div>' +
             '</div>';
 
           new kakao.maps.CustomOverlay({
