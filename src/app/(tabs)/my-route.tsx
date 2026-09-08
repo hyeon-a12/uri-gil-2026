@@ -1,6 +1,6 @@
 import { AppText as Text } from '@/components/AppText';
 import { ClipPreviewModal } from "@/components/ClipPreview/ClipPreviewModal";
-import KakaoMapView, { type KakaoMapPin } from '@/components/KakaoMapView';
+import KakaoMapView, { type KakaoMapPin, type KakaoMapViewHandle } from '@/components/KakaoMapView';
 import {
   PlaceDetailModal,
   fetchKakaoPlaceInfo,
@@ -37,7 +37,17 @@ import {
   StyleSheet,
   View,
   useWindowDimensions,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
 } from 'react-native';
+// 지도 위 스톱 카드 캐러셀(가로 스크롤) 안에 클립 목록(역시 가로 스크롤)이
+// 중첩되어 있습니다. react-native의 순정 ScrollView는 같은 방향으로 중첩된
+// 스크롤 제스처를 제대로 넘겨주지 못해서(부모가 항상 먼저 가로채감) 안쪽
+// 클립 목록이 전혀 스크롤되지 않았습니다. 이미 프로젝트 전역에 깔려있는
+// react-native-gesture-handler의 ScrollView는 네이티브 제스처 인식기로
+// 두 스크롤을 올바르게 협상해서 이 문제를 해결합니다 — 겹치는 두 곳(캐러셀,
+// 클립 목록) 모두 이걸로 바꿔줘야 합니다.
+import { ScrollView as GestureScrollView } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { captureRef } from 'react-native-view-shot';
 
@@ -179,7 +189,7 @@ function SelectedStopCard({ stop, onPreviewClip, onPressDetail }: SelectedStopCa
         </Pressable>
       </View>
 
-      <ScrollView
+      <GestureScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.clipList}
@@ -230,7 +240,7 @@ function SelectedStopCard({ stop, onPreviewClip, onPressDetail }: SelectedStopCa
             클립 추가
           </Text>
         </Pressable>
-      </ScrollView>
+      </GestureScrollView>
     </View>
   );
 }
@@ -795,16 +805,24 @@ export default function MyRouteScreen() {
     setLocateToken((prev) => prev + 1);
   }, [loadDeviceLocation]);
 
+  // 지도 화면(카드 캐러셀·핀 목록)에서 공통으로 쓰는 순서대로 정렬된 스톱
+  // 목록. 예전엔 렌더링 시점에 매번 [...stops].sort(...)를 새로 만들었는데,
+  // 카드 스와이프 시 "현재 인덱스 → 스톱"을 찾을 때도 같은 정렬이 필요해서
+  // 하나로 합쳤습니다.
+  const sortedStops = useMemo(
+    () => [...planData.stops].sort((a, b) => a.order - b.order),
+    [planData.stops],
+  );
+
   // 지도에 찍을 핀 — 좌표가 있는 스톱만, day/순서대로 이어서 경로선을 그립니다.
   const mapPins = useMemo<KakaoMapPin[]>(
     () =>
-      planData.stops
+      sortedStops
         .filter(
           (stop): stop is PlanStop & { latitude: number; longitude: number } =>
             typeof stop.latitude === "number" &&
             typeof stop.longitude === "number",
         )
-        .sort((a, b) => a.order - b.order)
         .map((stop) => ({
           id: stop.id,
           lat: stop.latitude,
@@ -812,7 +830,25 @@ export default function MyRouteScreen() {
           label: String(stop.order),
           color: COLORS.primary,
         })),
-    [planData.stops],
+    [sortedStops],
+  );
+
+  const mapRef = useRef<KakaoMapViewHandle>(null);
+
+  // 카드 캐러셀을 스와이프해서 "현재 보이는 카드"가 바뀌면(스냅 애니메이션이
+  // 끝나는 시점 = onMomentumScrollEnd) 그 카드가 가리키는 장소로 지도 중심을
+  // panTo로 부드럽게 옮깁니다. 좌표가 없는 스톱(직접 추가했는데 위치를 못
+  // 구한 경우 등)은 옮길 곳이 없으니 조용히 건너뜁니다.
+  const handleStopCardScrollEnd = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const offsetX = event.nativeEvent.contentOffset.x;
+      const index = Math.round(offsetX / STOP_CARD_SNAP_INTERVAL);
+      const clampedIndex = Math.max(0, Math.min(index, sortedStops.length - 1));
+      const stop = sortedStops[clampedIndex];
+      if (!stop || stop.latitude === null || stop.longitude === null) return;
+      mapRef.current?.panTo(stop.latitude, stop.longitude);
+    },
+    [sortedStops],
   );
 
   return (
@@ -888,6 +924,7 @@ export default function MyRouteScreen() {
               ]}
             >
               <KakaoMapView
+                ref={mapRef}
                 pins={mapPins}
                 height={mapHeight}
                 currentLocation={deviceLocation}
@@ -898,8 +935,8 @@ export default function MyRouteScreen() {
               <MapControlButtons onPressLocate={handlePressLocate} />
             </View>
 
-            {planData.stops.length > 0 ? (
-              <ScrollView
+            {sortedStops.length > 0 ? (
+              <GestureScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
                 style={[styles.stopCardScroll, { top: SPACING.md + mapHeight - 16 }]}
@@ -907,26 +944,25 @@ export default function MyRouteScreen() {
                 snapToInterval={STOP_CARD_SNAP_INTERVAL}
                 snapToAlignment="start"
                 decelerationRate="fast"
+                onMomentumScrollEnd={handleStopCardScrollEnd}
               >
-                {[...planData.stops]
-                  .sort((a, b) => a.order - b.order)
-                  .map((stop) => (
-                    <View key={stop.id} style={styles.stopCardSlide}>
-                      <SelectedStopCard
-                        stop={stop}
-                        onPreviewClip={setPreviewClip}
-                        onPressDetail={(pressedStop) =>
-                          setViewingPlace({
-                            id: pressedStop.id,
-                            name: pressedStop.name,
-                            lat: pressedStop.latitude!,
-                            lng: pressedStop.longitude!,
-                          })
-                        }
-                      />
-                    </View>
-                  ))}
-              </ScrollView>
+                {sortedStops.map((stop) => (
+                  <View key={stop.id} style={styles.stopCardSlide}>
+                    <SelectedStopCard
+                      stop={stop}
+                      onPreviewClip={setPreviewClip}
+                      onPressDetail={(pressedStop) =>
+                        setViewingPlace({
+                          id: pressedStop.id,
+                          name: pressedStop.name,
+                          lat: pressedStop.latitude!,
+                          lng: pressedStop.longitude!,
+                        })
+                      }
+                    />
+                  </View>
+                ))}
+              </GestureScrollView>
             ) : null}
           </View>
         ) : (

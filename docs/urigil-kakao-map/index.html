@@ -101,6 +101,40 @@
     var FALLBACK_CENTER = { lat: 35.815, lng: 127.153 };
     var center = currentLocation || pins[0] || FALLBACK_CENTER;
 
+    // 카드를 스와이프할 때마다 앱이 postMessage로 panTo 명령을 보냅니다. map은
+    // kakao.maps.load 콜백 안에서 만들어지는데, 그 전에 명령이 도착할 수도
+    // 있어서(로딩이 끝나기 전에 사용자가 이미 카드를 넘긴 경우) pendingPanTo에
+    // 잠깐 담아뒀다가 지도가 준비되면 바로 적용합니다.
+    var map = null;
+    var pendingPanTo = null;
+
+    function applyPanTo(lat, lng) {
+      if (!map) {
+        pendingPanTo = { lat: lat, lng: lng };
+        return;
+      }
+      map.panTo(new kakao.maps.LatLng(lat, lng));
+    }
+
+    function handleNativeMessage(event) {
+      var raw = event && event.data;
+      if (typeof raw !== 'string') return;
+      var data;
+      try {
+        data = JSON.parse(raw);
+      } catch (e) {
+        return;
+      }
+      if (data && data.type === 'panTo' && typeof data.lat === 'number' && typeof data.lng === 'number') {
+        applyPanTo(data.lat, data.lng);
+      }
+    }
+
+    // react-native-webview의 postMessage는 플랫폼마다 도착하는 이벤트 타깃이
+    // 달라서(iOS는 window, Android는 document) 둘 다 등록해야 합니다.
+    window.addEventListener('message', handleNativeMessage);
+    document.addEventListener('message', handleNativeMessage);
+
     var SDK_URL = 'https://dapi.kakao.com/v2/maps/sdk.js?appkey=' + appkey + '&autoload=false';
 
     console.log('[trace] 페이지 스크립트 시작. appkey 앞 8자리=' + appkey.slice(0, 8) + ', SDK_URL=' + SDK_URL);
@@ -141,7 +175,7 @@
       kakao.maps.load(function () {
         console.log('[trace] kakao.maps.load 콜백 진입 — 여기까지 왔으면 SDK는 정상 로드된 것');
         var container = document.getElementById('map');
-        var map = new kakao.maps.Map(container, {
+        map = new kakao.maps.Map(container, {
           center: new kakao.maps.LatLng(center.lat, center.lng),
           level: level,
         });
@@ -236,6 +270,11 @@
           }
         } else if (pins.length >= 2 || (pins.length >= 1 && currentLocation)) {
           map.setBounds(bounds, 60);
+        }
+
+        if (pendingPanTo) {
+          applyPanTo(pendingPanTo.lat, pendingPanTo.lng);
+          pendingPanTo = null;
         }
 
         notifyReactNative({ type: 'ready' });
