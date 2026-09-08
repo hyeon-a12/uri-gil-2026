@@ -17,7 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { ShootingStyleId } from '@/services/folderService';
-import { HapticPressable } from '@/components/common';
+import { HapticPressable } from '@/components/common/HapticPressable';
 import { COLORS as SHARED_COLORS, RADIUS, SPACING } from '@/constants/color';
 
 const COLORS = {
@@ -739,7 +739,7 @@ export default function NewTripModal({
                 여행 테마 <Text style={styles.fieldLabelMuted}>(중복 선택 가능)</Text>
               </Text>
               <Text style={styles.fieldHint}>
-                선택한 테마를 바탕으로 루트 추천을 받을 수 있어요
+                선택한 테마를 바탕으로 장소 추천을 받을 수 있어요
               </Text>
               <View style={styles.chipWrap}>
                 {THEMES.map((theme) => (
@@ -988,7 +988,7 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.card,
     paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.sm * 1.5,
-    fontSize: 13,
+    fontSize: 15,
     color: COLORS.black,
   },
   inputWithCounter: {

@@ -623,7 +623,7 @@ const styles = StyleSheet.create({
   // 시트를 내리면 그만큼 지도가 위로 넓게 드러납니다.
   // 지도를 화면 전체에 깔고 시트를 그 위에 절대 위치로 띄워야, 시트의
   // 둥근 모서리 안쪽으로 지도가 비쳐서 라운드 처리가 실제로 보입니다.
-  mapArea: { ...StyleSheet.absoluteFillObject, overflow: "hidden" },
+  mapArea: { ...StyleSheet.absoluteFill, overflow: "hidden" },
   backButton: {
     position: "absolute",
     left: 16,
@@ -743,7 +743,7 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     color: COLORS.textPrimary,
-    fontSize: 14,
+    fontSize: 15,
     fontFamily: "Pretendard-SemiBold",
     padding: 0,
   },
@@ -868,7 +868,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 13,
     borderRadius: 12,
     color: COLORS.textPrimary,
-    fontSize: 13,
+    fontSize: 15,
     fontFamily: "Pretendard-SemiBold",
     backgroundColor: COLORS.surface,
   },

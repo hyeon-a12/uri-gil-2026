@@ -214,7 +214,7 @@ const styles = StyleSheet.create({
   tabLabel: {
     width: 62,
 
-    fontSize: 7.7, // 기존 11의 0.7배로 줄였습니다.
+    fontSize: 10,
     lineHeight: 14,
     fontWeight: '500',
 

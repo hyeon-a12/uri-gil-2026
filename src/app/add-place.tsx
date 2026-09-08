@@ -432,7 +432,7 @@ const styles = StyleSheet.create({
   // 둥근 모서리 안쪽으로 지도가 비쳐서 라운드 처리가 실제로 보입니다.
   // (예전처럼 flex로 지도/시트를 위아래로 나누면 시트 뒤가 흰 배경 그대로라
   // 모서리를 둥글게 깎아도 흰색끼리 겹쳐 티가 안 났습니다.)
-  mapArea: { ...StyleSheet.absoluteFillObject, overflow: 'hidden' },
+  mapArea: { ...StyleSheet.absoluteFill, overflow: 'hidden' },
   backButton: {
     position: 'absolute',
     left: 16,
@@ -572,7 +572,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 13,
     borderRadius: 12,
     color: COLORS.textPrimary,
-    fontSize: 14,
+    fontSize: 15,
     fontFamily: 'Pretendard-SemiBold',
     backgroundColor: COLORS.surface,
   },

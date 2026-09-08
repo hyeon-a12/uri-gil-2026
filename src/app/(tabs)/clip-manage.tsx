@@ -538,7 +538,7 @@ const styles = StyleSheet.create({
   },
   searchInput: {
     flex: 1,
-    fontSize: 12,
+    fontSize: 15,
     fontFamily: 'Pretendard-Regular',
     color: COLORS.textPrimary,
     padding: 0,
