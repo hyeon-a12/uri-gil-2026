@@ -87,7 +87,7 @@
     var pins = getJsonParam('pins', []);
     var currentLocation = getJsonParam('currentLocation', null);
     var level = Number(getParam('level', '4'));
-    var pathColor = getParam('pathColor', '#FFB134');
+    var pathColor = getParam('pathColor', '#FF7F5C');
     // "내 위치로" 버튼을 눌렀을 때만 'me'로 넘어옵니다 — 이때는 핀 전체를
     // 감싸는 setBounds 대신 내 위치 하나로만 중심을 옮겨야 합니다.
     var centerMode = getParam('centerMode', 'fit');
@@ -96,7 +96,7 @@
     // 옮겨서 가려지지 않는 영역 안에 보이게 합니다.
     var centerOffsetY = Number(getParam('centerOffsetY', '0'));
 
-    var DEFAULT_ACCENT = '#FFB134';
+    var DEFAULT_ACCENT = '#FF7F5C';
     var CURRENT_LOCATION_COLOR = '#4285F4';
     var FALLBACK_CENTER = { lat: 35.815, lng: 127.153 };
     var center = currentLocation || pins[0] || FALLBACK_CENTER;
