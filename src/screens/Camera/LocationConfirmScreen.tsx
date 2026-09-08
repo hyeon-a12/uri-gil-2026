@@ -743,7 +743,7 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     color: COLORS.textPrimary,
-    fontSize: 14,
+    fontSize: 15,
     fontFamily: "Pretendard-SemiBold",
     padding: 0,
   },
@@ -868,7 +868,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 13,
     borderRadius: 12,
     color: COLORS.textPrimary,
-    fontSize: 13,
+    fontSize: 15,
     fontFamily: "Pretendard-SemiBold",
     backgroundColor: COLORS.surface,
   },

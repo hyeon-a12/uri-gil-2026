@@ -988,7 +988,7 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.card,
     paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.sm * 1.5,
-    fontSize: 13,
+    fontSize: 15,
     color: COLORS.black,
   },
   inputWithCounter: {

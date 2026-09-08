@@ -572,7 +572,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 13,
     borderRadius: 12,
     color: COLORS.textPrimary,
-    fontSize: 14,
+    fontSize: 15,
     fontFamily: 'Pretendard-SemiBold',
     backgroundColor: COLORS.surface,
   },

@@ -2343,7 +2343,7 @@ const styles = StyleSheet.create({
     flex: 1,
     height: "100%",
     paddingVertical: 0,
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "500",
     color: COLORS.textPrimary,
   },

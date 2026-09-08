@@ -772,7 +772,7 @@ const styles = StyleSheet.create({
 
     color: COLORS.textPrimary,
 
-    fontSize: 14,
+    fontSize: 15,
     lineHeight: 19,
     fontFamily: 'Pretendard-Medium',
 
