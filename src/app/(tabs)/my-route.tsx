@@ -1,24 +1,33 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useFocusEffect, useLocalSearchParams } from "expo-router";
-import { parseDateRange, type FolderItem } from "@/services/folderService";
-import { getRecordingsByFolder } from "@/services/recordingService";
-import {
-  getTripScheduleStops,
-  type TripScheduleStop,
-} from "@/services/trip-schedule-service";
-import { getStopOrder, saveStopOrder, type StopOrderMap } from "@/services/stop-order-service";
-import { buildPlanData, type PlanStop } from "@/services/tripPlanService";
-import { navigateToCamera } from "@/navigation/recordingNavigation";
-import type { RecordingData } from "@/types/recording";
-import type { ClipItem } from "@/types/home";
+import { AppText as Text } from '@/components/AppText';
 import { ClipPreviewModal } from "@/components/ClipPreview/ClipPreviewModal";
+import KakaoMapView, { type KakaoMapPin, type KakaoMapViewHandle } from '@/components/KakaoMapView';
 import {
   PlaceDetailModal,
   fetchKakaoPlaceInfo,
   type KakaoPlaceInfo,
   type PlaceDetailView,
 } from "@/components/PlaceDetail/PlaceDetailModal";
+import { RoutePlanView } from '@/components/RoutePlanView';
+import { MapLocateButton } from '@/components/common';
+import { RADIUS, COLORS as SHARED_COLORS, SPACING } from '@/constants/color';
+import { navigateToCamera } from "@/navigation/recordingNavigation";
+import { parseDateRange, type FolderItem } from "@/services/folderService";
+import { getRecordingsByFolder } from "@/services/recordingService";
+import { getStopOrder, saveStopOrder, type StopOrderMap } from "@/services/stop-order-service";
+import {
+  getTripScheduleStops,
+  type TripScheduleStop,
+} from "@/services/trip-schedule-service";
+import { buildPlanData, type PlanStop } from "@/services/tripPlanService";
 import { useTripStore } from "@/store/useTripStore";
+import type { ClipItem } from "@/types/home";
+import type { RecordingData } from "@/types/recording";
+import { Ionicons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
+import * as Location from 'expo-location';
+import * as MediaLibrary from 'expo-media-library/legacy';
+import { useFocusEffect, useLocalSearchParams } from "expo-router";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Modal,
@@ -28,17 +37,19 @@ import {
   StyleSheet,
   View,
   useWindowDimensions,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
 } from 'react-native';
-import { AppText as Text } from '@/components/AppText';
-import { RoutePlanView } from '@/components/RoutePlanView';
-import KakaoMapView, { type KakaoMapPin } from '@/components/KakaoMapView';
-import { Image } from 'expo-image';
-import { Ionicons } from '@expo/vector-icons';
-import * as Location from 'expo-location';
-import * as MediaLibrary from 'expo-media-library';
-import { captureRef } from 'react-native-view-shot';
+// 지도 위 스톱 카드 캐러셀(가로 스크롤) 안에 클립 목록(역시 가로 스크롤)이
+// 중첩되어 있습니다. react-native의 순정 ScrollView는 같은 방향으로 중첩된
+// 스크롤 제스처를 제대로 넘겨주지 못해서(부모가 항상 먼저 가로채감) 안쪽
+// 클립 목록이 전혀 스크롤되지 않았습니다. 이미 프로젝트 전역에 깔려있는
+// react-native-gesture-handler의 ScrollView는 네이티브 제스처 인식기로
+// 두 스크롤을 올바르게 협상해서 이 문제를 해결합니다 — 겹치는 두 곳(캐러셀,
+// 클립 목록) 모두 이걸로 바꿔줘야 합니다.
+import { ScrollView as GestureScrollView } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { COLORS as SHARED_COLORS, RADIUS, SPACING } from '@/constants/color';
+import { captureRef } from 'react-native-view-shot';
 
 const COLORS = {
   background: SHARED_COLORS.background,
@@ -77,19 +88,7 @@ const STOP_CARD_SNAP_INTERVAL = STOP_CARD_WIDTH + STOP_CARD_GAP;
 function MapControlButtons({ onPressLocate }: { onPressLocate: () => void }) {
   return (
     <View style={styles.mapControls}>
-      <Pressable
-        onPress={onPressLocate}
-        style={({ pressed }) => [
-          styles.mapControlButton,
-          pressed && styles.mapControlButtonPressed,
-        ]}
-      >
-        <Ionicons
-          name="navigate-outline"
-          size={23}
-          color={COLORS.textPrimary}
-        />
-      </Pressable>
+      <MapLocateButton onPress={onPressLocate} color={COLORS.textPrimary} />
     </View>
   );
 }
@@ -190,7 +189,7 @@ function SelectedStopCard({ stop, onPreviewClip, onPressDetail }: SelectedStopCa
         </Pressable>
       </View>
 
-      <ScrollView
+      <GestureScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.clipList}
@@ -241,7 +240,7 @@ function SelectedStopCard({ stop, onPreviewClip, onPressDetail }: SelectedStopCa
             클립 추가
           </Text>
         </Pressable>
-      </ScrollView>
+      </GestureScrollView>
     </View>
   );
 }
@@ -688,6 +687,10 @@ export default function MyRouteScreen() {
       return () => {
         isActive = false;
       };
+      // currentTrip 객체 전체가 아니라 id만 의존성으로 둡니다 — 상위 스토어가
+      // 내용은 같지만 참조만 바뀐 currentTrip을 내려줄 때마다 이 포커스
+      // 이펙트가 불필요하게 다시 도는 걸 막기 위해서입니다.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [currentTrip?.id]),
   );
 
@@ -729,8 +732,11 @@ export default function MyRouteScreen() {
   const [selectedMode, setSelectedMode] = useState<RouteViewMode>("info");
 
   // 홈에서 AI 추천 일정을 확정하고 넘어온 경우, 이전 탭 상태와 무관하게 일정 탭을 엽니다.
+  // 라우트 파라미터(view)라는 외부 값이 바뀔 때 로컬 탭 상태를 맞추는
+  // 동기화라 effect가 맞는 자리입니다.
   useEffect(() => {
     if (view === "schedule") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSelectedMode("info");
     }
   }, [saved, view]);
@@ -756,7 +762,7 @@ export default function MyRouteScreen() {
     }
   }, [tripName, tripSummary]);
 
-  const mapHeight = Math.min(Math.max(width * 0.95, 400), 540);
+  const mapHeight = Math.min(Math.max(width * 0.85, 360), 480);
 
   // 실제 GPS 위치 — "현재 위치" 버튼을 눌렀을 때도 다시 불러와 지도를 재중심합니다.
   const [deviceLocation, setDeviceLocation] = useState<{
@@ -792,6 +798,10 @@ export default function MyRouteScreen() {
   }, []);
 
   useEffect(() => {
+    // 화면 마운트 시 GPS 위치를 한 번 가져오는 표준적인 데이터 페칭
+    // 이펙트입니다 — loadDeviceLocation 내부에서 await 이후에 setState하므로
+    // 렌더 중 동기 setState가 아닙니다.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadDeviceLocation();
   }, [loadDeviceLocation]);
 
@@ -806,16 +816,24 @@ export default function MyRouteScreen() {
     setLocateToken((prev) => prev + 1);
   }, [loadDeviceLocation]);
 
+  // 지도 화면(카드 캐러셀·핀 목록)에서 공통으로 쓰는 순서대로 정렬된 스톱
+  // 목록. 예전엔 렌더링 시점에 매번 [...stops].sort(...)를 새로 만들었는데,
+  // 카드 스와이프 시 "현재 인덱스 → 스톱"을 찾을 때도 같은 정렬이 필요해서
+  // 하나로 합쳤습니다.
+  const sortedStops = useMemo(
+    () => [...planData.stops].sort((a, b) => a.order - b.order),
+    [planData.stops],
+  );
+
   // 지도에 찍을 핀 — 좌표가 있는 스톱만, day/순서대로 이어서 경로선을 그립니다.
   const mapPins = useMemo<KakaoMapPin[]>(
     () =>
-      planData.stops
+      sortedStops
         .filter(
           (stop): stop is PlanStop & { latitude: number; longitude: number } =>
             typeof stop.latitude === "number" &&
             typeof stop.longitude === "number",
         )
-        .sort((a, b) => a.order - b.order)
         .map((stop) => ({
           id: stop.id,
           lat: stop.latitude,
@@ -823,7 +841,25 @@ export default function MyRouteScreen() {
           label: String(stop.order),
           color: COLORS.primary,
         })),
-    [planData.stops],
+    [sortedStops],
+  );
+
+  const mapRef = useRef<KakaoMapViewHandle>(null);
+
+  // 카드 캐러셀을 스와이프해서 "현재 보이는 카드"가 바뀌면(스냅 애니메이션이
+  // 끝나는 시점 = onMomentumScrollEnd) 그 카드가 가리키는 장소로 지도 중심을
+  // panTo로 부드럽게 옮깁니다. 좌표가 없는 스톱(직접 추가했는데 위치를 못
+  // 구한 경우 등)은 옮길 곳이 없으니 조용히 건너뜁니다.
+  const handleStopCardScrollEnd = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const offsetX = event.nativeEvent.contentOffset.x;
+      const index = Math.round(offsetX / STOP_CARD_SNAP_INTERVAL);
+      const clampedIndex = Math.max(0, Math.min(index, sortedStops.length - 1));
+      const stop = sortedStops[clampedIndex];
+      if (!stop || stop.latitude === null || stop.longitude === null) return;
+      mapRef.current?.panTo(stop.latitude, stop.longitude);
+    },
+    [sortedStops],
   );
 
   return (
@@ -899,6 +935,7 @@ export default function MyRouteScreen() {
               ]}
             >
               <KakaoMapView
+                ref={mapRef}
                 pins={mapPins}
                 height={mapHeight}
                 currentLocation={deviceLocation}
@@ -909,35 +946,34 @@ export default function MyRouteScreen() {
               <MapControlButtons onPressLocate={handlePressLocate} />
             </View>
 
-            {planData.stops.length > 0 ? (
-              <ScrollView
+            {sortedStops.length > 0 ? (
+              <GestureScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
-                style={[styles.stopCardScroll, { top: mapHeight - 56 }]}
+                style={[styles.stopCardScroll, { top: SPACING.md + mapHeight - 16 }]}
                 contentContainerStyle={styles.selectedCardWrapper}
                 snapToInterval={STOP_CARD_SNAP_INTERVAL}
                 snapToAlignment="start"
                 decelerationRate="fast"
+                onMomentumScrollEnd={handleStopCardScrollEnd}
               >
-                {[...planData.stops]
-                  .sort((a, b) => a.order - b.order)
-                  .map((stop) => (
-                    <View key={stop.id} style={styles.stopCardSlide}>
-                      <SelectedStopCard
-                        stop={stop}
-                        onPreviewClip={setPreviewClip}
-                        onPressDetail={(pressedStop) =>
-                          setViewingPlace({
-                            id: pressedStop.id,
-                            name: pressedStop.name,
-                            lat: pressedStop.latitude!,
-                            lng: pressedStop.longitude!,
-                          })
-                        }
-                      />
-                    </View>
-                  ))}
-              </ScrollView>
+                {sortedStops.map((stop) => (
+                  <View key={stop.id} style={styles.stopCardSlide}>
+                    <SelectedStopCard
+                      stop={stop}
+                      onPreviewClip={setPreviewClip}
+                      onPressDetail={(pressedStop) =>
+                        setViewingPlace({
+                          id: pressedStop.id,
+                          name: pressedStop.name,
+                          lat: pressedStop.latitude!,
+                          lng: pressedStop.longitude!,
+                        })
+                      }
+                    />
+                  </View>
+                ))}
+              </GestureScrollView>
             ) : null}
           </View>
         ) : (
@@ -1085,6 +1121,7 @@ const styles = StyleSheet.create({
 
   mapFrame: {
     marginHorizontal: SPACING.md,
+    marginTop: SPACING.md,
 
     overflow: "hidden",
 
@@ -1107,23 +1144,6 @@ const styles = StyleSheet.create({
     elevation: 20,
 
     gap: SPACING.sm,
-  },
-
-  mapControlButton: {
-    width: 46,
-    height: 46,
-
-    borderRadius: 23,
-
-    alignItems: "center",
-    justifyContent: "center",
-
-    backgroundColor: "rgba(255,255,255,0.93)",
-  },
-
-  mapControlButtonPressed: {
-    opacity: 0.74,
-    transform: [{ scale: 0.95 }],
   },
 
   // WebView(카카오맵)는 안드로이드에서 zIndex와 무관하게 다른 형제 뷰 위로
@@ -1235,7 +1255,7 @@ const styles = StyleSheet.create({
     position: "relative",
 
     width: 104,
-    height: 82,
+    height: 68,
 
     overflow: "hidden",
 
@@ -1250,7 +1270,7 @@ const styles = StyleSheet.create({
   },
 
   clipDim: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
 
     backgroundColor: "rgba(20,20,18,0.10)",
   },
@@ -1291,7 +1311,7 @@ const styles = StyleSheet.create({
 
   addClipButton: {
     width: 88,
-    height: 82,
+    height: 68,
 
     alignItems: "center",
     justifyContent: "center",
@@ -1339,12 +1359,12 @@ const styles = StyleSheet.create({
     shadowColor: COLORS.shadow,
     shadowOffset: {
       width: 0,
-      height: 5,
+      height: 1,
     },
-    shadowOpacity: 0.11,
-    shadowRadius: 12,
+    shadowOpacity: 0.06,
+    shadowRadius: 3,
 
-    elevation: 8,
+    elevation: 2,
   },
 
   internalNavigationItem: {
@@ -1777,7 +1797,7 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
   },
   shareBackdrop: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: "rgba(0, 0, 0, 0.28)",
   },
   shareSheet: {

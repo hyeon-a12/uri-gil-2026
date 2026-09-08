@@ -210,7 +210,7 @@ const previewStyles = StyleSheet.create({
         aspectRatio: 9 / 16,
     },
     pauseIconOverlay: {
-        ...StyleSheet.absoluteFillObject,
+        ...StyleSheet.absoluteFill,
         alignItems: 'center',
         justifyContent: 'center',
     },

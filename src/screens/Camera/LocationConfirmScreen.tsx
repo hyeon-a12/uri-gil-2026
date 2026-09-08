@@ -18,7 +18,7 @@ import * as Location from "expo-location";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppText as Text } from "@/components/AppText";
-import { HapticPressable } from "@/components/common";
+import { HapticPressable, MapLocateButton, SectionLabel } from "@/components/common";
 import KakaoMapView, {
   KakaoMapPin,
 } from "@/components/KakaoMapView";
@@ -27,6 +27,7 @@ import { saveRecording, updateRecordingServerId } from "@/services/recordingServ
 import { useTripStore } from "@/store/useTripStore";
 import { getAllFolders } from "@/services/folderService";
 import { apiFetch } from "@/services/api";
+import { formatDistance, usePlaceSearch } from "@/hooks/usePlaceSearch";
 
 const COLORS = {
   background: APP_COLORS.background,
@@ -55,130 +56,15 @@ type CapturedCoordinates = {
   longitude: number;
 };
 
-type KakaoPlace = {
-  id: string;
-  name: string;
-  category: string;
-  address: string;
-  distance?: number;
-  latitude: number;
-  longitude: number;
-};
-
-type KakaoPlaceResponse = {
-  id?: string;
-  place_name?: string;
-  category_name?: string;
-  category_group_name?: string;
-  road_address_name?: string;
-  address_name?: string;
-  distance?: string;
-  x?: string;
-  y?: string;
-};
-
 function parseCoordinate(value?: string): number | null {
   if (!value) return null;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function mapKakaoPlace(place: KakaoPlaceResponse): KakaoPlace | null {
-  const latitude = Number(place.y);
-  const longitude = Number(place.x);
-
-  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
-    return null;
-  }
-
-  return {
-    id: String(place.id ?? `${latitude}-${longitude}`),
-    name: place.place_name ?? "이름 없는 장소",
-    category: place.category_group_name || place.category_name || "장소",
-    address: place.road_address_name || place.address_name || "주소 정보 없음",
-    distance: place.distance ? Number(place.distance) : undefined,
-    latitude,
-    longitude,
-  };
-}
-
-function formatDistance(distance?: number): string {
-  if (distance === undefined || !Number.isFinite(distance)) return "주변";
-  if (distance < 1000) return `${distance}m`;
-  return `${(distance / 1000).toFixed(1)}km`;
-}
-
-// EXPO_PUBLIC_KAKAO_REST_API_KEY가 아직 준비되지 않았을 때(또는 요청 실패 시) 검색 흐름을
-// 계속 데모할 수 있도록 쓰는 목데이터입니다. 촬영 좌표에서 위경도를 살짝 떨어뜨려
-// 만들기 때문에, 실제 검색 결과처럼 거리순 정렬과 반경 표시가 자연스럽게 동작합니다.
-const MOCK_PLACE_SEEDS: {
-  name: string;
-  category: string;
-  address: string;
-  deltaLat: number;
-  deltaLng: number;
-}[] = [
-  { name: "객리단길", category: "관광명소", address: "전주시 완산구 경원동", deltaLat: 0.006, deltaLng: -0.004 },
-  { name: "팔복예술공장", category: "관광명소", address: "전주시 덕진구 팔복동", deltaLat: -0.012, deltaLng: 0.015 },
-  { name: "덕진공원", category: "관광명소", address: "전주시 덕진구 덕진동", deltaLat: 0.018, deltaLng: 0.006 },
-  { name: "한옥마을 전통찻집", category: "카페", address: "전주시 완산구 풍남동", deltaLat: 0.001, deltaLng: 0.001 },
-  { name: "골목 끝 로스터리", category: "카페", address: "전주시 완산구 태조로", deltaLat: -0.003, deltaLng: 0.002 },
-  { name: "전주 콩나물국밥집", category: "음식점", address: "전주시 완산구 중앙동", deltaLat: 0.002, deltaLng: -0.002 },
-  { name: "풍남문 분식", category: "음식점", address: "전주시 완산구 풍남동", deltaLat: -0.001, deltaLng: -0.003 },
-  { name: "전동성당", category: "관광명소", address: "전주시 완산구 태조로", deltaLat: 0.0008, deltaLng: 0.0015 },
-  { name: "오목대", category: "관광명소", address: "전주시 완산구 기린대로", deltaLat: 0.004, deltaLng: 0.003 },
-  { name: "경기전", category: "관광명소", address: "전주시 완산구 태조로", deltaLat: -0.0006, deltaLng: 0.0009 },
-];
-
-function haversineDistanceMeters(
-  a: CapturedCoordinates,
-  b: CapturedCoordinates,
-): number {
-  const R = 6371000;
-  const toRad = (deg: number) => (deg * Math.PI) / 180;
-  const dLat = toRad(b.latitude - a.latitude);
-  const dLng = toRad(b.longitude - a.longitude);
-  const lat1 = toRad(a.latitude);
-  const lat2 = toRad(b.latitude);
-
-  const h =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
-
-  return Math.round(2 * R * Math.asin(Math.sqrt(h)));
-}
-
-function buildMockPlaces(
-  center: CapturedCoordinates,
-  keyword: string,
-): KakaoPlace[] {
-  const normalized = keyword.trim().toLowerCase();
-
-  return MOCK_PLACE_SEEDS.filter(
-    (seed) =>
-      !normalized ||
-      seed.name.toLowerCase().includes(normalized) ||
-      seed.category.toLowerCase().includes(normalized),
-  )
-    .map((seed, index) => {
-      const latitude = center.latitude + seed.deltaLat;
-      const longitude = center.longitude + seed.deltaLng;
-      return {
-        id: `mock-${index}-${seed.name}`,
-        name: seed.name,
-        category: seed.category,
-        address: seed.address,
-        distance: haversineDistanceMeters(center, { latitude, longitude }),
-        latitude,
-        longitude,
-      };
-    })
-    .sort((a, b) => (a.distance ?? 0) - (b.distance ?? 0));
-}
-
 /** 검색 결과를 지도 핀으로 변환합니다. 선택된 장소만 포인트 컬러로 강조합니다. */
 function buildMapPins(
-  places: KakaoPlace[],
+  places: { id: string; latitude: number; longitude: number }[],
   selectedPlaceId: string | undefined,
 ): KakaoMapPin[] {
   return places.map((place, index) => ({
@@ -196,7 +82,11 @@ function buildMapPins(
  * 촬영 완료 후 장소를 검색하고 확정하는 화면입니다.
  *
  * CameraScreen에서 latitude/longitude route param을 전달하면 해당 지점을 고정해 검색합니다.
- * 전달되지 않은 경우에는 이 화면이 열린 시점의 기기 위치를 보조값으로 사용합니다.
+ * 전달되지 않은 경우에는 이 화면이 열린 시점의 기기 위치를 GPS로 가져와 씁니다.
+ *
+ * 장소 검색/근처 추천 로직은 usePlaceSearch 훅(add-place.tsx와 공유)을 그대로 쓰고,
+ * autoSelectNearest 옵션으로 GPS 기준 가장 가까운 장소를 기본 제안값으로
+ * 자동 선택합니다 — 사용자는 그대로 확인하거나 검색/재선택으로 바꿀 수 있습니다.
  */
 export default function LocationConfirmScreen() {
   const {
@@ -229,18 +119,7 @@ export default function LocationConfirmScreen() {
   const [locationMessage, setLocationMessage] = useState(
     routeCoordinates ? "" : "촬영 위치를 확인하고 있어요.",
   );
-  const [query, setQuery] = useState("");
-  const [places, setPlaces] = useState<KakaoPlace[]>([]);
-  const [isLoadingPlaces, setIsLoadingPlaces] = useState(false);
-  const [searchError, setSearchError] = useState<string | null>(null);
-  // Kakao REST API 키가 아직 앱에서 못 읽는 상태(또는 요청 실패)라 목데이터로 대체했을 때만 true.
-  const [isMockData, setIsMockData] = useState(false);
-  const [selectedPlace, setSelectedPlace] = useState<KakaoPlace | null>(null);
-  const [isManualEntryOpen, setIsManualEntryOpen] = useState(false);
-  const [manualPlaceName, setManualPlaceName] = useState("");
-  const [manualAddress, setManualAddress] = useState("");
 
-  const searchRequestIdRef = useRef(0);
   const insets = useSafeAreaInsets();
 
   const sheetHeight = useRef(new Animated.Value(DEFAULT_SHEET_HEIGHT)).current;
@@ -269,23 +148,23 @@ export default function LocationConfirmScreen() {
     }),
   ).current;
 
-  /**
-   * CameraScreen이 좌표를 넘기지 못한 구버전 흐름을 위한 보조 처리입니다.
-   * 정확한 촬영 위치는 반드시 CameraScreen에서 route param으로 넘기는 방식이 우선입니다.
-   */
-  const loadFallbackDeviceLocation = useCallback(async () => {
-    if (routeCoordinates) return;
-
+  // notifyOnFailure: 최초 진입 시 조용히 시도할 때는 false, 사용자가 직접
+  // "내 위치로" 버튼을 눌렀을 때는 true로 넘겨 실패 사유를 알려줍니다
+  // (my-route.tsx / add-place.tsx의 loadDeviceLocation과 동일한 패턴).
+  const loadDeviceLocation = useCallback(async (notifyOnFailure = false) => {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== "granted") {
         setLocationMessage(
           "위치 권한을 허용하면 촬영 위치 주변을 검색할 수 있어요.",
         );
+        if (notifyOnFailure) {
+          Alert.alert("위치 권한이 필요해요", "설정에서 위치 접근을 허용해주세요.");
+        }
         return;
       }
 
-      const lastKnown = await Location.getLastKnownPositionAsync();
+      const lastKnown = notifyOnFailure ? null : await Location.getLastKnownPositionAsync();
       const position =
         lastKnown ??
         (await Location.getCurrentPositionAsync({
@@ -302,135 +181,67 @@ export default function LocationConfirmScreen() {
       setLocationMessage(
         "촬영 위치를 확인하지 못했어요. 위치 권한을 확인해주세요.",
       );
+      if (notifyOnFailure) {
+        Alert.alert("위치를 가져오지 못했어요", "잠시 후 다시 시도해주세요.");
+      }
     }
-  }, [routeCoordinates]);
+  }, []);
 
   useEffect(() => {
-    void loadFallbackDeviceLocation();
-  }, [loadFallbackDeviceLocation]);
+    // CameraScreen이 좌표를 이미 넘긴 경우(routeCoordinates)엔 다시 조회할 필요가 없습니다.
+    if (routeCoordinates) return;
+    void loadDeviceLocation();
+  }, [loadDeviceLocation, routeCoordinates]);
 
-  const searchPlacesAroundShootingLocation = useCallback(
-    async (keyword: string, coordinates: CapturedCoordinates) => {
-      const apiKey = process.env.EXPO_PUBLIC_KAKAO_REST_API_KEY;
+  // 좌표가 이전과 완전히 같으면 지도 URL 문자열이 안 바뀌어서 WebView가 재로드를
+  // 건너뛰고 "내 위치로" 버튼이 반응 없는 것처럼 보입니다 — 누를 때마다 이 값을
+  // 증가시켜 항상 재중심이 일어나게 합니다.
+  const [locateToken, setLocateToken] = useState(0);
+  const handlePressLocate = useCallback(async () => {
+    await loadDeviceLocation(true);
+    setLocateToken((prev) => prev + 1);
+  }, [loadDeviceLocation]);
 
-      // 키가 아직 앱에서 못 읽는 상태(REST API 연동 전)라면 네트워크 요청 없이
-      // 바로 목데이터로 검색 흐름을 보여줍니다.
-      if (!apiKey) {
-        setIsLoadingPlaces(false);
-        setSearchError(null);
-        setIsMockData(true);
-        setPlaces(buildMockPlaces(coordinates, keyword));
-        return;
-      }
+  const {
+    query,
+    changeQuery,
+    clearQuery,
+    isBrowsingNearby,
+    displayedPlaces,
+    isLoadingDisplayed,
+    isDisplayedMockData,
+    searchError,
+    selectedPlace,
+    selectPlace,
+    autoSuggestedPlaceId,
+    isManualEntryOpen,
+    toggleManualEntry,
+    manualPlaceName,
+    changeManualPlaceName,
+    manualAddress,
+    changeManualAddress,
+    placeToSave,
+  } = usePlaceSearch(shootingCoordinates, { autoSelectNearest: true });
 
-      const requestId = ++searchRequestIdRef.current;
-      setIsLoadingPlaces(true);
-      setSearchError(null);
-
-      try {
-        const params = new URLSearchParams({
-          query: keyword,
-          x: String(coordinates.longitude),
-          y: String(coordinates.latitude),
-          sort: "distance",
-          size: "15",
-        });
-
-        const response = await fetch(
-          `https://dapi.kakao.com/v2/local/search/keyword.json?${params.toString()}`,
-          {
-            headers: {
-              Authorization: `KakaoAK ${apiKey}`,
-            },
-          },
-        );
-
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error(
-            "[LocationConfirm] Kakao 장소 검색 실패:",
-            response.status,
-            errorText,
-          );
-          throw new Error("주변 장소를 불러오지 못했어요.");
-        }
-
-        const data = (await response.json()) as {
-          documents?: KakaoPlaceResponse[];
-        };
-        const mappedPlaces = (data.documents ?? [])
-          .map(mapKakaoPlace)
-          .filter((place): place is KakaoPlace => place !== null);
-
-        // 빠르게 타이핑할 때 이전 요청이 늦게 도착해 최신 결과를 덮어쓰지 않도록 막습니다.
-        if (requestId === searchRequestIdRef.current) {
-          setIsMockData(false);
-          setPlaces(mappedPlaces);
-        }
-      } catch (error) {
-        // 실제 검색 요청이 실패해도 화면이 막히지 않도록 목데이터로 대체합니다.
-        console.warn(
-          "[LocationConfirm] 검색 실패로 목데이터로 대체합니다:",
-          error,
-        );
-        if (requestId === searchRequestIdRef.current) {
-          setIsMockData(true);
-          setPlaces(buildMockPlaces(coordinates, keyword));
-        }
-      } finally {
-        if (requestId === searchRequestIdRef.current) {
-          setIsLoadingPlaces(false);
-        }
-      }
-    },
-    [],
-  );
-
-  // 350ms 디바운스를 둬서 글자마다 API 요청이 발생하지 않게 합니다.
-  // 검색어가 없을 때는 더 이상 "촬영 위치 주변 추천"을 자동으로 보여주지 않고,
-  // 사용자가 직접 검색해야 목록이 뜹니다.
-  useEffect(() => {
-    const trimmed = query.trim();
-
-    if (!shootingCoordinates || !trimmed) {
-      setPlaces([]);
-      setSearchError(null);
-      setIsMockData(false);
-      setIsLoadingPlaces(false);
-      return;
-    }
-
-    const timer = setTimeout(() => {
-      void searchPlacesAroundShootingLocation(trimmed, shootingCoordinates);
-    }, 350);
-
-    return () => clearTimeout(timer);
-  }, [query, searchPlacesAroundShootingLocation, shootingCoordinates]);
-
-  // 검색에 실패했을 때 입력한 장소명은 촬영 좌표와 결합해 일반 검색 결과와 같은 형태로 저장합니다.
-  const manuallyAddedPlace = useMemo<KakaoPlace | null>(() => {
-    const name = manualPlaceName.trim();
-    if (!name || !shootingCoordinates) return null;
-
-    return {
-      id: "manual-place",
-      name,
-      category: "직접 추가한 장소",
-      address: manualAddress.trim() || "주소 직접 입력 없음",
-      latitude: shootingCoordinates.latitude,
-      longitude: shootingCoordinates.longitude,
-    };
-  }, [manualAddress, manualPlaceName, shootingCoordinates]);
-
-  const placeToSave = selectedPlace ?? manuallyAddedPlace;
   // 검색어를 입력한 뒤에만 "나만의 장소 추가"를 노출합니다 — 결과가 있어도
   // 항상 검색 결과 목록 맨 아래에 위치합니다.
-  const showManualEntry = query.trim().length > 0 && !isLoadingPlaces;
+  const showManualEntry = query.trim().length > 0 && !isLoadingDisplayed;
 
   const mapPins = useMemo(
-    () => buildMapPins(places, selectedPlace?.id),
-    [places, selectedPlace],
+    () => buildMapPins(displayedPlaces, selectedPlace?.id),
+    [displayedPlaces, selectedPlace],
   );
+
+  // GPS로 자동 제안된 장소가 아직 사용자의 다른 선택으로 바뀌지 않았을 때만
+  // "추천했어요" 안내를 보여줍니다. locationMessage(권한/조회 실패 안내)가
+  // 있으면 그쪽을 우선 보여줍니다.
+  const isShowingAutoSuggestion =
+    Boolean(autoSuggestedPlaceId) && selectedPlace?.id === autoSuggestedPlaceId;
+  const sheetDescription = locationMessage
+    ? locationMessage
+    : isShowingAutoSuggestion && selectedPlace
+      ? `근처 '${selectedPlace.name}'을(를) 촬영 장소로 추천했어요. 다르면 검색하거나 목록에서 골라주세요.`
+      : "";
 
   const handleComplete = async () => {
     if (!placeToSave) return;
@@ -538,6 +349,8 @@ export default function LocationConfirmScreen() {
               }
               height={SCREEN_HEIGHT}
               pathColor={COLORS.primary}
+              focusOnLocationToken={locateToken || undefined}
+              centerOffsetY={DEFAULT_SHEET_HEIGHT / 2}
             />
 
             <Pressable
@@ -558,6 +371,12 @@ export default function LocationConfirmScreen() {
                 다시 촬영하기
               </Text>
             </Pressable>
+
+            {/* "내 위치로" 버튼 — 시트를 드래그해도 항상 시트 바로 위에 떠 있도록
+                sheetHeight(Animated.Value)에 맞춰 bottom을 같이 움직입니다. */}
+            <Animated.View style={[styles.mapControls, { bottom: Animated.add(sheetHeight, 16) }]}>
+              <MapLocateButton onPress={handlePressLocate} color={COLORS.textPrimary} />
+            </Animated.View>
           </View>
 
           <Animated.View style={[styles.sheet, { height: sheetHeight }]}>
@@ -597,9 +416,9 @@ export default function LocationConfirmScreen() {
                   </Text>
                 </HapticPressable>
               </View>
-              {locationMessage ? (
+              {sheetDescription ? (
                 <Text allowFontScaling={false} style={styles.sheetDescription}>
-                  {locationMessage}
+                  {sheetDescription}
                 </Text>
               ) : null}
             </View>
@@ -612,11 +431,7 @@ export default function LocationConfirmScreen() {
               />
               <TextInput
                 value={query}
-                onChangeText={(value) => {
-                  setQuery(value);
-                  setSelectedPlace(null);
-                  setIsManualEntryOpen(false);
-                }}
+                onChangeText={changeQuery}
                 placeholder="장소, 주소로 검색"
                 placeholderTextColor={COLORS.textSecondary}
                 returnKeyType="search"
@@ -624,7 +439,7 @@ export default function LocationConfirmScreen() {
                 style={styles.searchInput}
               />
               {query.length > 0 && (
-                <Pressable onPress={() => setQuery("")} hitSlop={10}>
+                <Pressable onPress={clearQuery} hitSlop={10}>
                   <Ionicons
                     name="close-circle"
                     size={20}
@@ -640,69 +455,70 @@ export default function LocationConfirmScreen() {
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={false}
             >
-              {query.trim().length === 0 ? null : (
-                <>
-                  {isMockData && !isLoadingPlaces ? (
-                    <View style={styles.mockNotice}>
-                      <Ionicons
-                        name="information-circle-outline"
-                        size={16}
-                        color={COLORS.textSecondary}
-                      />
-                      <Text style={styles.mockNoticeText}>
-                        검색 API 연동 전이라 예시 데이터를 보여드리고 있어요.
-                      </Text>
-                    </View>
-                  ) : null}
+              {isBrowsingNearby && !isLoadingDisplayed && displayedPlaces.length > 0 ? (
+                <SectionLabel text="내 주변 장소" />
+              ) : null}
 
-                  {isLoadingPlaces ? (
-                    <View style={styles.statusRow}>
-                      <Ionicons
-                        name="ellipsis-horizontal"
-                        size={22}
-                        color={COLORS.primary}
-                      />
-                      <Text style={styles.statusText}>
-                        주변 장소를 찾고 있어요.
-                      </Text>
-                    </View>
-                  ) : null}
+              {isDisplayedMockData && !isLoadingDisplayed ? (
+                <View style={styles.mockNotice}>
+                  <Ionicons
+                    name="information-circle-outline"
+                    size={16}
+                    color={COLORS.textSecondary}
+                  />
+                  <Text style={styles.mockNoticeText}>
+                    검색 API 연동 전이라 예시 데이터를 보여드리고 있어요.
+                  </Text>
+                </View>
+              ) : null}
 
-                  {!isLoadingPlaces && searchError ? (
-                    <View style={styles.statusRow}>
-                      <Ionicons
-                        name="alert-circle-outline"
-                        size={21}
-                        color={COLORS.primary}
-                      />
-                      <Text style={styles.statusText}>{searchError}</Text>
-                    </View>
-                  ) : null}
+              {isLoadingDisplayed ? (
+                <View style={styles.statusRow}>
+                  <Ionicons
+                    name="ellipsis-horizontal"
+                    size={22}
+                    color={COLORS.primary}
+                  />
+                  <Text style={styles.statusText}>
+                    {isBrowsingNearby
+                      ? "촬영 위치 근처를 찾고 있어요."
+                      : "주변 장소를 찾고 있어요."}
+                  </Text>
+                </View>
+              ) : null}
 
-                  {!isLoadingPlaces && !searchError && places.length === 0 ? (
-                    <View style={styles.statusRow}>
-                      <Ionicons
-                        name="search-outline"
-                        size={21}
-                        color={COLORS.textSecondary}
-                      />
-                      <Text style={styles.statusText}>
-                        해당 검색어로 장소를 찾지 못했어요.
-                      </Text>
-                    </View>
-                  ) : null}
-                </>
-              )}
+              {!isLoadingDisplayed && !isBrowsingNearby && searchError ? (
+                <View style={styles.statusRow}>
+                  <Ionicons
+                    name="alert-circle-outline"
+                    size={21}
+                    color={COLORS.primary}
+                  />
+                  <Text style={styles.statusText}>{searchError}</Text>
+                </View>
+              ) : null}
 
-              {places.map((place) => {
+              {!isLoadingDisplayed && !searchError && displayedPlaces.length === 0 ? (
+                <View style={styles.statusRow}>
+                  <Ionicons
+                    name="search-outline"
+                    size={21}
+                    color={COLORS.textSecondary}
+                  />
+                  <Text style={styles.statusText}>
+                    {isBrowsingNearby
+                      ? "촬영 위치 근처에서 장소를 찾지 못했어요."
+                      : "해당 검색어로 장소를 찾지 못했어요."}
+                  </Text>
+                </View>
+              ) : null}
+
+              {displayedPlaces.map((place) => {
                 const selected = selectedPlace?.id === place.id;
                 return (
                   <Pressable
                     key={place.id}
-                    onPress={() => {
-                      setSelectedPlace(place);
-                      setIsManualEntryOpen(false);
-                    }}
+                    onPress={() => selectPlace(place)}
                     style={({ pressed }) => [
                       styles.placeCard,
                       selected && styles.placeCardSelected,
@@ -732,10 +548,7 @@ export default function LocationConfirmScreen() {
               {showManualEntry ? (
                 <View style={styles.manualAddSection}>
                   <Pressable
-                    onPress={() => {
-                      setIsManualEntryOpen((opened) => !opened);
-                      setSelectedPlace(null);
-                    }}
+                    onPress={toggleManualEntry}
                     style={[
                       styles.manualAddTrigger,
                       isManualEntryOpen && styles.manualAddTriggerOpen,
@@ -768,10 +581,7 @@ export default function LocationConfirmScreen() {
                       <Text style={styles.manualFormLabel}>장소 이름</Text>
                       <TextInput
                         value={manualPlaceName}
-                        onChangeText={(value) => {
-                          setManualPlaceName(value);
-                          setSelectedPlace(null);
-                        }}
+                        onChangeText={changeManualPlaceName}
                         placeholder="예: 골목 끝 작은 카페"
                         placeholderTextColor={COLORS.textTertiary}
                         returnKeyType="next"
@@ -782,10 +592,7 @@ export default function LocationConfirmScreen() {
                       </Text>
                       <TextInput
                         value={manualAddress}
-                        onChangeText={(value) => {
-                          setManualAddress(value);
-                          setSelectedPlace(null);
-                        }}
+                        onChangeText={changeManualAddress}
                         placeholder="예: 전주시 완산구 태조로 00"
                         placeholderTextColor={COLORS.textTertiary}
                         returnKeyType="done"
@@ -822,7 +629,7 @@ const styles = StyleSheet.create({
   // 시트를 내리면 그만큼 지도가 위로 넓게 드러납니다.
   // 지도를 화면 전체에 깔고 시트를 그 위에 절대 위치로 띄워야, 시트의
   // 둥근 모서리 안쪽으로 지도가 비쳐서 라운드 처리가 실제로 보입니다.
-  mapArea: { ...StyleSheet.absoluteFillObject, overflow: "hidden" },
+  mapArea: { ...StyleSheet.absoluteFill, overflow: "hidden" },
   backButton: {
     position: "absolute",
     left: 16,
@@ -845,6 +652,15 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18,
     fontWeight: "700",
+  },
+  // "내 위치로" 버튼 위치. bottom은 시트 높이(Animated.Value)에 맞춰 인라인으로 준다.
+  mapControls: {
+    position: "absolute",
+    right: 16,
+    zIndex: 20,
+    // WebView(카카오맵)는 안드로이드에서 zIndex와 무관하게 형제 뷰 위로 겹쳐
+    // 보일 수 있어서 elevation도 같이 줘야 버튼이 지도 위로 확실히 올라옵니다.
+    elevation: 20,
   },
   sheet: {
     position: "absolute",
@@ -933,7 +749,7 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     color: COLORS.textPrimary,
-    fontSize: 14,
+    fontSize: 15,
     fontFamily: "Pretendard-SemiBold",
     padding: 0,
   },
@@ -1058,7 +874,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 13,
     borderRadius: 12,
     color: COLORS.textPrimary,
-    fontSize: 13,
+    fontSize: 15,
     fontFamily: "Pretendard-SemiBold",
     backgroundColor: COLORS.surface,
   },

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { forwardRef, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { StyleSheet, View, ActivityIndicator, Text } from 'react-native';
 import { WebView, WebViewMessageEvent } from 'react-native-webview';
 
@@ -82,6 +82,17 @@ type KakaoMapViewProps = {
   onError?: (message: string) => void;
 };
 
+/**
+ * pins/currentLocation 등 다른 props는 전부 "URL을 바꿔서 페이지를 다시
+ * 그리는" 방식(buildMapUrl)이라 매번 지도가 새로 초기화됩니다. 카드를
+ * 스와이프할 때마다 이 방식을 쓰면 지도가 매번 깜빡이며 다시 그려져서
+ * panTo만은 예외적으로 postMessage로 WebView 안 지도 인스턴스에 직접
+ * 명령을 보내 부드럽게 이동시킵니다(재초기화 없음).
+ */
+export type KakaoMapViewHandle = {
+  panTo: (lat: number, lng: number) => void;
+};
+
 const DEFAULT_ACCENT = '#FF7F5C';
 
 function buildMapUrl(
@@ -117,7 +128,7 @@ function buildMapUrl(
   return `${MAP_PAGE_URL}?${params.toString()}`;
 }
 
-export default function KakaoMapView({
+const KakaoMapView = forwardRef<KakaoMapViewHandle, KakaoMapViewProps>(function KakaoMapView({
   pins,
   height,
   currentLocation,
@@ -126,8 +137,21 @@ export default function KakaoMapView({
   focusOnLocationToken,
   centerOffsetY,
   onError,
-}: KakaoMapViewProps) {
+}, ref) {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const webviewRef = useRef<WebView>(null);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      panTo: (lat: number, lng: number) => {
+        webviewRef.current?.postMessage(
+          JSON.stringify({ type: 'panTo', lat, lng }),
+        );
+      },
+    }),
+    [],
+  );
 
   const mapUrl = useMemo(
     () => buildMapUrl(pins, currentLocation, level, pathColor, focusOnLocationToken, centerOffsetY),
@@ -158,6 +182,7 @@ export default function KakaoMapView({
   return (
     <View style={[styles.container, { height }]}>
       <WebView
+        ref={webviewRef}
         originWhitelist={['*']}
         source={{ uri: mapUrl }}
         style={styles.webview}
@@ -213,7 +238,9 @@ export default function KakaoMapView({
       )}
     </View>
   );
-}
+});
+
+export default KakaoMapView;
 
 const styles = StyleSheet.create({
   container: {
@@ -225,7 +252,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   loading: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#F5F5F5',

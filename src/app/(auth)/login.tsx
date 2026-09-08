@@ -1,6 +1,10 @@
 import { getProfile } from '@/services/profileService';
 import { updateProfile } from '@/store/useProfileStore';
 import { useAuthStore } from '@/store/useAuthStore';
+import { hydrateCurrentTrip } from '@/store/useTripStore';
+import { extractErrorMessage } from '@/services/api';
+import { isValidEmail } from '@/utils/validation';
+import { COLORS } from '@/constants/color';
 import * as SecureStore from 'expo-secure-store';
 import { router } from 'expo-router';
 import { useState } from 'react';
@@ -23,6 +27,19 @@ export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [emailError, setEmailError] = useState<string | null>(null);
+
+  const handleEmailChange = (text: string) => {
+    setEmail(text);
+    if (emailError) setEmailError(null);
+  };
+
+  const handleEmailBlur = () => {
+    const trimmed = email.trim();
+    if (trimmed && !isValidEmail(trimmed)) {
+      setEmailError('올바른 이메일 형식을 입력해주세요.');
+    }
+  };
 
   const handleLogin = async () => {
     const trimmedEmail = email.trim();
@@ -32,8 +49,8 @@ export default function LoginScreen() {
       return;
     }
 
-    if (!trimmedEmail.includes('@')) {
-      Alert.alert('입력 확인', '올바른 이메일 형식을 입력해주세요.');
+    if (!isValidEmail(trimmedEmail)) {
+      setEmailError('올바른 이메일 형식을 입력해주세요.');
       return;
     }
 
@@ -57,7 +74,7 @@ export default function LoginScreen() {
       const data = await response.json();
 
       if (!response.ok) {
-        Alert.alert('로그인 실패', data.detail || '이메일 또는 비밀번호를 확인해주세요.');
+        Alert.alert('로그인 실패', extractErrorMessage(data, '이메일 또는 비밀번호를 확인해주세요.'));
         return;
       }
 
@@ -66,12 +83,19 @@ export default function LoginScreen() {
       await SecureStore.setItemAsync('user_id', String(data.user_id));
       await SecureStore.setItemAsync('nickname', data.nickname);
 
-      // 기존에 저장된 프로필(bio, avatarUri)은 유지하고, 닉네임만 서버 값으로 갱신
+      // 기존에 저장된 프로필(bio, avatarUri)은 유지하고, 닉네임만 서버 값으로 갱신.
+      // getProfile()은 방금 SecureStore에 저장한 user_id 기준으로 조회되므로,
+      // 같은 기기에서 이전에 로그인했던 다른 계정의 프로필과 섞이지 않습니다.
       const existingProfile = await getProfile();
       await updateProfile({
         ...existingProfile,
         nickname: data.nickname,
       });
+
+      // useTripStore(currentTrip)는 메모리 캐시라 로그아웃해도 자동으로 비워지지
+      // 않습니다. 이 계정의 활성 여행으로 다시 채워서, 방금 전 계정의 여행이
+      // 화면에 잠깐이라도 남아 보이는 일이 없도록 합니다.
+      await hydrateCurrentTrip();
 
       useAuthStore.getState().setLoggedIn(true);
 
@@ -108,9 +132,10 @@ export default function LoginScreen() {
             <Text style={styles.label}>이메일</Text>
 
             <TextInput
-              style={styles.input}
+              style={[styles.input, emailError && styles.inputError]}
               value={email}
-              onChangeText={setEmail}
+              onChangeText={handleEmailChange}
+              onBlur={handleEmailBlur}
               placeholder="example@email.com"
               placeholderTextColor="#8A8A8A"
               keyboardType="email-address"
@@ -118,6 +143,7 @@ export default function LoginScreen() {
               autoCorrect={false}
               returnKeyType="next"
             />
+            {emailError && <Text style={styles.errorText}>{emailError}</Text>}
 
             <Text style={styles.label}>비밀번호</Text>
 
@@ -241,6 +267,20 @@ const styles = StyleSheet.create({
     fontSize: 15,
     letterSpacing: 0,
     marginBottom: 20,
+  },
+
+  inputError: {
+    borderColor: COLORS.danger,
+    marginBottom: 6,
+  },
+
+  errorText: {
+    fontFamily: 'Pretendard-Regular',
+    color: COLORS.danger,
+    fontSize: 12,
+    marginTop: -2,
+    marginBottom: 14,
+    marginLeft: 4,
   },
 
   passwordInputContainer: {

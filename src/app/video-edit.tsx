@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -14,7 +14,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import * as FileSystem from 'expo-file-system/legacy';
-import * as MediaLibrary from 'expo-media-library';
+import * as MediaLibrary from 'expo-media-library/legacy';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useVideoPlayer, VideoView } from 'expo-video';
@@ -40,6 +40,16 @@ const COLORS = {
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const PREVIEW_HORIZONTAL_MARGIN = 40;
 const PREVIEW_WIDTH = SCREEN_WIDTH - PREVIEW_HORIZONTAL_MARGIN * 2;
+
+// 서버(mainServer.js)는 fontSize를 실제 촬영 영상의 픽셀 단위 그대로 ffmpeg
+// drawtext에 넘깁니다. CameraScreen의 videoQuality="720p" 촬영 해상도(세로
+// 폭 720px)는 이 화면의 미리보기 폭(PREVIEW_WIDTH, 보통 300~350dp)보다 훨씬
+// 커서, 같은 fontSize 숫자가 미리보기에서는 실제 영상보다 훨씬 크게 보입니다.
+// 미리보기에 그릴 때만 이 비율만큼 축소해서 "편집 화면에서 보이는 크기 =
+// 실제 생성될 크기"가 되도록 맞춥니다. 저장/전송되는 fontSize 값 자체는
+// 건드리지 않습니다 — 오직 화면에 그리는 크기만 스케일합니다.
+const OUTPUT_VIDEO_WIDTH = 720;
+const PREVIEW_FONT_SCALE = PREVIEW_WIDTH / OUTPUT_VIDEO_WIDTH;
 
 // 룰러(styles.rulerRow)의 paddingHorizontal과 반드시 같은 값이어야, 재생 눈금
 // (playhead)이 실제 눈금 위치와 어긋나지 않습니다.
@@ -237,13 +247,38 @@ function formatTimer(seconds: number) {
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
+// 전역 fetch()는 SDK 57부터 (New Architecture 환경에서) expo/fetch의
+// WinterCG 표준 구현으로 대체되는데, 이 구현이 아직 FormData의 파일 파트
+// ({ uri, name, type })를 처리하지 못해 "Unsupported FormDataPart
+// implementation" 에러를 던집니다 (Expo 쪽 미해결 이슈). fetch 대신 이
+// 문제를 겪지 않는 옛 방식인 XMLHttpRequest로 멀티파트 업로드를 우회합니다.
+function uploadFormData(
+  url: string,
+  formData: FormData,
+): Promise<{ status: number; statusText: string; ok: boolean; text: string }> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', url);
+    xhr.onload = () => {
+      resolve({
+        status: xhr.status,
+        statusText: xhr.statusText,
+        ok: xhr.status >= 200 && xhr.status < 300,
+        text: xhr.responseText,
+      });
+    };
+    xhr.onerror = () => reject(new Error('네트워크 요청에 실패했습니다.'));
+    xhr.send(formData as any);
+  });
+}
+
 async function renderVideo(exportData: {
   folderId?: string;
-  clips: Array<{
+  clips: {
     id: string;
     videoUri: string;
     isMuted: boolean;
-  }>;
+  }[];
   globalSetting: {
     infoContentType: string | null;
     textPosition: string;
@@ -287,16 +322,13 @@ async function renderVideo(exportData: {
 
     console.log('FormData 준비 완료');
 
-    const response = await fetch(SERVER_URL, {
-      method: 'POST',
-      body: formData,
-    });
+    const response = await uploadFormData(SERVER_URL, formData);
 
     console.log('응답 받음')
     console.log('[status]', response.status);
     console.log('[statusText]', response.statusText);
 
-    const responseText = await response.text();
+    const responseText = response.text;
     console.log('[응답 본문]', responseText);
 
     if (!response.ok) throw new Error(`서버 렌더링 실패: ${responseText.slice(0,200)}`);
@@ -372,7 +404,7 @@ export default function VideoEditScreen() {
   }, [clipIds]);
 
   const [clips, setClips] = useState<EditableClip[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [, setIsLoading] = useState(true);
 
   useEffect(() => {
     (async () => {
@@ -396,7 +428,7 @@ export default function VideoEditScreen() {
             thumbnailUri: record.thumbnail,
             placeName: record.location?.placeName ?? undefined,
             recordedAt: record.recordedAt,
-            durationSeconds: Math.floor((record.durationMs ?? 0) / 1000),
+            durationSeconds: Math.round((record.durationMs ?? 0) / 1000),
           });
         }
         
@@ -424,10 +456,15 @@ export default function VideoEditScreen() {
   const [editingClipId, setEditingClipId] = useState<string | null>(null);
 
   useEffect(() => {
+    // 클립 목록이 로드되면 아직 아무것도 선택 안 됐을 때만 첫 클립을 기본
+    // 선택합니다. editingClipId는 사용자가 직접 다른 클립을 고르거나(1100줄
+    // 근처) 선택 해제(660줄, null)할 수도 있는 독립적인 상태라 clips에서
+    // 그냥 파생시킬 수 없어 effect로 동기화합니다.
     if (clips.length > 0 && !editingClipId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setEditingClipId(clips[0].id);
     }
-  }, [clips]);
+  }, [clips, editingClipId]);
 
   const editingClip = clips.find((c) => c.id === editingClipId) ?? null;
 
@@ -537,7 +574,7 @@ export default function VideoEditScreen() {
   // 시작 지점으로 즉시 점프하고(아래 첫 번째 effect), 재생 중이면 남은 시간 동안
   // 항목이 끝나는 지점까지 선형으로 애니메이션합니다. 일시정지하면 애니메이션만
   // 멈추고 값은 그대로 남아서 그 자리에 계속 멈춰 있어요.
-  const playheadAnim = useRef(new Animated.Value(0)).current;
+  const [playheadAnim] = useState(() => new Animated.Value(0));
 
   useEffect(() => {
     playheadAnim.stopAnimation();
@@ -595,7 +632,10 @@ export default function VideoEditScreen() {
     if (!playingClip?.videoUri) return;
 
     if (isPlaying) {
-      // 재생 중인 클립이 음소거 설정돼 있으면 반영합니다.
+      // 재생 중인 클립이 음소거 설정돼 있으면 반영합니다. expo-video의
+      // useVideoPlayer가 반환하는 player는 프로퍼티를 직접 대입해서 제어하는
+      // 네이티브 인스턴스라(공식 API), 컴파일러의 불변성 규칙 대상이 아닙니다.
+      // eslint-disable-next-line react-hooks/immutability
       player.muted = getEditState(playingClip.id).isMuted;
       player.replace(playingClip.videoUri);
       player.play();
@@ -668,18 +708,18 @@ export default function VideoEditScreen() {
   // 움직여 보여서, 네이티브 드라이버로 도는 Animated.Value로 따로 뺐습니다.
   const [sheetScrollViewportHeight, setSheetScrollViewportHeight] = useState(0);
   const [sheetScrollContentHeight, setSheetScrollContentHeight] = useState(0);
-  const sheetScrollY = useRef(new Animated.Value(0)).current;
+  const [sheetScrollY] = useState(() => new Animated.Value(0));
   // Animated.event를 JSX 안에서 매 렌더 새로 만들면 "Changing onScroll listener
   // at runtime is not supported" 에러가 나서, ref로 한 번만 만들어 재사용합니다.
   // useNativeDriver: true로 두면 여기 ScrollView 조합에서 onScroll이 함수가
   // 아니라 이벤트 객체로 넘어가면서 크래시가 나서(TypeError: onScroll is not
   // a function), JS 드라이버로 돌립니다 — 조금 덜 매끄럽지만 안전합니다.
-  const handleSheetScroll = useRef(
+  const [handleSheetScroll] = useState(() =>
     Animated.event(
       [{ nativeEvent: { contentOffset: { y: sheetScrollY } } }],
       { useNativeDriver: false },
     ),
-  ).current;
+  );
 
   // 스크롤할 내용이 실제로 뷰포트보다 길 때만 바를 보여줍니다.
   const isSheetScrollable =
@@ -708,7 +748,7 @@ export default function VideoEditScreen() {
   // Mute는 그런 "화면"이 아니라 바로 토글되는 가벼운 동작이라
   // sheetTranslateY 애니메이션 대상에서 제외했습니다.
   const isSheetTool = activeTool === 'text' || activeTool === 'position';
-  const sheetTranslateY = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
+  const [sheetTranslateY] = useState(() => new Animated.Value(SCREEN_HEIGHT));
 
   // 시트를 실제로 화면에 그릴지 여부. isSheetTool이 꺼지자마자 바로 언마운트해버리면
   // 내려가는 애니메이션이 재생될 틈도 없이 사라져서, 닫히는 애니메이션이 끝난
@@ -719,6 +759,10 @@ export default function VideoEditScreen() {
 
   useEffect(() => {
     if (isSheetTool) {
+      // Animated(외부 명령형 애니메이션 시스템)와 동기화하는 effect라
+      // 마운트부터 먼저 켜야 스프링 애니메이션이 실제로 보입니다. 닫힐
+      // 때는 반대로 애니메이션이 끝난 뒤(772줄, start 콜백 안)에야 언마운트합니다.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setIsSheetMounted(true);
       Animated.spring(sheetTranslateY, {
         toValue: 0,
@@ -954,7 +998,7 @@ export default function VideoEditScreen() {
                     {
                       textAlign: FIXED_TEXT_ALIGN,
                       color: editingState.timeStyle.color,
-                      fontSize: editingState.timeStyle.fontSize,
+                      fontSize: editingState.timeStyle.fontSize * PREVIEW_FONT_SCALE,
                       fontFamily: getFontFamily(
                         editingState.timeStyle.fontId,
                         editingState.timeStyle.bold,
@@ -985,7 +1029,7 @@ export default function VideoEditScreen() {
                     {
                       textAlign: FIXED_TEXT_ALIGN,
                       color: editingState.placeStyle.color,
-                      fontSize: editingState.placeStyle.fontSize,
+                      fontSize: editingState.placeStyle.fontSize * PREVIEW_FONT_SCALE,
                       fontFamily: getFontFamily(
                         editingState.placeStyle.fontId,
                         editingState.placeStyle.bold,

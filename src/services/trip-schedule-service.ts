@@ -1,5 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
+import { getCurrentUserId } from './authService';
+
 const STORAGE_PREFIX = "trip-schedule:v1:";
 
 export type TripScheduleStop = {
@@ -24,14 +26,18 @@ export type NewTripScheduleStop = Omit<
   "id" | "tripId" | "order" | "createdAt"
 >;
 
-function storageKey(tripId: string) {
-  return `${STORAGE_PREFIX}${tripId}`;
+// 계정별로 일정을 분리하기 위해 user_id를 키에 섞습니다.
+function storageKey(userId: string, tripId: string) {
+  return `${STORAGE_PREFIX}${userId}:${tripId}`;
 }
 
 export async function getTripScheduleStops(
   tripId: string,
 ): Promise<TripScheduleStop[]> {
-  const raw = await AsyncStorage.getItem(storageKey(tripId));
+  const userId = await getCurrentUserId();
+  if (!userId) return [];
+
+  const raw = await AsyncStorage.getItem(storageKey(userId, tripId));
   if (!raw) return [];
 
   try {
@@ -51,6 +57,9 @@ export async function appendTripScheduleStops(
   tripId: string,
   stops: NewTripScheduleStop[],
 ): Promise<TripScheduleStop[]> {
+  const userId = await getCurrentUserId();
+  if (!userId) return [];
+
   const existing = await getTripScheduleStops(tripId);
   const existingPlaceIds = new Set(existing.map((stop) => stop.placeId));
   const now = new Date().toISOString();
@@ -68,7 +77,7 @@ export async function appendTripScheduleStops(
     }));
 
   const saved = [...existing, ...newStops];
-  await AsyncStorage.setItem(storageKey(tripId), JSON.stringify(saved));
+  await AsyncStorage.setItem(storageKey(userId, tripId), JSON.stringify(saved));
   return saved;
 }
 
@@ -76,11 +85,14 @@ export async function removeTripScheduleStop(
   tripId: string,
   stopId: string,
 ): Promise<TripScheduleStop[]> {
+  const userId = await getCurrentUserId();
+  if (!userId) return [];
+
   const existing = await getTripScheduleStops(tripId);
   const remaining = existing
     .filter((stop) => stop.id !== stopId)
     .map((stop, index) => ({ ...stop, order: index + 1 }));
 
-  await AsyncStorage.setItem(storageKey(tripId), JSON.stringify(remaining));
+  await AsyncStorage.setItem(storageKey(userId, tripId), JSON.stringify(remaining));
   return remaining;
 }

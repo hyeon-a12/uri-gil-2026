@@ -2343,7 +2343,7 @@ const styles = StyleSheet.create({
     flex: 1,
     height: "100%",
     paddingVertical: 0,
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "500",
     color: COLORS.textPrimary,
   },
@@ -3020,13 +3020,13 @@ const styles = StyleSheet.create({
 
   // AI 근접 일정 추천 화면
   aiPlannerScreen: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: COLORS.white,
     elevation: 300,
     zIndex: 300,
   },
   aiMapArea: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     overflow: "hidden",
     backgroundColor: "#EAF3F1",
   },

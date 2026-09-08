@@ -8,9 +8,10 @@ import { router } from 'expo-router';
 import { AppText as Text } from '@/components/AppText';
 import { colors } from '@/constants/menu-theme';
 import { cardShadow, ScreenHeader, PrimaryButton } from '@/components/common';
-import { useProfileStore, updateProfile } from '@/store/useProfileStore';
+import { useProfileStore, updateProfile, hydrateProfile } from '@/store/useProfileStore';
 import { useAuthStore } from '@/store/useAuthStore';
 import { apiFetch } from '@/services/api';
+import { clearCurrentTrip } from '@/store/useTripStore';
 
 export default function ProfileEditScreen() {
   const profile = useProfileStore((state) => state.profile);
@@ -56,6 +57,15 @@ export default function ProfileEditScreen() {
           await SecureStore.deleteItemAsync('access_token');
           await SecureStore.deleteItemAsync('user_id');
           await SecureStore.deleteItemAsync('nickname');
+
+          // useTripStore/useProfileStore는 메모리 캐시라 SecureStore를 지워도
+          // 자동으로 비워지지 않습니다. user_id가 사라진 상태에서 다시 채우면
+          // (getCurrentUserId()가 null을 반환하므로) 기본값으로 초기화됩니다 —
+          // 같은 기기에서 바로 다른 계정으로 로그인해도 방금 계정의 여행/프로필이
+          // 화면에 남아있지 않도록 합니다.
+          await clearCurrentTrip();
+          await hydrateProfile();
+
           useAuthStore.getState().setLoggedIn(false);
           router.replace('/onboarding');
         },
@@ -75,6 +85,10 @@ export default function ProfileEditScreen() {
             await SecureStore.deleteItemAsync('access_token');
             await SecureStore.deleteItemAsync('user_id');
             await SecureStore.deleteItemAsync('nickname');
+
+            await clearCurrentTrip();
+            await hydrateProfile();
+
             useAuthStore.getState().setLoggedIn(false);
             router.replace('/onboarding');
           } catch (error) {
