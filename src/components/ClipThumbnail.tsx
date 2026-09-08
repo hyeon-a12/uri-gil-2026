@@ -19,7 +19,7 @@ export default function ClipThumbnail({ item, width }: Props) {
   return (
     <TouchableOpacity style={{ width, marginRight: ms(12) }} activeOpacity={0.86}>
       <View style={[styles.imageWrap, { width, height, borderRadius: ms(16) }]}>
-        <Image source={{ uri: item.image }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
+        <Image source={{ uri: item.image }} style={StyleSheet.absoluteFill} resizeMode="cover" />
         <View style={styles.scrim} />
         <View
           style={[
@@ -46,7 +46,7 @@ export default function ClipThumbnail({ item, width }: Props) {
 
 const styles = StyleSheet.create({
   imageWrap: { overflow: 'hidden', backgroundColor: '#E9E9E5' },
-  scrim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.06)' },
+  scrim: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(0,0,0,0.06)' },
   playOverlay: {
     position: 'absolute',
     top: '50%',

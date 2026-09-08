@@ -537,7 +537,11 @@ export default function CameraScreen() {
         throw new Error('촬영된 영상 경로를 확인할 수 없습니다.');
       }
 
-      const durationMs = Date.now() - startedAt;
+      // recordAsync()는 실제 촬영이 끝난 뒤 파일 저장까지 마치고서야 resolve되기
+      // 때문에, 단순히 시작 시각과의 차이를 재면 그 처리 시간까지 길이에 포함돼
+      // 버립니다. 자동 정지 방식이라 실제 촬영 길이는 항상 maxClipSeconds를
+      // 넘지 않으므로 여기서 상한을 씌워줍니다.
+      const durationMs = Math.min(Date.now() - startedAt, maxClipSeconds * 1000);
 
       setClipCount((currentCount) =>
         Math.min(currentCount + 1, MAX_CLIPS),
@@ -854,7 +858,7 @@ const styles = StyleSheet.create({
   },
 
   guideArea: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     alignItems: 'center',
     justifyContent: 'center',
   },

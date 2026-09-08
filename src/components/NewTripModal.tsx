@@ -739,7 +739,7 @@ export default function NewTripModal({
                 여행 테마 <Text style={styles.fieldLabelMuted}>(중복 선택 가능)</Text>
               </Text>
               <Text style={styles.fieldHint}>
-                선택한 테마를 바탕으로 루트 추천을 받을 수 있어요
+                선택한 테마를 바탕으로 장소 추천을 받을 수 있어요
               </Text>
               <View style={styles.chipWrap}>
                 {THEMES.map((theme) => (

@@ -1,24 +1,33 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useFocusEffect, useLocalSearchParams } from "expo-router";
-import { parseDateRange, type FolderItem } from "@/services/folderService";
-import { getRecordingsByFolder } from "@/services/recordingService";
-import {
-  getTripScheduleStops,
-  type TripScheduleStop,
-} from "@/services/trip-schedule-service";
-import { getStopOrder, saveStopOrder, type StopOrderMap } from "@/services/stop-order-service";
-import { buildPlanData, type PlanStop } from "@/services/tripPlanService";
-import { navigateToCamera } from "@/navigation/recordingNavigation";
-import type { RecordingData } from "@/types/recording";
-import type { ClipItem } from "@/types/home";
+import { AppText as Text } from '@/components/AppText';
 import { ClipPreviewModal } from "@/components/ClipPreview/ClipPreviewModal";
+import KakaoMapView, { type KakaoMapPin } from '@/components/KakaoMapView';
 import {
   PlaceDetailModal,
   fetchKakaoPlaceInfo,
   type KakaoPlaceInfo,
   type PlaceDetailView,
 } from "@/components/PlaceDetail/PlaceDetailModal";
+import { RoutePlanView } from '@/components/RoutePlanView';
+import { MapLocateButton } from '@/components/common';
+import { RADIUS, COLORS as SHARED_COLORS, SPACING } from '@/constants/color';
+import { navigateToCamera } from "@/navigation/recordingNavigation";
+import { parseDateRange, type FolderItem } from "@/services/folderService";
+import { getRecordingsByFolder } from "@/services/recordingService";
+import { getStopOrder, saveStopOrder, type StopOrderMap } from "@/services/stop-order-service";
+import {
+  getTripScheduleStops,
+  type TripScheduleStop,
+} from "@/services/trip-schedule-service";
+import { buildPlanData, type PlanStop } from "@/services/tripPlanService";
 import { useTripStore } from "@/store/useTripStore";
+import type { ClipItem } from "@/types/home";
+import type { RecordingData } from "@/types/recording";
+import { Ionicons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
+import * as Location from 'expo-location';
+import * as MediaLibrary from 'expo-media-library';
+import { useFocusEffect, useLocalSearchParams } from "expo-router";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Modal,
@@ -29,17 +38,8 @@ import {
   View,
   useWindowDimensions,
 } from 'react-native';
-import { AppText as Text } from '@/components/AppText';
-import { RoutePlanView } from '@/components/RoutePlanView';
-import KakaoMapView, { type KakaoMapPin } from '@/components/KakaoMapView';
-import { MapLocateButton } from '@/components/common';
-import { Image } from 'expo-image';
-import { Ionicons } from '@expo/vector-icons';
-import * as Location from 'expo-location';
-import * as MediaLibrary from 'expo-media-library';
-import { captureRef } from 'react-native-view-shot';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { COLORS as SHARED_COLORS, RADIUS, SPACING } from '@/constants/color';
+import { captureRef } from 'react-native-view-shot';
 
 const COLORS = {
   background: SHARED_COLORS.background,
@@ -745,7 +745,7 @@ export default function MyRouteScreen() {
     }
   }, [tripName, tripSummary]);
 
-  const mapHeight = Math.min(Math.max(width * 0.95, 400), 540);
+  const mapHeight = Math.min(Math.max(width * 0.85, 360), 480);
 
   // 실제 GPS 위치 — "현재 위치" 버튼을 눌렀을 때도 다시 불러와 지도를 재중심합니다.
   const [deviceLocation, setDeviceLocation] = useState<{
@@ -902,7 +902,7 @@ export default function MyRouteScreen() {
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
-                style={[styles.stopCardScroll, { top: mapHeight - 56 }]}
+                style={[styles.stopCardScroll, { top: SPACING.md + mapHeight - 16 }]}
                 contentContainerStyle={styles.selectedCardWrapper}
                 snapToInterval={STOP_CARD_SNAP_INTERVAL}
                 snapToAlignment="start"
@@ -1074,6 +1074,7 @@ const styles = StyleSheet.create({
 
   mapFrame: {
     marginHorizontal: SPACING.md,
+    marginTop: SPACING.md,
 
     overflow: "hidden",
 
@@ -1207,7 +1208,7 @@ const styles = StyleSheet.create({
     position: "relative",
 
     width: 104,
-    height: 82,
+    height: 68,
 
     overflow: "hidden",
 
@@ -1222,7 +1223,7 @@ const styles = StyleSheet.create({
   },
 
   clipDim: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
 
     backgroundColor: "rgba(20,20,18,0.10)",
   },
@@ -1263,7 +1264,7 @@ const styles = StyleSheet.create({
 
   addClipButton: {
     width: 88,
-    height: 82,
+    height: 68,
 
     alignItems: "center",
     justifyContent: "center",
@@ -1311,12 +1312,12 @@ const styles = StyleSheet.create({
     shadowColor: COLORS.shadow,
     shadowOffset: {
       width: 0,
-      height: 5,
+      height: 1,
     },
-    shadowOpacity: 0.11,
-    shadowRadius: 12,
+    shadowOpacity: 0.06,
+    shadowRadius: 3,
 
-    elevation: 8,
+    elevation: 2,
   },
 
   internalNavigationItem: {
@@ -1749,7 +1750,7 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
   },
   shareBackdrop: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: "rgba(0, 0, 0, 0.28)",
   },
   shareSheet: {
