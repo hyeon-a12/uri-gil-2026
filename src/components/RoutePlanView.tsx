@@ -18,6 +18,7 @@ import { getDayLabel, type PlanStop } from '@/services/tripPlanService';
 import { getStopMemos, saveStopMemo } from '@/services/stop-memo-service';
 import { removeTripScheduleStop } from '@/services/trip-schedule-service';
 import { deleteRecordings } from '@/services/recordingService';
+import { apiFetch } from '@/services/api';
 
 // my-route.tsx '일정' 탭에서 쓰던 UI를 그대로 뽑아낸 컴포넌트입니다.
 // 여행 상세 화면(trip-detail/[tripId].tsx)에서도 똑같은 모양을 써야 해서
@@ -213,6 +214,20 @@ export function RoutePlanView({
     async (stop: PlanStop) => {
       try {
         await deleteRecordings(stop.clips.map((clip) => clip.id));
+
+        // 서버에도 클립 삭제 반영 (실패해도 로컬 삭제는 이미 끝났으니 무시)
+        const clipServerIds = stop.clips
+          .map((clip) => clip.serverId)
+          .filter((id): id is number => typeof id === 'number');
+
+        await Promise.all(
+          clipServerIds.map((serverId) =>
+            apiFetch(`/clips/${serverId}`, { method: 'DELETE' }).catch((error) =>
+              console.error('[RoutePlanView] 서버 클립 삭제 실패:', serverId, error),
+            ),
+          ),
+        );
+
         if (tripId && (stop.source === 'manual' || stop.source === 'ai-recommendation')) {
           await removeTripScheduleStop(tripId, stop.id);
         }

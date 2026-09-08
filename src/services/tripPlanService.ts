@@ -12,6 +12,7 @@ import type { RecordingData } from '@/types/recording';
 
 export interface PlanStop {
   id: string;
+  serverId?: number; 
   order: number;
   name: string;
   day: number;
@@ -23,6 +24,7 @@ export interface PlanStop {
   longitude: number | null;
   clips: {
     id: string;
+    serverId?: number;
     thumbnail: string;
     duration: string;
     /** 클립 관리 화면과 동일한 영상 미리보기(ClipPreviewModal)를 열기 위한 정보 */
@@ -113,6 +115,7 @@ export function buildPlanData(
 
     const clip = {
       id: recording.id,
+      serverId: recording.serverId,
       thumbnail: recording.thumbnail,
       duration: formatClipDuration(recording.durationMs),
       uri: recording.videoUri,

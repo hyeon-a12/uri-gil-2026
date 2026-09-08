@@ -161,9 +161,12 @@ export async function updateRecordingServerId(
   localId: string,
   serverId: number,
 ): Promise<void> {
+  const userId = await getCurrentUserId();
+  if (!userId) return;
+  
   const all = await getAllRecordings();
   const updated = all.map((r) =>
     r.id === localId ? { ...r, serverId } : r,
   );
-  await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+  await AsyncStorage.setItem(storageKey(userId), JSON.stringify(updated));
 }
