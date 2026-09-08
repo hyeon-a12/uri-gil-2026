@@ -17,7 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { ShootingStyleId } from '@/services/folderService';
-import { HapticPressable } from '@/components/common';
+import { HapticPressable } from '@/components/common/HapticPressable';
 import { COLORS as SHARED_COLORS, RADIUS, SPACING } from '@/constants/color';
 
 const COLORS = {

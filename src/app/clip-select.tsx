@@ -15,7 +15,7 @@ import { AppText as Text } from '@/components/AppText';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { Ionicons, Feather, MaterialCommunityIcons } from '@expo/vector-icons';
-import * as MediaLibrary from 'expo-media-library';
+import * as MediaLibrary from 'expo-media-library/legacy';
 
 import { ClipPreviewModal } from '@/components/ClipPreview/ClipPreviewModal'
 import { HapticPressable } from '@/components/common';
