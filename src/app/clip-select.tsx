@@ -48,7 +48,7 @@ const COLORS = {
   overlay: 'rgba(0,0,0,0.25)',
 };
 
-const FOOTER_HEIGHT = 93;
+const FOOTER_HEIGHT = 103;
 
 function formatDuration(seconds: number) {
   const minutes = Math.floor(seconds / 60);

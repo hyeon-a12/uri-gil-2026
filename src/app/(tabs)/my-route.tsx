@@ -226,6 +226,7 @@ function SelectedStopCard({ stop, onPreviewClip, onPressDetail }: SelectedStopCa
                 name: stop.name,
                 latitude: stop.latitude,
                 longitude: stop.longitude,
+                stopId: stop.id,
               },
             });
           }}
@@ -646,52 +647,53 @@ export default function MyRouteScreen() {
     };
   }, [viewingPlace]);
 
+  // 여행 데이터(촬영 기록/확정된 스톱/순서)를 다시 불러옵니다. 화면 포커스 시
+  // 자동으로도 돌지만(아래 useFocusEffect), 스톱 삭제처럼 사용자 조작으로
+  // 즉시 갱신이 필요한 곳(RoutePlanView의 onStopDeleted)에서도 그대로 씁니다.
+  const refreshTripData = useCallback(async () => {
+    if (!currentTrip) {
+      setRecordings([]);
+      setSavedScheduleStops([]);
+      setStopOrder({});
+      return;
+    }
+
+    try {
+      const [records, scheduleStops, order] = await Promise.all([
+        getRecordingsByFolder(currentTrip.id),
+        getTripScheduleStops(currentTrip.id),
+        getStopOrder(currentTrip.id),
+      ]);
+      setRecordings(records);
+      setSavedScheduleStops(scheduleStops);
+      setStopOrder(order);
+    } catch (error) {
+      console.error(
+        "[MyRouteScreen] 여행 데이터를 불러오지 못했습니다.",
+        error,
+      );
+      setRecordings([]);
+      setSavedScheduleStops([]);
+      setStopOrder({});
+    }
+    // currentTrip 객체 전체가 아니라 id만 의존성으로 둡니다 — 상위 스토어가
+    // 내용은 같지만 참조만 바뀐 currentTrip을 내려줄 때마다 이 함수가
+    // 불필요하게 새로 만들어지는 걸 막기 위해서입니다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentTrip?.id]);
+
   useFocusEffect(
     useCallback(() => {
       let isActive = true;
-
       (async () => {
-        if (!currentTrip) {
-          if (isActive) {
-            setRecordings([]);
-            setSavedScheduleStops([]);
-            setStopOrder({});
-          }
-          return;
-        }
-
-        try {
-          const [records, scheduleStops, order] = await Promise.all([
-            getRecordingsByFolder(currentTrip.id),
-            getTripScheduleStops(currentTrip.id),
-            getStopOrder(currentTrip.id),
-          ]);
-          if (isActive) {
-            setRecordings(records);
-            setSavedScheduleStops(scheduleStops);
-            setStopOrder(order);
-          }
-        } catch (error) {
-          console.error(
-            "[MyRouteScreen] 여행 데이터를 불러오지 못했습니다.",
-            error,
-          );
-          if (isActive) {
-            setRecordings([]);
-            setSavedScheduleStops([]);
-            setStopOrder({});
-          }
+        if (isActive) {
+          await refreshTripData();
         }
       })();
-
       return () => {
         isActive = false;
       };
-      // currentTrip 객체 전체가 아니라 id만 의존성으로 둡니다 — 상위 스토어가
-      // 내용은 같지만 참조만 바뀐 currentTrip을 내려줄 때마다 이 포커스
-      // 이펙트가 불필요하게 다시 도는 걸 막기 위해서입니다.
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [currentTrip?.id]),
+    }, [refreshTripData]),
   );
 
   // 드래그로 순서를 바꾸면 즉시 반영되도록 로컬 상태도 같이 갱신하고, 다음 방문 때도
@@ -984,6 +986,7 @@ export default function MyRouteScreen() {
             dayNumbers={planData.dayNumbers}
             tripStartDate={tripStartDate}
             onReorderStops={handleReorderStops}
+            onStopDeleted={refreshTripData}
           />
         )}
       </View>

@@ -16,6 +16,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { COLORS as SHARED_COLORS, RADIUS, SPACING } from '@/constants/color';
 import { getDayLabel, type PlanStop } from '@/services/tripPlanService';
 import { getStopMemos, saveStopMemo } from '@/services/stop-memo-service';
+import { removeTripScheduleStop } from '@/services/trip-schedule-service';
+import { deleteRecordings } from '@/services/recordingService';
 
 // my-route.tsx '일정' 탭에서 쓰던 UI를 그대로 뽑아낸 컴포넌트입니다.
 // 여행 상세 화면(trip-detail/[tripId].tsx)에서도 똑같은 모양을 써야 해서
@@ -116,6 +118,9 @@ export type RoutePlanViewProps = {
   dayNumbers: number[];
   tripStartDate: Date | null;
   onReorderStops: (day: number, orderedIds: string[]) => void;
+  /** 스톱을 삭제한 뒤(클립도 같이 지워졌을 수 있음) 호출됩니다 — 부모가 이걸로
+   * 촬영 기록/확정된 스톱 목록을 다시 불러와 화면을 최신 상태로 갱신합니다. */
+  onStopDeleted?: () => void | Promise<void>;
   /**
    * 메모 남기기 / 장소 추가 기능을 보여줄지 여부입니다. my-route.tsx(경로
    * 탭바)에는 이 기능이 계속 있어야 해서 기본값은 true이고, 여행 상세 화면
@@ -133,6 +138,7 @@ export function RoutePlanView({
   dayNumbers,
   tripStartDate,
   onReorderStops,
+  onStopDeleted,
   enableStopTools = true,
 }: RoutePlanViewProps) {
   const [selectedDay, setSelectedDay] = useState(dayNumbers[0] ?? 1);
@@ -200,7 +206,26 @@ export function RoutePlanView({
     [dayStops, selectedDay, onReorderStops],
   );
 
-  // 카드를 길게 누르면 뜨는 "위로 이동 / 아래로 이동" 메뉴.
+  // 스톱을 실제로 지웁니다. 확정된 스톱(AI 추천/직접 추가)이면 그 스톱 자체를,
+  // 촬영으로만 생긴 스톱이면(클립을 지우면 자연히 사라짐) 클립만 지웁니다 —
+  // 어느 쪽이든 딸린 클립(recordingService)은 항상 같이 지웁니다.
+  const deleteStop = useCallback(
+    async (stop: PlanStop) => {
+      try {
+        await deleteRecordings(stop.clips.map((clip) => clip.id));
+        if (tripId && (stop.source === 'manual' || stop.source === 'ai-recommendation')) {
+          await removeTripScheduleStop(tripId, stop.id);
+        }
+        await onStopDeleted?.();
+      } catch (error) {
+        console.error('[RoutePlanView] 스톱 삭제 실패:', error);
+        Alert.alert('삭제하지 못했어요', '잠시 후 다시 시도해주세요.');
+      }
+    },
+    [tripId, onStopDeleted],
+  );
+
+  // 카드를 길게 누르면 뜨는 "위로 이동 / 아래로 이동 / 삭제" 메뉴.
   const openReorderMenu = useCallback(
     (stop: PlanStop, index: number) => {
       const options: {
@@ -215,11 +240,30 @@ export function RoutePlanView({
       if (index < dayStops.length - 1) {
         options.push({ text: '아래로 이동', onPress: () => moveStop(index, 1) });
       }
+      options.push({
+        text: '삭제',
+        style: 'destructive',
+        onPress: () => {
+          if (stop.clips.length > 0) {
+            // 클립이 있으면 한 번 더 확인 — 같이 지워진다는 걸 명확히 알려줍니다.
+            Alert.alert(
+              '이 장소를 삭제할까요?',
+              `촬영된 클립 ${stop.clips.length}개도 함께 삭제되고, 복구할 수 없어요.`,
+              [
+                { text: '취소', style: 'cancel' },
+                { text: '삭제', style: 'destructive', onPress: () => void deleteStop(stop) },
+              ],
+            );
+          } else {
+            void deleteStop(stop);
+          }
+        },
+      });
       options.push({ text: '취소', style: 'cancel' });
 
-      Alert.alert(stop.name, '순서를 바꿀 수 있어요.', options);
+      Alert.alert(stop.name, '순서를 바꾸거나 삭제할 수 있어요.', options);
     },
-    [dayStops.length, moveStop],
+    [dayStops.length, moveStop, deleteStop],
   );
 
   const activeStop = useMemo(
@@ -355,7 +399,9 @@ export function RoutePlanView({
                       </Text>
 
                       <Text allowFontScaling={false} style={styles.planStopMeta}>
-                        {stop.source === 'ai-recommendation'
+                        {stop.clips.length > 0
+                          ? `${stop.time} · 클립 ${stop.clips.length}개`
+                          : stop.source === 'ai-recommendation'
                           ? 'AI 추천으로 추가됨'
                           : stop.source === 'manual'
                           ? '직접 추가한 장소'

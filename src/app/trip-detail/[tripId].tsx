@@ -189,6 +189,7 @@ export default function TripDetailScreen() {
         dayNumbers={dayNumbers}
         tripStartDate={tripStartDate}
         onReorderStops={handleReorderStops}
+        onStopDeleted={loadTrip}
         enableStopTools={false}
       />
 

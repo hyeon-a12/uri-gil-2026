@@ -114,6 +114,35 @@ export async function deleteRecording(id: string): Promise<void> {
     await AsyncStorage.setItem(storageKey(userId), JSON.stringify(filtered));
 }
 
+/**
+ * 클립 여러 개를 한 번에 지웁니다. deleteRecording()을 Promise.all로 여러 번
+ * 동시에 부르면 각 호출이 "삭제 전" 목록을 따로 읽어서 자기 것만 뺀 걸 저장하다가
+ * 서로 덮어써서 결국 1개만 지워진 것처럼 남는 경쟁 상태(race condition)가
+ * 생깁니다. 여기서는 목록을 한 번만 읽고, 한 번만 써서 그 문제를 피합니다.
+ */
+export async function deleteRecordings(ids: string[]): Promise<void> {
+    if (ids.length === 0) return;
+
+    const userId = await getCurrentUserId();
+    if (!userId) return;
+
+    const idSet = new Set(ids);
+    const all = await getAllRecordings();
+    const targets = all.filter((r) => idSet.has(r.id));
+
+    await Promise.all(
+        targets.map(async (target) => {
+            const info = await FileSystem.getInfoAsync(target.videoUri);
+            if (info.exists) {
+                await FileSystem.deleteAsync(target.videoUri);
+            }
+        }),
+    );
+
+    const filtered = all.filter((r) => !idSet.has(r.id));
+    await AsyncStorage.setItem(storageKey(userId), JSON.stringify(filtered));
+}
+
 export async function clearAllRecordings(): Promise<void> {
     const userId = await getCurrentUserId();
     if (!userId) return;
