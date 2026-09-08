@@ -5,6 +5,10 @@ export type QuickAddPlace = {
   name: string;
   latitude: number;
   longitude: number;
+  /** 스톱 카드의 "클립 추가" 버튼으로 들어온 경우, 그 스톱의 id. 이 값이
+   * 있어야 buildPlanData가 이름이 아니라 이 id로 정확히 그 스톱에만 클립을
+   * 합칩니다(장소 검색으로 직접 새로 추가한 동명의 스톱과 안 섞이도록). */
+  stopId?: string;
 };
 
 /**
@@ -27,6 +31,7 @@ export function navigateToCamera(options?: {
       quickAddPlaceName: quickAddPlace?.name,
       quickAddLatitude: quickAddPlace ? String(quickAddPlace.latitude) : undefined,
       quickAddLongitude: quickAddPlace ? String(quickAddPlace.longitude) : undefined,
+      quickAddStopId: quickAddPlace?.stopId,
     },
   });
 }

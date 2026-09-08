@@ -31,5 +31,10 @@ export type RecordingData = {
     latitude: number;
     longitude: number;
     placeName?: string;
+    /** 이 클립을 "클립 추가" 버튼으로 촬영한 경로 탭 스톱(AI 추천/직접 추가)의
+     * id. 있으면 tripPlanService.buildPlanData가 장소 이름이 아니라 이 id로
+     * 정확히 그 스톱에만 합칩니다 — 이름이 같다는 이유만으로 다른 스톱과
+     * 잘못 합쳐지는 걸 막기 위함입니다. */
+    linkedStopId?: string;
   };
 };

@@ -369,11 +369,12 @@ export default function CameraScreen() {
   // 내 루트의 스톱 카드 "클립 추가" 버튼처럼 장소가 이미 정해진 상태로 들어온
   // 경우에만 채워집니다 — 있으면 촬영 후 location-confirm 화면을 건너뛰고
   // 이 장소로 바로 저장합니다.
-  const { quickAddPlaceName, quickAddLatitude, quickAddLongitude } =
+  const { quickAddPlaceName, quickAddLatitude, quickAddLongitude, quickAddStopId } =
     useLocalSearchParams<{
       quickAddPlaceName?: string;
       quickAddLatitude?: string;
       quickAddLongitude?: string;
+      quickAddStopId?: string;
     }>();
 
   const quickAddPlace = useMemo(() => {
@@ -382,8 +383,8 @@ export default function CameraScreen() {
     if (!quickAddPlaceName || !Number.isFinite(latitude) || !Number.isFinite(longitude)) {
       return null;
     }
-    return { name: quickAddPlaceName, latitude, longitude };
-  }, [quickAddPlaceName, quickAddLatitude, quickAddLongitude]);
+    return { name: quickAddPlaceName, latitude, longitude, stopId: quickAddStopId };
+  }, [quickAddPlaceName, quickAddLatitude, quickAddLongitude, quickAddStopId]);
 
   // 촬영 스타일은 여행 만들기 단계가 아니라 이 화면에서 그때그때 고릅니다
   // (추후 다시 수정할 예정 — 지금은 촬영 세션 동안만 쓰이는 로컬 상태예요).
@@ -572,6 +573,7 @@ export default function CameraScreen() {
               latitude: quickAddPlace.latitude,
               longitude: quickAddPlace.longitude,
               placeName: quickAddPlace.name,
+              linkedStopId: quickAddPlace.stopId,
             },
           });
           router.back();
