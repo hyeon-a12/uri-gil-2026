@@ -26,11 +26,16 @@ class Route(Base):
     end_date = Column(Date)
     member_count = Column(Integer, default=1)
 
+     # route 삭제 시 딸린 spots/clips/videos도 함께 삭제되도록
+    spots = relationship("RouteSpot", cascade="all, delete-orphan", passive_deletes=True)
+    clips = relationship("Clip", cascade="all, delete-orphan", passive_deletes=True)
+    videos = relationship("Video", cascade="all, delete-orphan", passive_deletes=True)
+
 class RouteSpot(Base):
     __tablename__ = "route_spots"
 
     id = Column(Integer, primary_key=True, index=True)
-    route_id = Column(Integer, ForeignKey("routes.id"), nullable=False)
+    route_id = Column(Integer, ForeignKey("routes.id", ondelete="CASCADE"), nullable=False)
     spot_name = Column(String, nullable=False)
     latitude = Column(Float, nullable=True)
     longitude = Column(Float, nullable=True)
@@ -41,7 +46,7 @@ class Clip(Base):
     __tablename__ = "clips"
 
     id = Column(Integer, primary_key=True, index=True)
-    route_id = Column(Integer, ForeignKey("routes.id"), nullable=False)
+    route_id = Column(Integer, ForeignKey("routes.id", ondelete="CASCADE"), nullable=False)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     spot_id = Column(Integer, ForeignKey("route_spots.id"), nullable=True)
     clip_url = Column(String, nullable=False)
@@ -54,7 +59,7 @@ class Video(Base):
     __tablename__ = "videos"
 
     id = Column(Integer, primary_key=True, index=True)
-    route_id = Column(Integer, ForeignKey("routes.id"), nullable=False)
+    route_id = Column(Integer, ForeignKey("routes.id", ondelete="CASCADE"), nullable=False)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     video_url = Column(String, nullable=False)
     thumbnail_url = Column(String)

@@ -1,6 +1,8 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { getCurrentUserId } from './authService';
+import { apiFetch } from './api';
+import { getRecordingsByFolder, deleteRecordings } from './recordingService';
 
 // 계정별로 여행 목록을 분리하기 위해 user_id를 키에 섞습니다.
 // (같은 기기에서 계정을 바꿔도 이전 계정의 여행이 보이지 않도록)
@@ -105,6 +107,21 @@ export async function deleteFolder(id: string): Promise<void> {
     if (!userId) return;
 
     const all = await getAllFolders();
+    const target = all.find((f) => f.id === id);
+
+    // 로컬 클립도 함께 정리
+    const recordings = await getRecordingsByFolder(id);
+    await deleteRecordings(recordings.map((r) => r.id));
+
+    // 서버에도 route 삭제 반영 (CASCADE로 spots/clips/videos까지 함께 삭제됨)
+    if (target?.routeId) {
+        try {
+            await apiFetch(`/routes/${target.routeId}`, { method: 'DELETE' });
+        } catch (error) {
+            console.error('[deleteFolder] 서버 route 삭제 실패:', error);
+        }
+    }
+
     const updated = all.filter((f) => f.id !== id);
     await AsyncStorage.setItem(
         foldersKey(userId), JSON.stringify(updated),
