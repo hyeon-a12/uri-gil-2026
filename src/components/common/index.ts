@@ -4,6 +4,7 @@ export { Badge } from './Badge';
 export type { BadgeVariant } from './Badge';
 export { ScreenHeader } from './ScreenHeader';
 export { HapticPressable } from './HapticPressable';
+export { MapLocateButton } from './MapLocateButton';
 export { PrimaryButton } from './PrimaryButton';
 export { SectionLabel } from './SectionLabel';
 export { Toggle } from './Toggle';

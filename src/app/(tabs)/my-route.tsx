@@ -32,6 +32,7 @@ import {
 import { AppText as Text } from '@/components/AppText';
 import { RoutePlanView } from '@/components/RoutePlanView';
 import KakaoMapView, { type KakaoMapPin } from '@/components/KakaoMapView';
+import { MapLocateButton } from '@/components/common';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
@@ -77,19 +78,7 @@ const STOP_CARD_SNAP_INTERVAL = STOP_CARD_WIDTH + STOP_CARD_GAP;
 function MapControlButtons({ onPressLocate }: { onPressLocate: () => void }) {
   return (
     <View style={styles.mapControls}>
-      <Pressable
-        onPress={onPressLocate}
-        style={({ pressed }) => [
-          styles.mapControlButton,
-          pressed && styles.mapControlButtonPressed,
-        ]}
-      >
-        <Ionicons
-          name="navigate-outline"
-          size={23}
-          color={COLORS.textPrimary}
-        />
-      </Pressable>
+      <MapLocateButton onPress={onPressLocate} color={COLORS.textPrimary} />
     </View>
   );
 }
@@ -1107,23 +1096,6 @@ const styles = StyleSheet.create({
     elevation: 20,
 
     gap: SPACING.sm,
-  },
-
-  mapControlButton: {
-    width: 46,
-    height: 46,
-
-    borderRadius: 23,
-
-    alignItems: "center",
-    justifyContent: "center",
-
-    backgroundColor: "rgba(255,255,255,0.93)",
-  },
-
-  mapControlButtonPressed: {
-    opacity: 0.74,
-    transform: [{ scale: 0.95 }],
   },
 
   // WebView(카카오맵)는 안드로이드에서 zIndex와 무관하게 다른 형제 뷰 위로
