@@ -687,6 +687,10 @@ export default function MyRouteScreen() {
       return () => {
         isActive = false;
       };
+      // currentTrip 객체 전체가 아니라 id만 의존성으로 둡니다 — 상위 스토어가
+      // 내용은 같지만 참조만 바뀐 currentTrip을 내려줄 때마다 이 포커스
+      // 이펙트가 불필요하게 다시 도는 걸 막기 위해서입니다.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [currentTrip?.id]),
   );
 
@@ -728,8 +732,11 @@ export default function MyRouteScreen() {
   const [selectedMode, setSelectedMode] = useState<RouteViewMode>("info");
 
   // 홈에서 AI 추천 일정을 확정하고 넘어온 경우, 이전 탭 상태와 무관하게 일정 탭을 엽니다.
+  // 라우트 파라미터(view)라는 외부 값이 바뀔 때 로컬 탭 상태를 맞추는
+  // 동기화라 effect가 맞는 자리입니다.
   useEffect(() => {
     if (view === "schedule") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSelectedMode("info");
     }
   }, [saved, view]);
@@ -791,6 +798,10 @@ export default function MyRouteScreen() {
   }, []);
 
   useEffect(() => {
+    // 화면 마운트 시 GPS 위치를 한 번 가져오는 표준적인 데이터 페칭
+    // 이펙트입니다 — loadDeviceLocation 내부에서 await 이후에 setState하므로
+    // 렌더 중 동기 setState가 아닙니다.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadDeviceLocation();
   }, [loadDeviceLocation]);
 

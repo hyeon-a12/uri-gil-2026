@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -272,11 +272,11 @@ function uploadFormData(
 
 async function renderVideo(exportData: {
   folderId?: string;
-  clips: Array<{
+  clips: {
     id: string;
     videoUri: string;
     isMuted: boolean;
-  }>;
+  }[];
   globalSetting: {
     infoContentType: string | null;
     textPosition: string;
@@ -402,7 +402,7 @@ export default function VideoEditScreen() {
   }, [clipIds]);
 
   const [clips, setClips] = useState<EditableClip[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [, setIsLoading] = useState(true);
 
   useEffect(() => {
     (async () => {
@@ -454,10 +454,15 @@ export default function VideoEditScreen() {
   const [editingClipId, setEditingClipId] = useState<string | null>(null);
 
   useEffect(() => {
+    // 클립 목록이 로드되면 아직 아무것도 선택 안 됐을 때만 첫 클립을 기본
+    // 선택합니다. editingClipId는 사용자가 직접 다른 클립을 고르거나(1100줄
+    // 근처) 선택 해제(660줄, null)할 수도 있는 독립적인 상태라 clips에서
+    // 그냥 파생시킬 수 없어 effect로 동기화합니다.
     if (clips.length > 0 && !editingClipId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setEditingClipId(clips[0].id);
     }
-  }, [clips]);
+  }, [clips, editingClipId]);
 
   const editingClip = clips.find((c) => c.id === editingClipId) ?? null;
 
@@ -567,7 +572,7 @@ export default function VideoEditScreen() {
   // 시작 지점으로 즉시 점프하고(아래 첫 번째 effect), 재생 중이면 남은 시간 동안
   // 항목이 끝나는 지점까지 선형으로 애니메이션합니다. 일시정지하면 애니메이션만
   // 멈추고 값은 그대로 남아서 그 자리에 계속 멈춰 있어요.
-  const playheadAnim = useRef(new Animated.Value(0)).current;
+  const [playheadAnim] = useState(() => new Animated.Value(0));
 
   useEffect(() => {
     playheadAnim.stopAnimation();
@@ -625,7 +630,10 @@ export default function VideoEditScreen() {
     if (!playingClip?.videoUri) return;
 
     if (isPlaying) {
-      // 재생 중인 클립이 음소거 설정돼 있으면 반영합니다.
+      // 재생 중인 클립이 음소거 설정돼 있으면 반영합니다. expo-video의
+      // useVideoPlayer가 반환하는 player는 프로퍼티를 직접 대입해서 제어하는
+      // 네이티브 인스턴스라(공식 API), 컴파일러의 불변성 규칙 대상이 아닙니다.
+      // eslint-disable-next-line react-hooks/immutability
       player.muted = getEditState(playingClip.id).isMuted;
       player.replace(playingClip.videoUri);
       player.play();
@@ -698,18 +706,18 @@ export default function VideoEditScreen() {
   // 움직여 보여서, 네이티브 드라이버로 도는 Animated.Value로 따로 뺐습니다.
   const [sheetScrollViewportHeight, setSheetScrollViewportHeight] = useState(0);
   const [sheetScrollContentHeight, setSheetScrollContentHeight] = useState(0);
-  const sheetScrollY = useRef(new Animated.Value(0)).current;
+  const [sheetScrollY] = useState(() => new Animated.Value(0));
   // Animated.event를 JSX 안에서 매 렌더 새로 만들면 "Changing onScroll listener
   // at runtime is not supported" 에러가 나서, ref로 한 번만 만들어 재사용합니다.
   // useNativeDriver: true로 두면 여기 ScrollView 조합에서 onScroll이 함수가
   // 아니라 이벤트 객체로 넘어가면서 크래시가 나서(TypeError: onScroll is not
   // a function), JS 드라이버로 돌립니다 — 조금 덜 매끄럽지만 안전합니다.
-  const handleSheetScroll = useRef(
+  const [handleSheetScroll] = useState(() =>
     Animated.event(
       [{ nativeEvent: { contentOffset: { y: sheetScrollY } } }],
       { useNativeDriver: false },
     ),
-  ).current;
+  );
 
   // 스크롤할 내용이 실제로 뷰포트보다 길 때만 바를 보여줍니다.
   const isSheetScrollable =
@@ -738,7 +746,7 @@ export default function VideoEditScreen() {
   // Mute는 그런 "화면"이 아니라 바로 토글되는 가벼운 동작이라
   // sheetTranslateY 애니메이션 대상에서 제외했습니다.
   const isSheetTool = activeTool === 'text' || activeTool === 'position';
-  const sheetTranslateY = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
+  const [sheetTranslateY] = useState(() => new Animated.Value(SCREEN_HEIGHT));
 
   // 시트를 실제로 화면에 그릴지 여부. isSheetTool이 꺼지자마자 바로 언마운트해버리면
   // 내려가는 애니메이션이 재생될 틈도 없이 사라져서, 닫히는 애니메이션이 끝난
@@ -749,6 +757,10 @@ export default function VideoEditScreen() {
 
   useEffect(() => {
     if (isSheetTool) {
+      // Animated(외부 명령형 애니메이션 시스템)와 동기화하는 effect라
+      // 마운트부터 먼저 켜야 스프링 애니메이션이 실제로 보입니다. 닫힐
+      // 때는 반대로 애니메이션이 끝난 뒤(772줄, start 콜백 안)에야 언마운트합니다.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setIsSheetMounted(true);
       Animated.spring(sheetTranslateY, {
         toValue: 0,
