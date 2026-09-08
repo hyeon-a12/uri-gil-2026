@@ -23,7 +23,7 @@ import KakaoMapView, {
   KakaoMapPin,
 } from "@/components/KakaoMapView";
 import { COLORS as APP_COLORS, RADIUS } from "@/constants/color";
-import { saveRecording } from "@/services/recordingService";
+import { saveRecording, updateRecordingServerId } from "@/services/recordingService";
 import { useTripStore } from "@/store/useTripStore";
 import { getAllFolders } from "@/services/folderService";
 import { apiFetch } from "@/services/api";
@@ -455,8 +455,10 @@ export default function LocationConfirmScreen() {
         ? `${placeToSave.name} · ${placeToSave.address}`
         : placeToSave.name;
 
+    
+
     try {
-      await saveRecording({
+      const record = await saveRecording({
         recordedAt,
         videoUri,
         thumbnail: videoUri,
@@ -476,7 +478,7 @@ export default function LocationConfirmScreen() {
         const folder = folders.find((f) => f.id === currentTrip.id);
 
         if (folder?.routeId) {
-          await apiFetch("/clips/", {
+          const created = await apiFetch("/clips/", {
             method: "POST",
             body: JSON.stringify({
               route_id: folder.routeId,
@@ -487,6 +489,10 @@ export default function LocationConfirmScreen() {
               recorded_at: recordedAt,
             }),
           });
+
+          if (created?.id) {
+            await updateRecordingServerId(record.id, created.id);
+          }
         } else {
           console.warn("[LocationConfirm] routeId가 없어 서버 저장을 건너뜁니다.");
         }

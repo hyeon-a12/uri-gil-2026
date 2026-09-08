@@ -23,6 +23,7 @@ import { deleteRecording, getRecordingsByFolder } from '@/services/recordingServ
 import { useTripStore } from '@/store/useTripStore';
 import { ClipItem } from '@/types/home';
 import { COLORS as SHARED_COLORS, RADIUS, SPACING } from '@/constants/color';
+import { apiFetch } from '@/services/api';
 
 const COLORS = {
   background: SHARED_COLORS.background,
@@ -204,6 +205,7 @@ export default function ClipSelectScreen() {
       const records = await getRecordingsByFolder(folderId);
       const items: ClipItem[] = records.map((r) => ({
         id: r.id,
+        serverId: r.serverId,
         title: r.location.placeName ?? "제목 없음",
         recordedAt: r.recordedAt,
         durationSeconds: Math.floor((r.durationMs ?? 0) / 1000),
@@ -387,6 +389,20 @@ export default function ClipSelectScreen() {
           text: '삭제', style: 'destructive', onPress: async () => {
             try {
               await deleteRecording(targetClip.id);
+
+              // 서버에도 삭제 반영 시도 (실패해도 로컬 삭제는 이미 끝났으니 무시)
+              if (targetClip.serverId) {
+                try {
+                  await apiFetch(`/clips/${targetClip.serverId}`, {
+                    method: 'DELETE',
+                  });
+                } catch (serverError) {
+                  console.error('[handleDelete] 서버 클립 삭제 실패:', serverError);
+                }
+              } else {
+                console.warn('[handleDelete] serverId가 없어 서버 삭제를 건너뜁니다.');
+              }
+
               setClips((prev) => prev.filter((c) => c.id !== targetClip.id));
               setSelectedIds((prev) => {
                 const next = new Set(prev);

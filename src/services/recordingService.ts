@@ -86,3 +86,14 @@ export async function clearAllRecordings(): Promise<void> {
     }
     await AsyncStorage.removeItem(STORAGE_KEY);
 }
+
+export async function updateRecordingServerId(
+  localId: string,
+  serverId: number,
+): Promise<void> {
+  const all = await getAllRecordings();
+  const updated = all.map((r) =>
+    r.id === localId ? { ...r, serverId } : r,
+  );
+  await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+}

@@ -21,6 +21,7 @@ export type LocationConfirmParams = {
  */
 export type RecordingData = {
   id: string;
+  serverId?: number;
   recordedAt: string;
   videoUri: string;
   thumbnail: string;

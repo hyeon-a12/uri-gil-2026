@@ -1,5 +1,6 @@
 export interface ClipItem {
   id: string;
+  serverId?: number;
   title?: string;
   recordedAt: string;
   durationSeconds?: number;
