@@ -39,6 +39,16 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const PREVIEW_HORIZONTAL_MARGIN = 40;
 const PREVIEW_WIDTH = SCREEN_WIDTH - PREVIEW_HORIZONTAL_MARGIN * 2;
 
+// 서버(mainServer.js)는 fontSize를 실제 촬영 영상의 픽셀 단위 그대로 ffmpeg
+// drawtext에 넘깁니다. CameraScreen의 videoQuality="720p" 촬영 해상도(세로
+// 폭 720px)는 이 화면의 미리보기 폭(PREVIEW_WIDTH, 보통 300~350dp)보다 훨씬
+// 커서, 같은 fontSize 숫자가 미리보기에서는 실제 영상보다 훨씬 크게 보입니다.
+// 미리보기에 그릴 때만 이 비율만큼 축소해서 "편집 화면에서 보이는 크기 =
+// 실제 생성될 크기"가 되도록 맞춥니다. 저장/전송되는 fontSize 값 자체는
+// 건드리지 않습니다 — 오직 화면에 그리는 크기만 스케일합니다.
+const OUTPUT_VIDEO_WIDTH = 720;
+const PREVIEW_FONT_SCALE = PREVIEW_WIDTH / OUTPUT_VIDEO_WIDTH;
+
 // 룰러(styles.rulerRow)의 paddingHorizontal과 반드시 같은 값이어야, 재생 눈금
 // (playhead)이 실제 눈금 위치와 어긋나지 않습니다.
 const RULER_HORIZONTAL_PADDING = 20;
@@ -235,6 +245,31 @@ function formatTimer(seconds: number) {
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
+// 전역 fetch()는 SDK 57부터 (New Architecture 환경에서) expo/fetch의
+// WinterCG 표준 구현으로 대체되는데, 이 구현이 아직 FormData의 파일 파트
+// ({ uri, name, type })를 처리하지 못해 "Unsupported FormDataPart
+// implementation" 에러를 던집니다 (Expo 쪽 미해결 이슈). fetch 대신 이
+// 문제를 겪지 않는 옛 방식인 XMLHttpRequest로 멀티파트 업로드를 우회합니다.
+function uploadFormData(
+  url: string,
+  formData: FormData,
+): Promise<{ status: number; statusText: string; ok: boolean; text: string }> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', url);
+    xhr.onload = () => {
+      resolve({
+        status: xhr.status,
+        statusText: xhr.statusText,
+        ok: xhr.status >= 200 && xhr.status < 300,
+        text: xhr.responseText,
+      });
+    };
+    xhr.onerror = () => reject(new Error('네트워크 요청에 실패했습니다.'));
+    xhr.send(formData as any);
+  });
+}
+
 async function renderVideo(exportData: {
   folderId?: string;
   clips: Array<{
@@ -285,16 +320,13 @@ async function renderVideo(exportData: {
 
     console.log('FormData 준비 완료');
 
-    const response = await fetch(SERVER_URL, {
-      method: 'POST',
-      body: formData,
-    });
+    const response = await uploadFormData(SERVER_URL, formData);
 
     console.log('응답 받음')
     console.log('[status]', response.status);
     console.log('[statusText]', response.statusText);
 
-    const responseText = await response.text();
+    const responseText = response.text;
     console.log('[응답 본문]', responseText);
 
     if (!response.ok) throw new Error(`서버 렌더링 실패: ${responseText.slice(0,200)}`);
@@ -394,7 +426,7 @@ export default function VideoEditScreen() {
             thumbnailUri: record.thumbnail,
             placeName: record.location?.placeName ?? undefined,
             recordedAt: record.recordedAt,
-            durationSeconds: Math.floor((record.durationMs ?? 0) / 1000),
+            durationSeconds: Math.round((record.durationMs ?? 0) / 1000),
           });
         }
         
@@ -929,7 +961,7 @@ export default function VideoEditScreen() {
                     {
                       textAlign: FIXED_TEXT_ALIGN,
                       color: editingState.timeStyle.color,
-                      fontSize: editingState.timeStyle.fontSize,
+                      fontSize: editingState.timeStyle.fontSize * PREVIEW_FONT_SCALE,
                       fontFamily: getFontFamily(
                         editingState.timeStyle.fontId,
                         editingState.timeStyle.bold,
@@ -960,7 +992,7 @@ export default function VideoEditScreen() {
                     {
                       textAlign: FIXED_TEXT_ALIGN,
                       color: editingState.placeStyle.color,
-                      fontSize: editingState.placeStyle.fontSize,
+                      fontSize: editingState.placeStyle.fontSize * PREVIEW_FONT_SCALE,
                       fontFamily: getFontFamily(
                         editingState.placeStyle.fontId,
                         editingState.placeStyle.bold,

@@ -469,16 +469,27 @@ export default function CameraScreen() {
   useEffect(() => {
     if (!isRecording) return;
 
-    const interval = setInterval(() => {
-      setElapsedSeconds((s) => (s >= maxClipSeconds ? maxClipSeconds : s + 1));
-    }, 1000);
+    // 1초 단위(setInterval 1000ms + 1씩 증가)로 갱신하면 3초짜리 촬영에서는
+    // 링이 총 3번만 뚝뚝 끊겨 점프하듯 보입니다. requestAnimationFrame으로
+    // 화면이 실제로 그려지는 매 프레임마다 실제 경과 시간(wall clock) 기준
+    // 진행률을 갱신해서 최대한 부드럽게 차오르도록 합니다.
+    const startedAt = Date.now();
+    let frameId: number;
+    const tick = () => {
+      const elapsed = (Date.now() - startedAt) / 1000;
+      setElapsedSeconds(Math.min(elapsed, maxClipSeconds));
+      if (elapsed < maxClipSeconds) {
+        frameId = requestAnimationFrame(tick);
+      }
+    };
+    frameId = requestAnimationFrame(tick);
 
     const markerTimeout = setTimeout(() => {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }, ZOOM_SWITCH_RATIO * maxClipSeconds * 1000);
 
     return () => {
-      clearInterval(interval);
+      cancelAnimationFrame(frameId);
       clearTimeout(markerTimeout);
     };
   }, [isRecording, maxClipSeconds]);
@@ -625,6 +636,11 @@ export default function CameraScreen() {
             mode="video"
             zoom={ZOOM_LEVELS[zoomIndex].value}
             videoQuality="720p"
+            // ratio 미지정 시 안드로이드 프리뷰 scaleType 기본값이 FILL이라
+            // 카메라 원본 비율을 무시하고 늘려서 꽉 채워버립니다(세로로
+            // 늘어나 보이는 원인). 녹화 해상도(1280x720 = 16:9)와 맞춰서
+            // FIT으로 바꿔 비율 왜곡을 없앱니다. iOS에는 영향 없는 prop입니다.
+            ratio="16:9"
             enableTorch={flashEnabled}
             selectedLens={selectedLens}
           />

@@ -17,11 +17,34 @@ async function ensureVideoDir(): Promise<void> {
     }
 }
 
+function wait(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// recordAsync()가 resolve된 직후에도, (특히 Expo Go 안드로이드에서) 실제
+// 임시 영상 파일이 디스크에 완전히 flush되기 전이라 곧바로 copyAsync를
+// 하면 "isn't readable" IOException이 나는 경우가 있습니다. 짧게 재시도해서
+// 그 타이밍 창을 넘깁니다.
 async function persistVideoFile(tempUri: string, id: string): Promise<string> {
     await ensureVideoDir();
     const newPath = `${VIDEO_DIR}${id}.mp4`;
-    await FileSystem.copyAsync({ from: tempUri, to: newPath });
-    return newPath;
+
+    const RETRY_DELAYS_MS = [200, 400, 800];
+    for (let attempt = 0; ; attempt += 1) {
+        try {
+            await FileSystem.copyAsync({ from: tempUri, to: newPath });
+            return newPath;
+        } catch (error) {
+            if (attempt >= RETRY_DELAYS_MS.length) {
+                throw error;
+            }
+            console.warn(
+                `[persistVideoFile] copyAsync 실패, ${RETRY_DELAYS_MS[attempt]}ms 뒤 재시도 (${attempt + 1}/${RETRY_DELAYS_MS.length}):`,
+                error,
+            );
+            await wait(RETRY_DELAYS_MS[attempt]);
+        }
+    }
 }
 
 export async function saveRecording(
