@@ -21,6 +21,9 @@ class UserResponse(BaseModel):
     class Config:
         from_attributes = True
 
+class UserUpdate(BaseModel):
+    nickname: Optional[str] = None
+
 # ========== 여정 ==========
 class RouteCreate(BaseModel):
     title: str

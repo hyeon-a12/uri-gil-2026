@@ -13,11 +13,15 @@ import { useAuthStore } from '@/store/useAuthStore';
 import { apiFetch } from '@/services/api';
 import { clearCurrentTrip } from '@/store/useTripStore';
 
+// 로그아웃 버튼은 마이페이지 화면(my-page.tsx)으로 옮겼습니다 — "설정" 안이
+// 아니라 마이페이지에서 바로 보이도록 하기 위함입니다. 회원 탈퇴는 이 화면에
+// 그대로 둡니다(되돌릴 수 없는 동작이라 "나의 정보 관리" 안쪽에 두는 게
+// 실수로 누르기 어려워서 더 안전합니다).
+
 export default function ProfileEditScreen() {
   const profile = useProfileStore((state) => state.profile);
 
   const [nickname, setNickname] = useState(profile.nickname);
-  const [bio, setBio] = useState(profile.bio);
   const [avatarUri, setAvatarUri] = useState(profile.avatarUri);
 
   // 시스템 사진 선택 도구(Android Photo Picker/iOS PHPicker)는 앱에 갤러리
@@ -36,6 +40,8 @@ export default function ProfileEditScreen() {
     }
   };
 
+  const [isSaving, setIsSaving] = useState(false);
+
   const handleSave = async () => {
     const trimmedNickname = nickname.trim();
     if (!trimmedNickname) {
@@ -43,34 +49,28 @@ export default function ProfileEditScreen() {
       return;
     }
 
-    await updateProfile({ nickname: trimmedNickname, bio: bio.trim(), avatarUri });
+    setIsSaving(true);
+    try {
+      // 닉네임은 서버에도 동기화합니다 — 기기를 바꿔 로그인해도 최신
+      // 닉네임이 보이도록 하기 위함입니다. (프로필 사진은 아직 서버 업로드
+      // 기능이 없어 이 기기에만 저장됩니다.)
+      await apiFetch('/auth/me', {
+        method: 'PATCH',
+        body: JSON.stringify({ nickname: trimmedNickname }),
+      });
+    } catch (error) {
+      console.error('[ProfileEditScreen] 닉네임 서버 동기화 실패:', error);
+      Alert.alert(
+        '저장 실패',
+        error instanceof Error ? error.message : '닉네임을 서버에 저장하지 못했어요. 잠시 후 다시 시도해주세요.',
+      );
+      setIsSaving(false);
+      return;
+    }
+
+    await updateProfile({ ...profile, nickname: trimmedNickname, avatarUri });
+    setIsSaving(false);
     router.back();
-  };
-
-  const handleLogout = () => {
-    Alert.alert('로그아웃', '로그아웃 하시겠어요?', [
-      { text: '취소', style: 'cancel' },
-      {
-        text: '로그아웃',
-        style: 'destructive',
-        onPress: async () => {
-          await SecureStore.deleteItemAsync('access_token');
-          await SecureStore.deleteItemAsync('user_id');
-          await SecureStore.deleteItemAsync('nickname');
-
-          // useTripStore/useProfileStore는 메모리 캐시라 SecureStore를 지워도
-          // 자동으로 비워지지 않습니다. user_id가 사라진 상태에서 다시 채우면
-          // (getCurrentUserId()가 null을 반환하므로) 기본값으로 초기화됩니다 —
-          // 같은 기기에서 바로 다른 계정으로 로그인해도 방금 계정의 여행/프로필이
-          // 화면에 남아있지 않도록 합니다.
-          await clearCurrentTrip();
-          await hydrateProfile();
-
-          useAuthStore.getState().setLoggedIn(false);
-          router.replace('/onboarding');
-        },
-      },
-    ]);
   };
 
   const handleWithdraw = () => {
@@ -121,15 +121,16 @@ export default function ProfileEditScreen() {
           </View>
 
           <Field label="닉네임" value={nickname} onChangeText={setNickname} />
-          <Field label="한줄 소개" value={bio} onChangeText={setBio} />
 
-          <PrimaryButton label="저장" onPress={handleSave} style={styles.saveButton} />
+          <PrimaryButton
+            label={isSaving ? '저장 중...' : '저장'}
+            onPress={handleSave}
+            disabled={isSaving}
+            style={styles.saveButton}
+          />
         </View>
 
         <View style={styles.bottomButtons}>
-          <Pressable style={styles.logoutButton} onPress={handleLogout}>
-            <Text style={styles.logoutButtonText}>로그아웃</Text>
-          </Pressable>
           <Pressable style={styles.withdrawButton} onPress={handleWithdraw}>
             <Text style={styles.withdrawButtonText}>회원 탈퇴</Text>
           </Pressable>
@@ -216,17 +217,8 @@ const styles = StyleSheet.create({
   },
   fieldInput: { flex: 1, fontSize: 12, fontFamily: 'Pretendard-Regular', color: colors.text, paddingVertical: 10 },
   saveButton: { marginTop: 6, marginBottom: 12 },
-  bottomButtons: { flexDirection: 'row', gap: 10, marginBottom: 32 },
-  logoutButton: {
-    flex: 1,
-    paddingVertical: 14,
-    borderRadius: 12,
-    backgroundColor: colors.surface,
-    alignItems: 'center',
-  },
-  logoutButtonText: { fontSize: 14, fontWeight: '700', color: colors.text },
+  bottomButtons: { marginBottom: 32 },
   withdrawButton: {
-    flex: 1,
     paddingVertical: 14,
     borderRadius: 12,
     backgroundColor: colors.danger,

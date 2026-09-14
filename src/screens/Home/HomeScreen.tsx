@@ -1030,49 +1030,10 @@ function clamp(value: number, min: number, max: number) {
 type AiPlanFilter = "all" | "food" | "cafe" | "attraction";
 
 function formatPlaceDistance(distance?: number): string {
-  if (distance === undefined) return "예시 코스";
+  if (distance === undefined) return "거리 정보 없음";
   return distance < 1000
     ? `${Math.round(distance)}m`
     : `${(distance / 1000).toFixed(1)}km`;
-}
-
-// 위치 권한 또는 지도 연결 전에도 추천 화면의 흐름을 확인할 수 있는 예시 코스입니다.
-// 위치가 연결되면 이 데이터는 Kakao 장소 검색 결과로 자동 교체됩니다.
-function buildFallbackAiPlan(
-  location: KakaoMapCurrentLocation | null,
-): SearchResultItem[] {
-  const baseLat = location?.lat ?? 37.5665;
-  const baseLng = location?.lng ?? 126.978;
-
-  return [
-    {
-      id: "sample-walk",
-      title: "산책하기 좋은 주변 코스",
-      subtitle: "위치 연결 후 실제 주변 장소로 바뀝니다",
-      latitude: baseLat + 0.002,
-      longitude: baseLng + 0.001,
-      category: "관광",
-      distance: location ? 280 : undefined,
-    },
-    {
-      id: "sample-cafe",
-      title: "잠시 쉬어가기 좋은 카페",
-      subtitle: "위치 연결 후 실제 주변 장소로 바뀝니다",
-      latitude: baseLat + 0.0035,
-      longitude: baseLng - 0.0015,
-      category: "카페",
-      distance: location ? 520 : undefined,
-    },
-    {
-      id: "sample-food",
-      title: "식사 추천 장소",
-      subtitle: "위치 연결 후 실제 주변 장소로 바뀝니다",
-      latitude: baseLat + 0.005,
-      longitude: baseLng + 0.002,
-      category: "음식점",
-      distance: location ? 860 : undefined,
-    },
-  ];
 }
 
 function getAiPlaceKind(place: SearchResultItem): {
@@ -1339,7 +1300,7 @@ function AiRecommendationScreen({
           <Text style={styles.aiLocationPillText}>
             {currentLocation
               ? "현재 위치 기준으로 가까운 순"
-              : "위치 연결 전 · 예시 코스"}
+              : "위치 정보를 불러오는 중"}
           </Text>
         </View>
       </View>
@@ -1534,9 +1495,13 @@ function AiRecommendationScreen({
                 size={35}
                 color={COLORS.textSecondary}
               />
-              <Text style={styles.aiEmptyTitle}>추천 장소가 없어요</Text>
+              <Text style={styles.aiEmptyTitle}>
+                {currentLocation ? "추천 장소가 없어요" : "위치 정보를 확인하고 있어요"}
+              </Text>
               <Text style={styles.aiEmptyText}>
-                다시 검색해 주변 장소를 불러와 주세요.
+                {currentLocation
+                  ? "다시 검색해 주변 장소를 불러와 주세요."
+                  : "위치 권한을 허용하면 주변 장소를 추천해드려요."}
               </Text>
             </View>
           )}
@@ -1869,11 +1834,9 @@ export default function TripHomeScreen() {
     setAiPlanPlaces([]);
     setAiPlanSelectedIds([]);
 
-    // 위치를 아직 받지 못한 경우에도 빈 화면 대신 예시 일정으로 흐름을 보여줍니다.
+    // 위치를 아직 받지 못한 경우 빈 상태(로딩/안내 문구)로 두고, 위치가
+    // 연결되면 사용자가 새로고침해서 실제 주변 장소를 불러오게 합니다.
     if (!currentLocation) {
-      const fallbackPlan = buildFallbackAiPlan(null);
-      setAiPlanPlaces(fallbackPlan);
-      setAiPlanSelectedIds(fallbackPlan.map((place) => place.id));
       setIsSearching(false);
       return;
     }
@@ -1959,20 +1922,15 @@ export default function TripHomeScreen() {
         .slice(0, 8)
         .map(({ place }) => place);
 
-      const planPlaces =
-        recommended.length > 0
-          ? recommended
-          : buildFallbackAiPlan(currentLocation);
-
-      setAiPlanPlaces(planPlaces);
+      setAiPlanPlaces(recommended);
       // 가까운 세 곳을 우선 선택해 첫 화면부터 하나의 일정처럼 제안합니다.
-      setAiPlanSelectedIds(planPlaces.slice(0, 3).map((place) => place.id));
+      setAiPlanSelectedIds(recommended.slice(0, 3).map((place) => place.id));
     } catch (error) {
       console.error("[HomeScreen] AI 추천 실패:", error);
-      // 네트워크·지도 연결 실패여도 화면을 닫지 않고 예시 코스로 대체합니다.
-      const fallbackPlan = buildFallbackAiPlan(currentLocation);
-      setAiPlanPlaces(fallbackPlan);
-      setAiPlanSelectedIds(fallbackPlan.map((place) => place.id));
+      // 네트워크·지도 연결 실패 시 빈 목록으로 두고 empty state를 보여줍니다.
+      setAiPlanPlaces([]);
+      setAiPlanSelectedIds([]);
+      Alert.alert("추천 실패", "주변 장소를 불러오지 못했어요. 잠시 후 다시 시도해주세요.");
     } finally {
       setIsSearching(false);
     }

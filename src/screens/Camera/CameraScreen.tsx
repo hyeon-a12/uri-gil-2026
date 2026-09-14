@@ -568,7 +568,6 @@ export default function CameraScreen() {
             thumbnail: video.uri,
             durationMs,
             folderId: currentTrip.id,
-            userId: 'guest',
             location: {
               latitude: quickAddPlace.latitude,
               longitude: quickAddPlace.longitude,

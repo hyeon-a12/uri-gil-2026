@@ -13,7 +13,7 @@ import os
 import secrets
 import resend
 from models import User, Route, RouteSpot, Clip, Video, PasswordResetToken
-from schemas import UserCreate, UserLogin, UserResponse, ForgotPasswordRequest, ResetPasswordRequest
+from schemas import UserCreate, UserLogin, UserResponse, UserUpdate, ForgotPasswordRequest, ResetPasswordRequest
 
 resend.api_key = os.getenv("RESEND_API_KEY", "")
 RESET_PAGE_URL = "https://hyeon-a12.github.io/urigil-reset-password/"
@@ -93,6 +93,25 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
 @router.get("/me")
 def read_current_user(current_user: User = Depends(get_current_user)):
     return {"id": current_user.id, "email": current_user.email, "nickname": current_user.nickname}
+
+
+# 닉네임 수정 — 기기에 로컬로만 저장되던 값을 서버에도 동기화해서, 다른
+# 기기로 로그인해도 최신 닉네임이 그대로 보이게 합니다.
+@router.patch("/me", response_model=UserResponse)
+def update_current_user(
+    payload: UserUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if payload.nickname is not None:
+        trimmed = payload.nickname.strip()
+        if not trimmed:
+            raise HTTPException(status_code=400, detail="닉네임을 입력해주세요")
+        current_user.nickname = trimmed
+
+    db.commit()
+    db.refresh(current_user)
+    return current_user
 
 
 @router.delete("/me")

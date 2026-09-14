@@ -97,7 +97,6 @@ export default function AddPlaceScreen() {
     isBrowsingNearby,
     displayedPlaces,
     isLoadingDisplayed,
-    isDisplayedMockData,
     searchError,
     selectedPlace,
     selectPlace,
@@ -301,13 +300,6 @@ export default function AddPlaceScreen() {
             >
               {isBrowsingNearby && !isLoadingDisplayed && displayedPlaces.length > 0 ? (
                 <SectionLabel text="내 주변 장소" />
-              ) : null}
-
-              {isDisplayedMockData && !isLoadingDisplayed ? (
-                <View style={styles.mockNotice}>
-                  <Ionicons name="information-circle-outline" size={16} color={COLORS.textSecondary} />
-                  <Text style={styles.mockNoticeText}>검색 API 연동 전이라 예시 데이터를 보여드리고 있어요.</Text>
-                </View>
               ) : null}
 
               {isLoadingDisplayed ? (
@@ -530,8 +522,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#FBFBFA',
   },
   statusText: { flex: 1, color: COLORS.textSecondary, fontSize: 13, fontWeight: '600', lineHeight: 19 },
-  mockNotice: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 3, paddingBottom: 2 },
-  mockNoticeText: { flex: 1, color: COLORS.textSecondary, fontSize: 11, fontWeight: '500', lineHeight: 16 },
   placeCard: {
     minHeight: 82,
     padding: 13,

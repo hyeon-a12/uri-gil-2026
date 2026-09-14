@@ -1,6 +1,7 @@
 import React, { useCallback, useState } from 'react';
-import { StyleSheet, View, ScrollView, Pressable } from 'react-native';
+import { StyleSheet, View, ScrollView, Pressable, Alert } from 'react-native';
 import { Image } from 'expo-image';
+import * as SecureStore from 'expo-secure-store';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
@@ -9,7 +10,9 @@ import { Card, ListRow } from '@/components/common';
 import { colors } from '@/constants/menu-theme';
 import { getAllFolders, getFolderStatus } from '@/services/folderService';
 import { getAllRecordings } from '@/services/recordingService';
-import { useProfileStore } from '@/store/useProfileStore';
+import { useProfileStore, hydrateProfile } from '@/store/useProfileStore';
+import { useAuthStore } from '@/store/useAuthStore';
+import { clearCurrentTrip } from '@/store/useTripStore';
 
 export default function MyPageScreen() {
   const router = useRouter();
@@ -46,6 +49,32 @@ export default function MyPageScreen() {
       })();
     }, []),
   );
+
+  const handleLogout = () => {
+    Alert.alert('로그아웃', '로그아웃 하시겠어요?', [
+      { text: '취소', style: 'cancel' },
+      {
+        text: '로그아웃',
+        style: 'destructive',
+        onPress: async () => {
+          await SecureStore.deleteItemAsync('access_token');
+          await SecureStore.deleteItemAsync('user_id');
+          await SecureStore.deleteItemAsync('nickname');
+
+          // useTripStore/useProfileStore는 메모리 캐시라 SecureStore를 지워도
+          // 자동으로 비워지지 않습니다. user_id가 사라진 상태에서 다시 채우면
+          // (getCurrentUserId()가 null을 반환하므로) 기본값으로 초기화됩니다 —
+          // 같은 기기에서 바로 다른 계정으로 로그인해도 방금 계정의 여행/프로필이
+          // 화면에 남아있지 않도록 합니다.
+          await clearCurrentTrip();
+          await hydrateProfile();
+
+          useAuthStore.getState().setLoggedIn(false);
+          router.replace('/onboarding');
+        },
+      },
+    ]);
+  };
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
@@ -121,6 +150,18 @@ export default function MyPageScreen() {
               style={styles.menuRow}
             />
           </Card>
+        </View>
+
+        <View style={styles.section}>
+          <Pressable
+            style={({ pressed }) => [
+              styles.logoutButton,
+              pressed && styles.logoutButtonPressed,
+            ]}
+            onPress={handleLogout}
+          >
+            <Text style={styles.logoutButtonText}>로그아웃</Text>
+          </Pressable>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -250,5 +291,19 @@ const styles = StyleSheet.create({
   },
   menuRow: {
     paddingVertical: 20,
+  },
+  logoutButton: {
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: '#FBFBFA',
+    alignItems: 'center',
+  },
+  logoutButtonPressed: {
+    opacity: 0.85,
+  },
+  logoutButtonText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.text,
   },
 });

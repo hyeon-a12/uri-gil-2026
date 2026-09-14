@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 /**
  * 카카오 장소 검색 로직을 화면 두 곳(촬영 후 장소 확인, 일정에 장소 추가)에서
- * 그대로 재사용하기 위해 뽑아낸 훅입니다. 검색 반경, 디바운스, 목데이터 폴백,
+ * 그대로 재사용하기 위해 뽑아낸 훅입니다. 검색 반경, 디바운스,
  * 직접 입력 장소 결합 규칙이 두 화면에서 절대 어긋나지 않도록 여기 한 곳에서만 관리합니다.
  */
 
@@ -58,69 +58,7 @@ export function formatDistance(distance?: number): string {
   return `${(distance / 1000).toFixed(1)}km`;
 }
 
-// EXPO_PUBLIC_KAKAO_REST_API_KEY가 아직 준비되지 않았을 때(또는 요청 실패 시) 검색 흐름을
-// 계속 데모할 수 있도록 쓰는 목데이터입니다.
-const MOCK_PLACE_SEEDS: {
-  name: string;
-  category: string;
-  address: string;
-  deltaLat: number;
-  deltaLng: number;
-}[] = [
-  { name: '객리단길', category: '관광명소', address: '전주시 완산구 경원동', deltaLat: 0.006, deltaLng: -0.004 },
-  { name: '팔복예술공장', category: '관광명소', address: '전주시 덕진구 팔복동', deltaLat: -0.012, deltaLng: 0.015 },
-  { name: '덕진공원', category: '관광명소', address: '전주시 덕진구 덕진동', deltaLat: 0.018, deltaLng: 0.006 },
-  { name: '한옥마을 전통찻집', category: '카페', address: '전주시 완산구 풍남동', deltaLat: 0.001, deltaLng: 0.001 },
-  { name: '골목 끝 로스터리', category: '카페', address: '전주시 완산구 태조로', deltaLat: -0.003, deltaLng: 0.002 },
-  { name: '전주 콩나물국밥집', category: '음식점', address: '전주시 완산구 중앙동', deltaLat: 0.002, deltaLng: -0.002 },
-  { name: '풍남문 분식', category: '음식점', address: '전주시 완산구 풍남동', deltaLat: -0.001, deltaLng: -0.003 },
-  { name: '전동성당', category: '관광명소', address: '전주시 완산구 태조로', deltaLat: 0.0008, deltaLng: 0.0015 },
-  { name: '오목대', category: '관광명소', address: '전주시 완산구 기린대로', deltaLat: 0.004, deltaLng: 0.003 },
-  { name: '경기전', category: '관광명소', address: '전주시 완산구 태조로', deltaLat: -0.0006, deltaLng: 0.0009 },
-];
-
-function haversineDistanceMeters(a: PlaceCoordinates, b: PlaceCoordinates): number {
-  const R = 6371000;
-  const toRad = (deg: number) => (deg * Math.PI) / 180;
-  const dLat = toRad(b.latitude - a.latitude);
-  const dLng = toRad(b.longitude - a.longitude);
-  const lat1 = toRad(a.latitude);
-  const lat2 = toRad(b.latitude);
-
-  const h =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
-
-  return Math.round(2 * R * Math.asin(Math.sqrt(h)));
-}
-
-function buildMockPlaces(center: PlaceCoordinates, keyword: string): KakaoPlace[] {
-  const normalized = keyword.trim().toLowerCase();
-
-  return MOCK_PLACE_SEEDS.filter(
-    (seed) =>
-      !normalized ||
-      seed.name.toLowerCase().includes(normalized) ||
-      seed.category.toLowerCase().includes(normalized),
-  )
-    .map((seed, index) => {
-      const latitude = center.latitude + seed.deltaLat;
-      const longitude = center.longitude + seed.deltaLng;
-      return {
-        id: `mock-${index}-${seed.name}`,
-        name: seed.name,
-        category: seed.category,
-        address: seed.address,
-        distance: haversineDistanceMeters(center, { latitude, longitude }),
-        latitude,
-        longitude,
-      };
-    })
-    .sort((a, b) => (a.distance ?? 0) - (b.distance ?? 0));
-}
-
-// "내 주변 장소" 자동 추천에 쓰는 카카오 카테고리 코드 — 관광명소/음식점/카페를
-// 섞어서 보여줍니다(위 MOCK_PLACE_SEEDS 구성과도 맞춰뒀습니다).
+// "내 주변 장소" 자동 추천에 쓰는 카카오 카테고리 코드 — 관광명소/음식점/카페를 섞어서 보여줍니다.
 const NEARBY_CATEGORY_CODES = ['AT4', 'FD6', 'CE7'] as const;
 const NEARBY_RADIUS_METERS = 3000;
 const NEARBY_RESULT_LIMIT = 5;
@@ -193,7 +131,6 @@ export function usePlaceSearch(
   const [places, setPlaces] = useState<KakaoPlace[]>([]);
   const [isLoadingPlaces, setIsLoadingPlaces] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
-  const [isMockData, setIsMockData] = useState(false);
   const [selectedPlace, setSelectedPlace] = useState<KakaoPlace | null>(null);
   const [isManualEntryOpen, setIsManualEntryOpen] = useState(false);
   const [manualPlaceName, setManualPlaceName] = useState('');
@@ -202,7 +139,6 @@ export function usePlaceSearch(
   // 검색어를 아직 입력하지 않았을 때 화면 상단에 먼저 보여줄 "내 주변 장소" 5곳.
   const [nearbyPlaces, setNearbyPlaces] = useState<KakaoPlace[]>([]);
   const [isLoadingNearby, setIsLoadingNearby] = useState(false);
-  const [isNearbyMockData, setIsNearbyMockData] = useState(false);
   // autoSelectNearest로 자동 선택된 장소의 id. 화면에서 "추천했어요" 안내를
   // 보여줄지 판단하는 용도 — 사용자가 다른 곳을 직접 고르면 selectedPlace만
   // 바뀌고 이 값은 그대로라 더 이상 추천 문구를 보여주지 않게 됩니다.
@@ -218,9 +154,8 @@ export function usePlaceSearch(
 
       if (!apiKey) {
         setIsLoadingPlaces(false);
-        setSearchError(null);
-        setIsMockData(true);
-        setPlaces(buildMockPlaces(center, keyword));
+        setSearchError('카카오 장소 검색을 사용할 수 없어요.');
+        setPlaces([]);
         return;
       }
 
@@ -258,14 +193,13 @@ export function usePlaceSearch(
           .filter((place): place is KakaoPlace => place !== null);
 
         if (requestId === searchRequestIdRef.current) {
-          setIsMockData(false);
           setPlaces(mappedPlaces);
         }
       } catch (error) {
-        console.warn('[usePlaceSearch] 검색 실패로 목데이터로 대체합니다:', error);
+        console.warn('[usePlaceSearch] 검색 실패:', error);
         if (requestId === searchRequestIdRef.current) {
-          setIsMockData(true);
-          setPlaces(buildMockPlaces(center, keyword));
+          setSearchError('주변 장소를 불러오지 못했어요.');
+          setPlaces([]);
         }
       } finally {
         if (requestId === searchRequestIdRef.current) {
@@ -277,8 +211,7 @@ export function usePlaceSearch(
   );
 
   const applyNearbyResult = useCallback(
-    (result: KakaoPlace[], isMock: boolean) => {
-      setIsNearbyMockData(isMock);
+    (result: KakaoPlace[]) => {
       setNearbyPlaces(result);
 
       if (autoSelectNearest && !hasAutoSelectedRef.current && result[0]) {
@@ -296,7 +229,7 @@ export function usePlaceSearch(
       const requestId = ++nearbyRequestIdRef.current;
 
       if (!apiKey) {
-        applyNearbyResult(buildMockPlaces(center, '').slice(0, NEARBY_RESULT_LIMIT), true);
+        applyNearbyResult([]);
         return;
       }
 
@@ -314,14 +247,7 @@ export function usePlaceSearch(
 
         if (requestId !== nearbyRequestIdRef.current) return;
 
-        const merged = mergeNearbyResults(resultsByCategory);
-
-        if (merged.length === 0) {
-          // 카테고리 검색이 전부 실패했거나 결과가 없으면 목데이터로 대체합니다.
-          applyNearbyResult(buildMockPlaces(center, '').slice(0, NEARBY_RESULT_LIMIT), true);
-        } else {
-          applyNearbyResult(merged, false);
-        }
+        applyNearbyResult(mergeNearbyResults(resultsByCategory));
       } finally {
         if (requestId === nearbyRequestIdRef.current) {
           setIsLoadingNearby(false);
@@ -343,7 +269,6 @@ export function usePlaceSearch(
     if (!coordinates || !trimmed) {
       setPlaces([]);
       setSearchError(null);
-      setIsMockData(false);
       setIsLoadingPlaces(false);
       return;
     }
@@ -402,7 +327,6 @@ export function usePlaceSearch(
   const isBrowsingNearby = query.trim().length === 0;
   const displayedPlaces = isBrowsingNearby ? nearbyPlaces : places;
   const isLoadingDisplayed = isBrowsingNearby ? isLoadingNearby : isLoadingPlaces;
-  const isDisplayedMockData = isBrowsingNearby ? isNearbyMockData : isMockData;
 
   return {
     query,
@@ -411,15 +335,12 @@ export function usePlaceSearch(
     places,
     isLoadingPlaces,
     searchError,
-    isMockData,
     nearbyPlaces,
     isLoadingNearby,
-    isNearbyMockData,
     autoSuggestedPlaceId,
     isBrowsingNearby,
     displayedPlaces,
     isLoadingDisplayed,
-    isDisplayedMockData,
     selectedPlace,
     selectPlace,
     isManualEntryOpen,

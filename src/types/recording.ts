@@ -27,7 +27,6 @@ export type RecordingData = {
   thumbnail: string;
   durationMs?: number;
   folderId: string;
-  userId: string;
   location: {
     latitude: number;
     longitude: number;
