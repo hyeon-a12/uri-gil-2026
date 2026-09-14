@@ -2015,6 +2015,29 @@ export default function TripHomeScreen() {
 
   const fetchCurrentLocation = useCallback(async () => {
     try {
+      // 홈 화면 진입과 동시에 OS 권한 다이얼로그부터 띄우면 사용자가 왜
+      // 필요한지 모른 채로 갑자기 요청받게 됩니다(Google Play가 "맥락 없는
+      // 권한 요청"으로 볼 수 있는 패턴). 아직 한 번도 응답한 적 없는
+      // "undetermined" 상태일 때만, OS 다이얼로그 전에 간단한 설명을 먼저
+      // 보여줍니다 — 이미 허용/거부한 적 있으면 그 응답을 그대로 쓰므로
+      // 매번 또 물어보지 않습니다.
+      const { status: currentStatus } = await Location.getForegroundPermissionsAsync();
+
+      if (currentStatus === 'undetermined') {
+        const wantsToAllow = await new Promise<boolean>((resolve) => {
+          Alert.alert(
+            '위치 접근 허용',
+            '지도에 현재 위치를 표시하고 내 주변 장소를 추천해드리려면 위치 접근 권한이 필요해요.',
+            [
+              { text: '나중에', style: 'cancel', onPress: () => resolve(false) },
+              { text: '허용하기', onPress: () => resolve(true) },
+            ],
+          );
+        });
+
+        if (!wantsToAllow) return;
+      }
+
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== "granted") { Alert.alert("위치 권한 필요", "설정에서 위치 접근을 허용해주세요."); return; }
       const { coords } = await Location.getCurrentPositionAsync({});
