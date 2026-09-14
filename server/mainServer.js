@@ -4,6 +4,12 @@ const ffmpeg = require('fluent-ffmpeg');
 const ffmpegInstaller = require('@ffmpeg-installer/ffmpeg');
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
+
+// 다운로드 준비된 결과물을 이 시간(ms) 뒤에 자동으로 지웁니다. 클라이언트는
+// 렌더링 응답을 받자마자 같은 흐름 안에서 바로 다운로드하므로(video-edit.tsx),
+// 정상적인 네트워크 지연/재시도를 감안해도 이 정도면 충분히 여유 있는 시간입니다.
+const OUTPUT_RETENTION_MS = 10 * 60 * 1000;
 
 ffmpeg.setFfmpegPath(ffmpegInstaller.path);
 
@@ -247,7 +253,10 @@ app.post('/process-video', upload.array('videos', 20), async(req, res) => {
       .join('\n');
     fs.writeFileSync(listPath, listContent);
 
-    const outputPath = path.join(OUTPUT_DIR, `output_${timestamp}.mp4`);
+    // 파일명에 타임스탬프만 쓰면 순서대로 추측해서 남의 영상을 내려받을 수
+    // 있어서, 추측 불가능한 랜덤 이름을 씁니다(다운로드 URL은 이 파일명을
+    // 그대로 포함해서 클라이언트에 내려주므로 클라이언트 쪽 변경은 필요 없음).
+    const outputPath = path.join(OUTPUT_DIR, `${crypto.randomUUID()}.mp4`);
     console.log('concat 리스트 생성', listPath);
 
     await new Promise((resolve, reject) => {
@@ -277,6 +286,15 @@ app.post('/process-video', upload.array('videos', 20), async(req, res) => {
       success: true,
       downloadUrl: `https://${req.headers.host}${downloadUrl}`,
     });
+
+    // 병합된 결과물도 영상 데이터를 "일시적으로만 처리하고 보관하지 않는다"는
+    // 원칙을 지키기 위해 일정 시간 뒤 자동 삭제합니다 — 소스 클립만 지우고
+    // 최종 결과물은 무기한 남겨두던 문제를 해결.
+    setTimeout(() => {
+      try {
+        if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
+      } catch (_) {}
+    }, OUTPUT_RETENTION_MS);
 
     setTimeout(() => {
       tempFiles.forEach((f) => {
@@ -312,7 +330,9 @@ app.post('/process-video', upload.array('videos', 20), async(req, res) => {
 });
 
 app.get('/download/:filename', (req, res) => {
-  const filePath = path.join(OUTPUT_DIR, req.params.filename);
+  // path.basename으로 디렉터리 이동 문자(../ 등)를 제거해서 OUTPUT_DIR 밖의
+  // 파일에 접근하지 못하게 합니다.
+  const filePath = path.join(OUTPUT_DIR, path.basename(req.params.filename));
 
   if (!fs.existsSync(filePath)) {
     return res.status(404).send('파일을 찾을 수 없습니다.');
