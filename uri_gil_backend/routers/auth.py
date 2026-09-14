@@ -38,12 +38,21 @@ def register(user: UserCreate, db: Session = Depends(get_db)):
     if existing_user:
         raise HTTPException(status_code=400, detail="이미 사용 중인 이메일입니다")
 
+    # 필수 약관에 모두 동의하지 않으면 가입 자체를 막음 (프론트 체크와 별개로 서버에서도 검증)
+    if not (user.agreed_service and user.agreed_privacy and user.agreed_age):
+        raise HTTPException(status_code=400, detail="필수 약관에 모두 동의해야 가입할 수 있습니다")
+
     hashed_password = bcrypt.hashpw(user.password.encode("utf-8"), bcrypt.gensalt())
 
     new_user = User(
         email=user.email,
         password=hashed_password.decode("utf-8"),
         nickname=user.nickname,
+        agreed_service=user.agreed_service,
+        agreed_privacy=user.agreed_privacy,
+        agreed_age=user.agreed_age,
+        terms_version=user.terms_version,
+        agreed_at=datetime.now(timezone.utc),  # 동의 시각은 서버 기준으로 기록 (클라이언트 시각 조작 방지)
     )
     db.add(new_user)
     db.commit()

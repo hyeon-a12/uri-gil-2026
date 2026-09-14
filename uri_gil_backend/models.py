@@ -12,6 +12,12 @@ class User(Base):
     nickname = Column(String, nullable=False)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
+    agreed_service = Column(Boolean, nullable=False, default=False)
+    agreed_privacy = Column(Boolean, nullable=False, default=False)
+    agreed_age = Column(Boolean, nullable=False, default=False)
+    terms_version = Column(String, nullable=False, default="v1")
+    agreed_at = Column(DateTime, nullable=True)
+
 class Route(Base):
     __tablename__ = "routes"
 
@@ -57,7 +63,6 @@ class Clip(Base):
 
 class Video(Base):
     __tablename__ = "videos"
-
     id = Column(Integer, primary_key=True, index=True)
     route_id = Column(Integer, ForeignKey("routes.id", ondelete="CASCADE"), nullable=False)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
