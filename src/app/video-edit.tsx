@@ -615,6 +615,15 @@ export default function VideoEditScreen() {
     p.loop = false;
   });
 
+  // player가 지금 실제로 들고 있는 영상의 uri. VideoView를 isPlaying으로
+  // 마운트/언마운트하면(과거 방식) 일시정지할 때마다 네이티브 비디오 서피스가
+  // 파괴됐다가 재생 시 다시 만들어지면서, 안드로이드에서 디코딩 중이던
+  // 서피스가 급하게 뜯겨나가 초록/보라 아티팩트나 검은 화면이 잠깐 보이는
+  // 문제가 있었습니다. 이제는 이 값과 playingClip.videoUri가 같은 동안은
+  // (즉 이미 재생을 시작한 클립이면) 정지해도 VideoView를 계속 띄워두고,
+  // player.pause()만 호출해 마지막 프레임에서 자연스럽게 멈추게 합니다.
+  const [loadedVideoUri, setLoadedVideoUri] = useState<string | null>(null);
+
   // 클립 재생이 끝났을 때: 선택 모드면 그냥 멈추고, 전체 재생 모드면 다음 클립으로 넘어갑니다.
   useEffect(() => {
     const subscription = player.addListener('playToEnd', () => {
@@ -637,7 +646,13 @@ export default function VideoEditScreen() {
       // 네이티브 인스턴스라(공식 API), 컴파일러의 불변성 규칙 대상이 아닙니다.
       // eslint-disable-next-line react-hooks/immutability
       player.muted = getEditState(playingClip.id).isMuted;
-      player.replace(playingClip.videoUri);
+      // 이미 같은 영상이 로드돼 있으면(= 일시정지 후 다시 재생) replace를
+      // 또 호출하지 않습니다. 매번 replace하면 일시정지했던 위치가 아니라
+      // 항상 처음(0초)부터 다시 시작해버립니다.
+      if (loadedVideoUri !== playingClip.videoUri) {
+        player.replace(playingClip.videoUri);
+        setLoadedVideoUri(playingClip.videoUri);
+      }
       player.play();
     } else {
       player.pause();
@@ -941,10 +956,13 @@ export default function VideoEditScreen() {
           setPreviewBottomY(y + height);
         }}
       >
-        {isPlaying && playingClip?.videoUri ? (
+        {playingClip?.videoUri && loadedVideoUri === playingClip.videoUri ? (
           <View style={styles.previewImage}>
             {/* 다음 클립으로 넘어갈 때 새 영상의 첫 프레임을 디코딩하는 짧은 순간
-                화면이 까맣게 깜빡이는 걸 막기 위해, 썸네일을 뒤에 깔아둡니다. */}
+                화면이 까맣게 깜빡이는 걸 막기 위해, 썸네일을 뒤에 깔아둡니다.
+                일시정지 시에도 VideoView를 그대로 두고 player.pause()만
+                호출하므로(위 loadedVideoUri 관련 주석 참고) 이 조건은 더 이상
+                isPlaying을 보지 않습니다. */}
             {playingClip.thumbnailUri && (
               <Image
                 source={{ uri: playingClip.thumbnailUri }}
