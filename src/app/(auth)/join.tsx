@@ -20,9 +20,11 @@ import { COLORS } from '@/constants/color';
 
 const API_URL = 'https://uri-gil-2026-production.up.railway.app';
 
-// 위치/개인정보/서비스 약관을 노션 페이지 하나에 통합해서 관리합니다
-// (PrivacyPolicyScreen.tsx와 동일한 페이지).
-const NOTION_TERMS_URL = 'https://rectangular-random-c6d.notion.site/444eee87fea883bc854a81944d60553c';
+// 서비스/위치기반/개인정보 약관을 각각 별도의 노션 페이지로 관리합니다
+// (PrivacyPolicyScreen.tsx의 URLS와 동일한 링크).
+const SERVICE_TERMS_URL = 'https://rectangular-random-c6d.notion.site/3dbeee87fea8808a931bf3fa2b664655';
+const LOCATION_TERMS_URL = 'https://rectangular-random-c6d.notion.site/3dbeee87fea88029b7d5e96126d03aba';
+const PRIVACY_POLICY_URL = 'https://rectangular-random-c6d.notion.site/444eee87fea883bc854a81944d60553c';
 
 export default function JoinScreen() {
   const [nickname, setNickname] = useState('');
@@ -33,6 +35,7 @@ export default function JoinScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [showPasswordConfirm, setShowPasswordConfirm] = useState(false);
   const [agreeService, setAgreeService] = useState(false);
+  const [agreeLocation, setAgreeLocation] = useState(false);
   const [agreePrivacy, setAgreePrivacy] = useState(false);
   const [agreeAge, setAgreeAge] = useState(false);
   const [emailError, setEmailError] = useState<string | null>(null);
@@ -49,20 +52,21 @@ export default function JoinScreen() {
     }
   };
 
-  const openTerms = async () => {
+  const openUrl = async (url: string) => {
     try {
-      await Linking.openURL(NOTION_TERMS_URL);
+      await Linking.openURL(url);
     } catch (err) {
       console.warn('약관 링크를 열 수 없어요:', err);
     }
   };
 
-  const requiredAgreed = agreeService && agreePrivacy && agreeAge;
+  const requiredAgreed = agreeService && agreeLocation && agreePrivacy && agreeAge;
   const allAgreed = requiredAgreed;
 
   const toggleAll = () => {
     const next = !allAgreed;
     setAgreeService(next);
+    setAgreeLocation(next);
     setAgreePrivacy(next);
     setAgreeAge(next);
   };
@@ -275,8 +279,9 @@ export default function JoinScreen() {
 
               <View style={styles.divider} />
 
-              <TermRow checked={agreeService} onToggle={() => setAgreeService(!agreeService)} label="[필수] 이용약관 동의" onView={openTerms} />
-              <TermRow checked={agreePrivacy} onToggle={() => setAgreePrivacy(!agreePrivacy)} label="[필수] 개인정보 수집 및 이용 동의" onView={openTerms} />
+              <TermRow checked={agreeService} onToggle={() => setAgreeService(!agreeService)} label="[필수] 서비스 이용약관 동의" onView={() => openUrl(SERVICE_TERMS_URL)} />
+              <TermRow checked={agreeLocation} onToggle={() => setAgreeLocation(!agreeLocation)} label="[필수] 위치기반서비스 이용약관 동의" onView={() => openUrl(LOCATION_TERMS_URL)} />
+              <TermRow checked={agreePrivacy} onToggle={() => setAgreePrivacy(!agreePrivacy)} label="[필수] 개인정보 수집 및 이용 동의" onView={() => openUrl(PRIVACY_POLICY_URL)} />
               <TermRow checked={agreeAge} onToggle={() => setAgreeAge(!agreeAge)} label="[필수] 만 14세 이상입니다." />
             </View>
 

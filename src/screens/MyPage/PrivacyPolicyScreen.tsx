@@ -5,13 +5,12 @@ import { AppText as Text } from '@/components/AppText';
 import { colors } from '@/constants/menu-theme';
 import { Card, ListRow, SectionLabel, ScreenHeader } from '@/components/common';
 
-// 위치/개인정보/서비스 약관을 노션 페이지 하나에 통합해서 관리합니다.
-const NOTION_TERMS_URL = 'https://rectangular-random-c6d.notion.site/444eee87fea883bc854a81944d60553c';
-
+// 서비스/위치기반/개인정보 약관을 각각 별도의 노션 페이지로 관리합니다
+// (join.tsx의 SERVICE_TERMS_URL/LOCATION_TERMS_URL/PRIVACY_POLICY_URL과 동일한 링크).
 const URLS = {
-  locationTerms: NOTION_TERMS_URL,
-  privacyPolicy: NOTION_TERMS_URL,
-  serviceTerms: NOTION_TERMS_URL,
+  locationTerms: 'https://rectangular-random-c6d.notion.site/3dbeee87fea88029b7d5e96126d03aba',
+  privacyPolicy: 'https://rectangular-random-c6d.notion.site/444eee87fea883bc854a81944d60553c',
+  serviceTerms: 'https://rectangular-random-c6d.notion.site/3dbeee87fea8808a931bf3fa2b664655',
   openSourceLicense: 'https://uri-gil.example.com/licenses',
 };
 
