@@ -242,8 +242,14 @@ export default function LocationConfirmScreen() {
       ? `근처 '${selectedPlace.name}'을(를) 촬영 장소로 추천했어요. 다르면 검색하거나 목록에서 골라주세요.`
       : "";
 
+  // saveRecording()은 영상 복사 + 썸네일 추출까지 기다리는 시간이 꽤 걸릴 수
+  // 있어서, 그 사이 "완료"를 연타하면 saveRecording 내부의 읽기-수정-쓰기
+  // 구간이 겹쳐 클립 하나가 저장 목록에서 통째로 사라질 수 있습니다. 저장이
+  // 끝날 때까지 버튼을 막아 애초에 중복 호출 자체를 방지합니다.
+  const [isSaving, setIsSaving] = useState(false);
+
   const handleComplete = async () => {
-    if (!placeToSave) return;
+    if (!placeToSave || isSaving) return;
 
     if (!videoUri) {
       Alert.alert("영상이 없습니다.", "촬영을 먼저 완료해주세요.");
@@ -265,7 +271,7 @@ export default function LocationConfirmScreen() {
         ? `${placeToSave.name} · ${placeToSave.address}`
         : placeToSave.name;
 
-    
+    setIsSaving(true);
 
     try {
       const record = await saveRecording({
@@ -323,6 +329,8 @@ export default function LocationConfirmScreen() {
     } catch (error) {
       console.error("[LocationConfirm] 클립 저장 실패:", error);
       Alert.alert("저장에 실패했습니다", "잠시 후 다시 시도해주세요.");
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -399,17 +407,17 @@ export default function LocationConfirmScreen() {
                 </Text>
                 <HapticPressable
                   onPress={handleComplete}
-                  disabled={!placeToSave}
+                  disabled={!placeToSave || isSaving}
                   style={[
                     styles.inlineNextButton,
-                    !placeToSave && styles.inlineNextButtonDisabled,
+                    (!placeToSave || isSaving) && styles.inlineNextButtonDisabled,
                   ]}
                 >
                   <Text
                     allowFontScaling={false}
                     style={styles.inlineNextButtonText}
                   >
-                    완료
+                    {isSaving ? "저장 중..." : "완료"}
                   </Text>
                 </HapticPressable>
               </View>

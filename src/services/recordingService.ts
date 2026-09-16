@@ -22,6 +22,23 @@ function wait(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// saveRecording/deleteRecording류는 전부 "목록 전체를 읽고 → 수정하고 →
+// 통째로 다시 쓰는" 패턴이라, 두 호출이 동시에 겹치면 나중에 끝난 쪽이
+// 먼저 쓴 결과를 덮어써서 클립 하나가 통째로 사라질 수 있습니다(파일은
+// 디스크에 남지만 목록엔 안 보임). 화면 쪽에서 중복 호출을 막는 가드를
+// 둬도, 서로 다른 화면에서 동시에 저장/삭제가 일어날 가능성까지 막으려면
+// 이 모듈을 드나드는 모든 읽기-수정-쓰기 구간을 한 줄로 직렬화해야 합니다.
+let writeQueue: Promise<unknown> = Promise.resolve();
+
+function withWriteLock<T>(task: () => Promise<T>): Promise<T> {
+    const result = writeQueue.then(task, task);
+    writeQueue = result.then(
+        () => undefined,
+        () => undefined,
+    );
+    return result;
+}
+
 // recordAsync()가 resolve된 직후에도, (특히 Expo Go 안드로이드에서) 실제
 // 임시 영상 파일이 디스크에 완전히 flush되기 전이라 곧바로 copyAsync를
 // 하면 "isn't readable" IOException이 나는 경우가 있습니다. 짧게 재시도해서
@@ -88,9 +105,11 @@ export async function saveRecording(
         durationMs: data.durationMs ?? 0,
     };
 
-    const existing = await getAllRecordings();
-    const updated = [...existing, record];
-    await AsyncStorage.setItem(storageKey(userId), JSON.stringify(updated));
+    await withWriteLock(async () => {
+        const existing = await getAllRecordings();
+        const updated = [...existing, record];
+        await AsyncStorage.setItem(storageKey(userId), JSON.stringify(updated));
+    });
 
     return record;
 }
@@ -130,16 +149,18 @@ export async function deleteRecording(id: string): Promise<void> {
     const userId = await getCurrentUserId();
     if (!userId) return;
 
-    const all = await getAllRecordings();
-    const target = all.find((r) => r.id === id);
+    await withWriteLock(async () => {
+        const all = await getAllRecordings();
+        const target = all.find((r) => r.id === id);
 
-    if (target) {
-        await deleteFileIfExists(target.videoUri);
-        await deleteFileIfExists(target.thumbnail);
-    }
+        if (target) {
+            await deleteFileIfExists(target.videoUri);
+            await deleteFileIfExists(target.thumbnail);
+        }
 
-    const filtered = all.filter((r) => r.id != id);
-    await AsyncStorage.setItem(storageKey(userId), JSON.stringify(filtered));
+        const filtered = all.filter((r) => r.id != id);
+        await AsyncStorage.setItem(storageKey(userId), JSON.stringify(filtered));
+    });
 }
 
 /**
@@ -154,31 +175,35 @@ export async function deleteRecordings(ids: string[]): Promise<void> {
     const userId = await getCurrentUserId();
     if (!userId) return;
 
-    const idSet = new Set(ids);
-    const all = await getAllRecordings();
-    const targets = all.filter((r) => idSet.has(r.id));
+    await withWriteLock(async () => {
+        const idSet = new Set(ids);
+        const all = await getAllRecordings();
+        const targets = all.filter((r) => idSet.has(r.id));
 
-    await Promise.all(
-        targets.map(async (target) => {
-            await deleteFileIfExists(target.videoUri);
-            await deleteFileIfExists(target.thumbnail);
-        }),
-    );
+        await Promise.all(
+            targets.map(async (target) => {
+                await deleteFileIfExists(target.videoUri);
+                await deleteFileIfExists(target.thumbnail);
+            }),
+        );
 
-    const filtered = all.filter((r) => !idSet.has(r.id));
-    await AsyncStorage.setItem(storageKey(userId), JSON.stringify(filtered));
+        const filtered = all.filter((r) => !idSet.has(r.id));
+        await AsyncStorage.setItem(storageKey(userId), JSON.stringify(filtered));
+    });
 }
 
 export async function clearAllRecordings(): Promise<void> {
     const userId = await getCurrentUserId();
     if (!userId) return;
 
-    const all = await getAllRecordings();
-    for (const r of all) {
-        await deleteFileIfExists(r.videoUri);
-        await deleteFileIfExists(r.thumbnail);
-    }
-    await AsyncStorage.removeItem(storageKey(userId));
+    await withWriteLock(async () => {
+        const all = await getAllRecordings();
+        for (const r of all) {
+            await deleteFileIfExists(r.videoUri);
+            await deleteFileIfExists(r.thumbnail);
+        }
+        await AsyncStorage.removeItem(storageKey(userId));
+    });
 }
 
 export async function updateRecordingServerId(
@@ -187,10 +212,12 @@ export async function updateRecordingServerId(
 ): Promise<void> {
   const userId = await getCurrentUserId();
   if (!userId) return;
-  
-  const all = await getAllRecordings();
-  const updated = all.map((r) =>
-    r.id === localId ? { ...r, serverId } : r,
-  );
-  await AsyncStorage.setItem(storageKey(userId), JSON.stringify(updated));
+
+  await withWriteLock(async () => {
+    const all = await getAllRecordings();
+    const updated = all.map((r) =>
+      r.id === localId ? { ...r, serverId } : r,
+    );
+    await AsyncStorage.setItem(storageKey(userId), JSON.stringify(updated));
+  });
 }

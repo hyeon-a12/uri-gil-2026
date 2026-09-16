@@ -870,7 +870,7 @@ export default function VideoEditScreen() {
                     body: JSON.stringify({
                       route_id: folder.routeId,
                       video_url: result.videoUri ?? '',
-                      thumbnail_url: clips[0]?.thumbnailUri ?? null,
+                      thumbnail_url: clips[0]?.thumbnailUri || null,
                       is_public: false,
                     }),
                   });
