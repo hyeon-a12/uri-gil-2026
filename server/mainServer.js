@@ -229,6 +229,15 @@ app.post('/process-video', upload.array('videos', 20), async(req, res) => {
             '-c:a', 'aac',
             '-preset', 'fast',
             '-pix_fmt', 'yuv420p',
+            // 스마트폰 카메라 원본은 가변 프레임레이트(VFR)인 경우가 많은데,
+            // 이후 병합 단계가 -c copy(스트림 복사)라서 모든 클립의 타임베이스가
+            // 동일해야 합니다. 여기서 고정 프레임레이트로 맞추고 타임스탬프를
+            // 0부터 재정렬하지 않으면, concat 시 뒤 클립 타임스탬프가 앞 클립
+            // 기준으로 잘못 해석돼 클립이 끝까지 재생되지 못하고 중간에
+            // 끊기는 문제가 생깁니다.
+            '-r', '30',
+            '-vsync', 'cfr',
+            '-avoid_negative_ts', 'make_zero',
           ])
           .output(processedPath)
           .on('start', (cmd) => console.log('FFmpeg 시작', cmd))
