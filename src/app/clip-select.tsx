@@ -2,7 +2,6 @@ import React, { useMemo, useState, useCallback } from 'react';
 import {
   Alert,
   Pressable,
-  ScrollView,
   StyleSheet,
   View,
   TouchableOpacity,
@@ -57,124 +56,6 @@ function formatDuration(seconds: number) {
   return `${String(minutes).padStart(2, '0')}:${String(
     remainingSeconds,
   ).padStart(2, '0')}`;
-}
-
-interface SelectionButtonProps {
-  selected: boolean;
-  onPress: () => void;
-}
-
-function SelectionButton({
-  selected,
-  onPress,
-}: SelectionButtonProps) {
-  return (
-    <Pressable
-      onPress={onPress}
-      hitSlop={10}
-      style={({ pressed }) => [
-        styles.selectionButton,
-        selected && styles.selectionButtonSelected,
-        pressed && styles.selectionButtonPressed,
-      ]}
-    >
-      {selected && (
-        <Ionicons
-          name="checkmark"
-          size={18}
-          color="#FFFFFF"
-        />
-      )}
-    </Pressable>
-  );
-}
-
-interface ClipSelectionCardProps {
-  clip: ClipItem;
-  selected: boolean;
-  onToggle: () => void;
-}
-
-function ClipSelectionCard({
-  clip,
-  selected,
-  onToggle,
-}: ClipSelectionCardProps) {
-  return (
-    <View style={styles.clipRow}>
-      <SelectionButton
-        selected={selected}
-        onPress={onToggle}
-      />
-
-      <Pressable
-        onPress={onToggle}
-        style={({ pressed }) => [
-          styles.clipCard,
-          selected && styles.clipCardSelected,
-          pressed && styles.clipCardPressed,
-        ]}
-      >
-        <View style={styles.thumbnailContainer}>
-          <Image
-            source={{ uri: clip.uri }}
-            style={styles.thumbnail}
-            resizeMode="cover"
-          />
-
-          <View style={styles.thumbnailDim} />
-
-          <View style={styles.playButton}>
-            <Ionicons
-              name="play"
-              size={18}
-              color="#FFFFFF"
-              style={styles.playIcon}
-            />
-          </View>
-        </View>
-
-        <View style={styles.clipInformation}>
-          <Text
-            numberOfLines={1}
-            allowFontScaling={false}
-            style={styles.clipTitle}
-          >
-            {clip.title}
-          </Text>
-
-          <Text
-            numberOfLines={1}
-            allowFontScaling={false}
-            style={styles.recordedAt}
-          >
-            {clip.recordedAt}
-          </Text>
-
-          <View style={styles.durationRow}>
-            <Ionicons
-              name="time-outline"
-              size={15}
-              color={COLORS.textSecondary}
-            />
-
-            <Text
-              allowFontScaling={false}
-              style={styles.durationText}
-            >
-              {formatDuration(clip.durationSeconds ?? 0)}
-            </Text>
-          </View>
-        </View>
-
-        <Ionicons
-          name="reorder-three-outline"
-          size={28}
-          color={COLORS.textTertiary}
-        />
-      </Pressable>
-    </View>
-  );
 }
 
 export default function ClipSelectScreen() {
@@ -370,11 +251,6 @@ export default function ClipSelectScreen() {
         },
       ],
     );
-  };
-
-  const handleCancel = () => {
-    setSelectedIds(new Set());
-    router.back();
   };
 
   const handleDelete = () => {
@@ -665,127 +541,6 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: SPACING.screenH,
     paddingTop: SPACING.xs,
-  },
-
-  clipRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-
-    marginBottom: SPACING.md,
-  },
-
-  selectionButton: {
-    width: 26,
-    height: 26,
-
-    marginRight: SPACING.sm,
-
-    borderRadius: 13,
-
-    alignItems: 'center',
-    justifyContent: 'center',
-
-    backgroundColor: COLORS.card,
-
-    borderWidth: 1.5,
-    borderColor: COLORS.unchecked,
-  },
-
-  selectionButtonSelected: {
-    backgroundColor: COLORS.primary,
-    borderColor: COLORS.primary,
-  },
-
-  selectionButtonPressed: {
-    opacity: 0.7,
-    transform: [{ scale: 0.95 }],
-  },
-
-  clipCard: {
-    flex: 1,
-    minHeight: 132,
-
-    padding: SPACING.sm,
-
-    flexDirection: 'row',
-    alignItems: 'center',
-
-    backgroundColor: COLORS.card,
-
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-
-    shadowColor: COLORS.shadow,
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.05,
-    shadowRadius: 9,
-
-    elevation: 2,
-  },
-
-  clipCardSelected: {
-    borderColor: COLORS.primary,
-
-    backgroundColor: '#FFFDFC',
-  },
-
-  clipCardPressed: {
-    opacity: 0.86,
-
-    transform: [{ scale: 0.995 }],
-  },
-
-  thumbnailDim: {
-    ...StyleSheet.absoluteFill,
-
-    backgroundColor: 'rgba(0,0,0,0.12)',
-  },
-
-  playButton: {
-    position: 'absolute',
-    top: '50%',
-    left: '50%',
-
-    width: 38,
-    height: 38,
-
-    marginTop: -19,
-    marginLeft: -19,
-
-    borderRadius: 19,
-
-    alignItems: 'center',
-    justifyContent: 'center',
-
-    backgroundColor: 'rgba(36,36,32,0.58)',
-
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.32)',
-  },
-
-  playIcon: {
-    marginLeft: SPACING.xs,
-  },
-
-  clipInformation: {
-    flex: 1,
-
-    marginLeft: SPACING.md,
-    marginRight: SPACING.sm,
-  },
-
-  recordedAt: {
-    marginTop: SPACING.sm,
-
-    color: COLORS.textSecondary,
-
-    fontSize: 12,
-    lineHeight: 17,
-    fontWeight: '500',
   },
 
   emptyIconContainer: {
