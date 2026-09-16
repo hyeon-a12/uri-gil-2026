@@ -10,6 +10,22 @@ function foldersKey(userId: string) {
     return `@folders/${userId}`;
 }
 
+// saveFolder/updateFolder/deleteFolder는 전부 "전체 목록을 읽고 → 수정하고 →
+// 통째로 다시 쓰는" 패턴이라, 두 호출이 겹치면 나중에 끝난 쪽이 먼저 쓴 걸
+// 덮어써서 여행 하나가 통째로 사라질 수 있습니다(recordingService.ts의
+// saveRecording에 있던 것과 같은 문제). 이 모듈을 드나드는 모든 쓰기를
+// 한 줄로 직렬화해서 막습니다.
+let writeQueue: Promise<unknown> = Promise.resolve();
+
+function withWriteLock<T>(task: () => Promise<T>): Promise<T> {
+    const result = writeQueue.then(task, task);
+    writeQueue = result.then(
+        () => undefined,
+        () => undefined,
+    );
+    return result;
+}
+
 // NewTripModal의 촬영 스타일 선택지와 그대로 맞춰둔 타입 (원래 NewTripModal.tsx 안에서만
 // 쓰던 로컬 타입이었는데, 저장 스키마(FolderItem)에도 필요해져서 여기로 옮겼습니다).
 export type ShootingStyleId = 'basic' | 'doll' | 'mirror';
@@ -92,28 +108,30 @@ export async function saveFolder(folder: FolderItem): Promise<void> {
     const userId = await getCurrentUserId();
     if (!userId) return;
 
-    const all = await getAllFolders();
-    const updated = [
-        folder, ...all.filter((f) => f.id !== folder.id),
-    ];
-    await AsyncStorage.setItem(
-        foldersKey(userId),
-        JSON.stringify(updated),
-    );
+    await withWriteLock(async () => {
+        const all = await getAllFolders();
+        const updated = [
+            folder, ...all.filter((f) => f.id !== folder.id),
+        ];
+        await AsyncStorage.setItem(
+            foldersKey(userId),
+            JSON.stringify(updated),
+        );
+    });
 }
 
 export async function deleteFolder(id: string): Promise<void> {
     const userId = await getCurrentUserId();
     if (!userId) return;
 
+    // 로컬 클립 정리와 서버 route 삭제는 목록 자체를 건드리지 않으니 잠금 밖에서
+    // 수행하고, "목록 읽기 → 걸러내기 → 통째로 쓰기" 구간만 직렬화합니다.
     const all = await getAllFolders();
     const target = all.find((f) => f.id === id);
 
-    // 로컬 클립도 함께 정리
     const recordings = await getRecordingsByFolder(id);
     await deleteRecordings(recordings.map((r) => r.id));
 
-    // 서버에도 route 삭제 반영 (CASCADE로 spots/clips/videos까지 함께 삭제됨)
     if (target?.routeId) {
         try {
             await apiFetch(`/routes/${target.routeId}`, { method: 'DELETE' });
@@ -122,19 +140,24 @@ export async function deleteFolder(id: string): Promise<void> {
         }
     }
 
-    const updated = all.filter((f) => f.id !== id);
-    await AsyncStorage.setItem(
-        foldersKey(userId), JSON.stringify(updated),
-    );
+    await withWriteLock(async () => {
+        const current = await getAllFolders();
+        const updated = current.filter((f) => f.id !== id);
+        await AsyncStorage.setItem(
+            foldersKey(userId), JSON.stringify(updated),
+        );
+    });
 }
 
 export async function updateFolder(id: string, updates: Partial<FolderItem>,): Promise<void> {
     const userId = await getCurrentUserId();
     if (!userId) return;
 
-    const all = await getAllFolders();
-    const updated = all.map((f) => f.id === id ? { ...f, ...updates } : f,);
-    await AsyncStorage.setItem(
-        foldersKey(userId), JSON.stringify(updated),
-    );
+    await withWriteLock(async () => {
+        const all = await getAllFolders();
+        const updated = all.map((f) => f.id === id ? { ...f, ...updates } : f,);
+        await AsyncStorage.setItem(
+            foldersKey(userId), JSON.stringify(updated),
+        );
+    });
 }

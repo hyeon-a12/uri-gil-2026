@@ -17,7 +17,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { clearActiveFolder, getActiveFolder } from '@/services/activeFolderService';
 import {
   getAllFolders,
-  saveFolder,
   deleteFolder as deleteFolderFromStorage,
   getFolderStatus,
   FolderItem,
@@ -26,6 +25,7 @@ import {
 import { getRecordingsByFolder } from '@/services/recordingService';
 import { useTripStore } from '@/store/useTripStore';
 import NewTripModal from '@/components/NewTripModal';
+import { useCreateTripModal } from '@/hooks/useCreateTripModal';
 import { HapticPressable } from '@/components/common';
 import { COLORS as SHARED_COLORS, RADIUS, SPACING } from '@/constants/color';
 import { TextInput } from 'react-native-gesture-handler';
@@ -141,10 +141,19 @@ export default function ClipManageScreen() {
   }>();
 
   const [activeTab, setActiveTab] = useState<'editing' | 'myTravel'>('editing');
-  const [activeFolderId, setActiveFolderId] = useState<string | null>('null');
+  const [activeFolderId, setActiveFolderId] = useState<string | null>(null);
   const [selectedFolderForMenu, setSelectedFolderForMenu] =
     useState<FolderItem | null>(null);
-  const [newTripModalVisible, setNewTripModalVisible] = useState(false);
+  // "새 여행 만들기"는 홈 화면 여행 전환 UI(TripSelector/TripSwitchSheet)와
+  // 완전히 같은 흐름(로컬 저장 → 현재 여행으로 전환 → 서버 동기화)을 타야 해서,
+  // 여기서 따로 재구현하지 않고 공용 훅을 그대로 씁니다. 예전엔 이 화면만
+  // selectCurrentTrip()/서버 저장 없이 로컬 저장만 하는 별도 로직이 있었음.
+  const {
+    visible: newTripModalVisible,
+    openCreateModal: handleCreateFolder,
+    closeCreateModal: closeNewTripModal,
+    handleCreatedTrip: handleTripCreated,
+  } = useCreateTripModal(loadFolders);
 
   const filteredFolders = folders.filter((f) => {
     const matchesQuery = f.title.toLowerCase().includes(searchQuery.toLowerCase());
@@ -180,46 +189,6 @@ export default function ClipManageScreen() {
     });
   };
 
-  const handleCreateFolder = () => {
-    setNewTripModalVisible(true);
-  };
-
-  const handleTripCreated: React.ComponentProps<typeof NewTripModal>['onCreated'] = async (
-    trip,
-  ) => {
-    const newFolder: FolderItem = {
-      id: `${Date.now()}`,
-      title: trip.name || `${trip.region ?? ''} 여행`,
-      dateRange: `${trip.startDate!.getFullYear()}.${String(
-        trip.startDate!.getMonth() + 1,
-      ).padStart(2, '0')}.${String(trip.startDate!.getDate()).padStart(2, '0')}. ~ ${trip.endDate.getFullYear()}.${String(
-        trip.endDate.getMonth() + 1,
-      ).padStart(2, '0')}.${String(trip.endDate.getDate()).padStart(2, '0')}.`,
-      thumbnail:
-        'https://images.unsplash.com/photo-1500534623283-312aade485b7?w=600',
-
-      // 예전에는 폴더 이름/날짜 말고는 다 버려지던 필드들 — 여행 만들기 모달에서
-      // 입력받은 그대로 저장합니다.
-      region: trip.region,
-      memo: trip.memo,
-      partySize: trip.partySize,
-      themes: trip.themes,
-      clipLengthSeconds: trip.clipLengthSeconds,
-      shootingStyle: trip.shootingStyle,
-    };
-
-    try {
-      await saveFolder(newFolder);
-      setFolders((prev) => [
-        { ...newFolder, clipCount: 0, previewThumbnails: [] },
-        ...prev,
-      ]);
-    } catch (error) {
-      console.error('[handleTripCreated] 저장 실패:', error);
-      Alert.alert('저장 실패', '폴더를 만드는 중 문제가 발생했습니다.');
-    }
-  };
-
   const handleDelete = () => {
     if (!selectedFolderForMenu) return;
     const folder = selectedFolderForMenu;
@@ -243,9 +212,7 @@ export default function ClipManageScreen() {
               setFolders((prev) => prev.filter((c) => c.id != folder.id));
             } catch (error) {
               console.error('[handleDelete] 실패:', error);
-              Alert.alert(
-                '삭제 실패',
-              );
+              Alert.alert('삭제 실패', '폴더를 삭제하는 중 문제가 발생했습니다.');
             }
           },
         },
@@ -424,7 +391,7 @@ export default function ClipManageScreen() {
 
       <NewTripModal
         visible={newTripModalVisible}
-        onClose={() => setNewTripModalVisible(false)}
+        onClose={closeNewTripModal}
         onCreated={handleTripCreated}
       />
     </View>
