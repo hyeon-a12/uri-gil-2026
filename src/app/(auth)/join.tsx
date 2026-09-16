@@ -128,6 +128,10 @@ export default function JoinScreen() {
           nickname: trimmedNickname,
           email: trimmedEmail,
           password,
+          agreed_service: agreeService,
+          agreed_privacy: agreePrivacy,
+          agreed_age: agreeAge,
+          terms_version: 'v1',
         }),
       });
 

@@ -7,6 +7,10 @@ class UserCreate(BaseModel):
     email: EmailStr
     password: str
     nickname: str
+    agreed_service: bool
+    agreed_privacy: bool
+    agreed_age: bool
+    terms_version: str = "v1"
 
 class UserLogin(BaseModel):
     email: EmailStr
@@ -17,6 +21,11 @@ class UserResponse(BaseModel):
     email: str
     nickname: str
     created_at: datetime
+    agreed_service: bool
+    agreed_privacy: bool
+    agreed_age: bool
+    terms_version: str
+    agreed_at: Optional[datetime]
 
     class Config:
         from_attributes = True
