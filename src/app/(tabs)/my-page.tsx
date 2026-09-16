@@ -61,6 +61,13 @@ export default function MyPageScreen() {
           await SecureStore.deleteItemAsync('user_id');
           await SecureStore.deleteItemAsync('nickname');
 
+          // 화면이 넘어가기 전에 여기서 프로필을 기본값으로 리셋하면, 아직
+          // 마이페이지가 화면에 떠있는 짧은 순간 동안 "텅굴이"(기본 닉네임)로
+          // 바뀐 인사말이 한 프레임 보였다가 사라집니다. onboarding으로 먼저
+          // 넘어간 뒤에 정리해서 그 깜빡임을 없앱니다.
+          useAuthStore.getState().setLoggedIn(false);
+          router.replace('/onboarding');
+
           // useTripStore/useProfileStore는 메모리 캐시라 SecureStore를 지워도
           // 자동으로 비워지지 않습니다. user_id가 사라진 상태에서 다시 채우면
           // (getCurrentUserId()가 null을 반환하므로) 기본값으로 초기화됩니다 —
@@ -68,9 +75,6 @@ export default function MyPageScreen() {
           // 화면에 남아있지 않도록 합니다.
           await clearCurrentTrip();
           await hydrateProfile();
-
-          useAuthStore.getState().setLoggedIn(false);
-          router.replace('/onboarding');
         },
       },
     ]);
