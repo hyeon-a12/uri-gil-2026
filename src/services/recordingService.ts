@@ -69,7 +69,6 @@ export async function saveRecording(
     const updated = [...existing, record];
     await AsyncStorage.setItem(storageKey(userId), JSON.stringify(updated));
 
-    console.log('[saveRecording] 저장 완료:', record.id);
     return record;
 }
 

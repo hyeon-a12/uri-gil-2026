@@ -293,8 +293,6 @@ async function renderVideo(exportData: {
   const SERVER_URL = `${process.env.EXPO_PUBLIC_SERVER_URL}/process-video`;
 
   try {
-    console.log('multipart 요청 시작');
-
     const formData = new FormData();
 
     for (let i=0; i<exportData.clips.length; i++) {
@@ -320,21 +318,13 @@ async function renderVideo(exportData: {
       formData.append('folderId', exportData.folderId);
     }
 
-    console.log('FormData 준비 완료');
-
     const response = await uploadFormData(SERVER_URL, formData);
 
-    console.log('응답 받음')
-    console.log('[status]', response.status);
-    console.log('[statusText]', response.statusText);
-
     const responseText = response.text;
-    console.log('[응답 본문]', responseText);
 
     if (!response.ok) throw new Error(`서버 렌더링 실패: ${responseText.slice(0,200)}`);
 
     const result = JSON.parse(responseText);
-    console.log('[renderVideo] 서버 응답:', result);
 
     if (!result.success) {
       return {
@@ -344,16 +334,11 @@ async function renderVideo(exportData: {
     }
 
     if (result.downloadUrl) {
-      console.log('[rendervideo] 다운로드 시작', result.downloadUrl);
-
       const localPath = FileSystem.documentDirectory + `output_${Date.now()}.mp4`;
       const downloadResult = await FileSystem.downloadAsync(result.downloadUrl, localPath);
 
-      console.log('[renderVideo] 다운로드 완료', downloadResult.uri, downloadResult.status);
-
       // 파일이 실제로 존재하고 크기가 있는지 확인
       const fileInfo = await FileSystem.getInfoAsync(downloadResult.uri);
-      console.log('[renderVideo] 파일 정보:', fileInfo);
 
       if (!fileInfo.exists || fileInfo.size === 0) {
         return { success: false, message: '다운로드된 파일이 비어있습니다.' };
@@ -370,7 +355,6 @@ async function renderVideo(exportData: {
 
       try {
         const asset = await MediaLibrary.createAssetAsync(downloadResult.uri);
-        console.log('[renderVideo] 갤러리 저장 완료', asset.uri);
         return { success: true, videoUri: asset.uri };
       } catch (assetError) {
         // createAssetAsync가 에러를 던져도 실제로는 파일이 저장된 경우가
