@@ -195,7 +195,7 @@ function buildTodayMoments(recordings: RecordingData[]): ClipItem[] {
     id: r.id,
     recordedAt: r.recordedAt ?? new Date().toISOString(),
     durationSeconds: Math.floor((r.durationMs ?? 0) / 1000),
-    thumbnail: r.thumbnail ?? r.thumbnail,
+    thumbnail: r.thumbnail,
     uri: r.videoUri ?? '',
 
     durationLabel: formatClipDuration(r.durationMs),
@@ -216,9 +216,9 @@ interface RecommendedPlace {
 
 //const RECOMMENDED_PLACES: RecommendedPlace[] = [];
 
-/** "오늘의 순간들" 가로 스크롤에 들어가는 클립 하나. 실제 썸네일 이미지가
- * 없어서 지금은 색상 placeholder로 대체했어요 — 나중에
- * <Image source={{ uri: clip.thumbnailUrl }} /> 로 바꿔주시면 됩니다. */
+/** "오늘의 순간들" 가로 스크롤에 들어가는 클립 하나. moment.thumbnail은
+ * recordingService.saveRecording()이 촬영 영상에서 실제로 추출해 저장한
+ * 이미지 경로입니다(추출 실패 시에만 빈 문자열 → 아래 placeholder). */
 function MomentThumbnail({
   moment,
   onSelect,

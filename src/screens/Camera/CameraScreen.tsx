@@ -565,7 +565,6 @@ export default function CameraScreen() {
           await saveRecording({
             recordedAt: new Date().toISOString(),
             videoUri: video.uri,
-            thumbnail: video.uri,
             durationMs,
             folderId: currentTrip.id,
             location: {

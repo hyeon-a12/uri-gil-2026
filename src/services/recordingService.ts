@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system/legacy';
+import * as VideoThumbnails from 'expo-video-thumbnails';
 
 import type { RecordingData } from '@/types/recording';
 import { getCurrentUserId } from './authService';
@@ -47,8 +48,28 @@ async function persistVideoFile(tempUri: string, id: string): Promise<string> {
     }
 }
 
+// 영상 파일 경로를 그대로 thumbnail로 저장하면(과거 방식) <Image>가 mp4를
+// 디코드하지 못해 홈/클립 목록 어디서도 실제 그림이 안 뜨고 빈 배경만
+// 보입니다. 실제 프레임을 뽑아 별도 jpg로 저장해서 이 문제를 없앱니다.
+// 실패해도(코덱 미지원 등) 빈 문자열을 돌려주면 기존 UI가 이미 placeholder로
+// 대체해서 보여주므로 저장 자체를 막을 필요는 없습니다.
+async function persistThumbnail(videoUri: string, id: string): Promise<string> {
+    try {
+        const { uri: cacheUri } = await VideoThumbnails.getThumbnailAsync(videoUri, {
+            time: 0,
+        });
+        await ensureVideoDir();
+        const newPath = `${VIDEO_DIR}${id}_thumb.jpg`;
+        await FileSystem.copyAsync({ from: cacheUri, to: newPath });
+        return newPath;
+    } catch (error) {
+        console.warn('[persistThumbnail] 썸네일 생성 실패:', error);
+        return '';
+    }
+}
+
 export async function saveRecording(
-    data: Omit<RecordingData, 'id' | 'videoUri'> & { videoUri: string },
+    data: Omit<RecordingData, 'id' | 'videoUri' | 'thumbnail'> & { videoUri: string },
 ): Promise<RecordingData> {
     const userId = await getCurrentUserId();
     if (!userId) {
@@ -57,11 +78,13 @@ export async function saveRecording(
 
     const id = `rec_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const persistedUri = await persistVideoFile(data.videoUri, id);
+    const thumbnail = await persistThumbnail(persistedUri, id);
 
     const record: RecordingData = {
         ...data,
         id,
         videoUri: persistedUri,
+        thumbnail,
         durationMs: data.durationMs ?? 0,
     };
 
@@ -95,6 +118,14 @@ export async function getAllRecordings(): Promise<RecordingData[]> {
     }
 }
 
+async function deleteFileIfExists(uri: string): Promise<void> {
+    if (!uri) return;
+    const info = await FileSystem.getInfoAsync(uri);
+    if (info.exists) {
+        await FileSystem.deleteAsync(uri);
+    }
+}
+
 export async function deleteRecording(id: string): Promise<void> {
     const userId = await getCurrentUserId();
     if (!userId) return;
@@ -103,10 +134,8 @@ export async function deleteRecording(id: string): Promise<void> {
     const target = all.find((r) => r.id === id);
 
     if (target) {
-        const info = await FileSystem.getInfoAsync(target.videoUri);
-        if (info.exists) {
-            await FileSystem.deleteAsync(target.videoUri);
-        }
+        await deleteFileIfExists(target.videoUri);
+        await deleteFileIfExists(target.thumbnail);
     }
 
     const filtered = all.filter((r) => r.id != id);
@@ -131,10 +160,8 @@ export async function deleteRecordings(ids: string[]): Promise<void> {
 
     await Promise.all(
         targets.map(async (target) => {
-            const info = await FileSystem.getInfoAsync(target.videoUri);
-            if (info.exists) {
-                await FileSystem.deleteAsync(target.videoUri);
-            }
+            await deleteFileIfExists(target.videoUri);
+            await deleteFileIfExists(target.thumbnail);
         }),
     );
 
@@ -148,10 +175,8 @@ export async function clearAllRecordings(): Promise<void> {
 
     const all = await getAllRecordings();
     for (const r of all) {
-        const info = await FileSystem.getInfoAsync(r.videoUri);
-        if (info.exists) {
-            await FileSystem.deleteAsync(r.videoUri);
-        }
+        await deleteFileIfExists(r.videoUri);
+        await deleteFileIfExists(r.thumbnail);
     }
     await AsyncStorage.removeItem(storageKey(userId));
 }

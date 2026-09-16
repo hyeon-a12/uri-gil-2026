@@ -271,7 +271,6 @@ export default function LocationConfirmScreen() {
       const record = await saveRecording({
         recordedAt,
         videoUri,
-        thumbnail: videoUri,
         durationMs,
         folderId: currentTrip.id,
         location: {

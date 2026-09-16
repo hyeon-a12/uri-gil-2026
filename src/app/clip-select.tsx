@@ -292,7 +292,9 @@ export default function ClipSelectScreen() {
             }}
             style={styles.thumbnailContainer}
           >
-            <Image source={{ uri: item.uri }} style={styles.thumbnail} />
+            {item.thumbnail ? (
+              <Image source={{ uri: item.thumbnail }} style={styles.thumbnail} />
+            ) : null}
             <View style={styles.playOverlay}>
               <Ionicons name="play" size={16} color="#FFFFFF" />
             </View>
