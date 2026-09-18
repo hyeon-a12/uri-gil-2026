@@ -1,4 +1,4 @@
-import * as SecureStore from 'expo-secure-store';
+import * as SecureStore from './secureStorage';
 
 /**
  * 로그인한 사용자의 user_id를 SecureStore에서 가져옵니다.

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import * as SecureStore from 'expo-secure-store';
+import * as SecureStore from '@/services/secureStorage';
 import { View, TextInput, Pressable, StyleSheet, Alert } from 'react-native';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';

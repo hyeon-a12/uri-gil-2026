@@ -1,4 +1,4 @@
-import * as SecureStore from 'expo-secure-store';
+import * as SecureStore from './secureStorage';
 
 const API_URL = 'https://uri-gil-2026-production.up.railway.app';
 

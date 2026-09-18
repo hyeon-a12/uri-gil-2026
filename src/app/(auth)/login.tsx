@@ -5,7 +5,7 @@ import { hydrateCurrentTrip } from '@/store/useTripStore';
 import { extractErrorMessage } from '@/services/api';
 import { isValidEmail } from '@/utils/validation';
 import { COLORS } from '@/constants/color';
-import * as SecureStore from 'expo-secure-store';
+import * as SecureStore from '@/services/secureStorage';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { Image } from 'react-native';

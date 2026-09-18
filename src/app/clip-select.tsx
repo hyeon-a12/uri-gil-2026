@@ -1,6 +1,7 @@
 import React, { useMemo, useState, useCallback } from 'react';
 import {
   Alert,
+  Platform,
   Pressable,
   StyleSheet,
   View,
@@ -229,10 +230,32 @@ export default function ClipSelectScreen() {
 
     Alert.alert(
       '다운로드',
-      `${targetClip.title} 영상을 갤러리에 저장할까요?`,
+      Platform.OS === 'web'
+        ? `${targetClip.title} 영상을 다운로드할까요?`
+        : `${targetClip.title} 영상을 갤러리에 저장할까요?`,
       [
         {text: '취소', style: 'cancel'},
         {text: '저장', onPress: async () => {
+          if (!targetClip.uri) return;
+
+          // 웹은 갤러리 개념이 없어서(expo-media-library 웹 미지원), 브라우저
+          // 기본 다운로드 동작(<a download>)으로 대체합니다 — 별도 권한 절차 없이
+          // 바로 기기의 다운로드 폴더에 저장됩니다.
+          if (Platform.OS === 'web') {
+            try {
+              const link = document.createElement('a');
+              link.href = targetClip.uri;
+              link.download = `${targetClip.title || 'urigil-clip'}.webm`;
+              document.body.appendChild(link);
+              link.click();
+              document.body.removeChild(link);
+            } catch (error) {
+              console.error('[handleDownloadClip:web] 실패:', error);
+              Alert.alert('다운로드 실패', '잠시 후 다시 시도해주세요.');
+            }
+            return;
+          }
+
           try {
             const {status} = await MediaLibrary.requestPermissionsAsync(true);
             if (status !== 'granted') {
@@ -240,7 +263,6 @@ export default function ClipSelectScreen() {
               return;
             }
 
-            if (!targetClip.uri) return;
             await MediaLibrary.saveToLibraryAsync(targetClip.uri);
             Alert.alert('저장 완료', '갤러리에 저장되었습니다.');
           } catch (error) {
