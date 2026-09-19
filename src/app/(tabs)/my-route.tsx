@@ -29,6 +29,7 @@ import * as MediaLibrary from 'expo-media-library/legacy';
 import { useFocusEffect, useLocalSearchParams } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  Platform,
   Modal,
   Pressable,
   ScrollView,
@@ -416,30 +417,46 @@ function TravelShareSheet({
   );
 
   const handleSaveScheduleImage = async () => {
-    if (isSavingScheduleRef.current || !scheduleGridRef.current) return;
-    if (hours.length === 0) {
-      Alert.alert('저장할 일정이 없어요', '촬영된 클립이 있어야 시간대별 일정표를 만들 수 있어요.');
+  if (isSavingScheduleRef.current) return;
+
+  if (hours.length === 0) {
+    Alert.alert('저장할 일정이 없어요', '촬영된 클립이 있어야 시간대별 일정표를 만들 수 있어요.');
+    return;
+  }
+
+  if (!scheduleGridRef.current) return;
+
+  isSavingScheduleRef.current = true;
+
+  try {
+    const uri = await captureRef(scheduleGridRef, { format: 'png', quality: 1 });
+
+    if (Platform.OS === 'web') {
+      const link = document.createElement('a');
+      link.href = uri;
+      link.download = `${tripName || 'urigil-schedule'}.png`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      Alert.alert('저장 완료', '일정표 이미지가 다운로드됐어요.');
       return;
     }
-    isSavingScheduleRef.current = true;
 
-    try {
-      const { status } = await MediaLibrary.requestPermissionsAsync(true);
-      if (status !== 'granted') {
-        Alert.alert('권한 필요', '이미지를 저장하려면 갤러리 접근 권한이 필요해요.');
-        return;
-      }
-
-      const uri = await captureRef(scheduleGridRef, { format: 'png', quality: 1 });
-      await MediaLibrary.createAssetAsync(uri);
-      Alert.alert('저장 완료', '일정표 이미지를 갤러리에 저장했어요.');
-    } catch (error) {
-      console.error('[TravelShareSheet] 일정표 이미지 저장 실패:', error);
-      Alert.alert('저장 실패', '이미지를 저장하지 못했어요. 잠시 후 다시 시도해주세요.');
-    } finally {
-      isSavingScheduleRef.current = false;
+    const { status } = await MediaLibrary.requestPermissionsAsync(true);
+    if (status !== 'granted') {
+      Alert.alert('권한 필요', '이미지를 저장하려면 갤러리 접근 권한이 필요해요.');
+      return;
     }
-  };
+
+    await MediaLibrary.createAssetAsync(uri);
+    Alert.alert('저장 완료', '일정표 이미지를 갤러리에 저장했어요.');
+  } catch (error) {
+    console.error('[TravelShareSheet] 일정표 이미지 저장 실패:', error);
+    Alert.alert('저장 실패', '이미지를 저장하지 못했어요. 잠시 후 다시 시도해주세요.');
+  } finally {
+    isSavingScheduleRef.current = false;
+  }
+};
 
   return (
     <Modal
@@ -753,16 +770,29 @@ export default function MyRouteScreen() {
     : "여행을 선택해주세요";
 
   const handleNativeShare = useCallback(async () => {
+  const shareText = `${tripName}의 ${tripSummary} 여행 경로를 확인해보세요!`;
+
+  if (Platform.OS === 'web') {
     try {
-      await Share.share({
-        title: `${tripName} 여행`,
-        message: `${tripName}의 ${tripSummary} 여행 경로를 확인해보세요!`,
-      });
+      await navigator.clipboard.writeText(shareText);
+      Alert.alert('복사 완료', '여행 소개 문구가 복사됐어요. 원하는 곳에 붙여넣어 공유해보세요.');
     } catch (error) {
-      console.error("[MyRouteScreen] 공유 화면을 열지 못했습니다.", error);
-      Alert.alert("공유를 열지 못했어요", "잠시 후 다시 시도해 주세요.");
+      console.error('[MyRouteScreen] 클립보드 복사 실패:', error);
+      Alert.alert('복사하지 못했어요', '잠시 후 다시 시도해 주세요.');
     }
-  }, [tripName, tripSummary]);
+    return;
+  }
+
+  try {
+    await Share.share({
+      title: `${tripName} 여행`,
+      message: shareText,
+    });
+  } catch (error) {
+    console.error('[MyRouteScreen] 공유 화면을 열지 못했습니다.', error);
+    Alert.alert('공유를 열지 못했어요', '잠시 후 다시 시도해 주세요.');
+  }
+}, [tripName, tripSummary]);
 
   const mapHeight = Math.min(Math.max(width * 0.85, 360), 480);
 
