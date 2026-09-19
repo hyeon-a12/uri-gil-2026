@@ -16,7 +16,6 @@ import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS as SHARED_COLORS, RADIUS, SPACING } from '@/constants/color';
 import { getDayLabel, formatDayDate, type PlanStop } from '@/services/tripPlanService';
-import KakaoMapView, { type KakaoMapPin } from '@/components/KakaoMapView';
 import { getStopMemos, saveStopMemo } from '@/services/stop-memo-service';
 import { removeTripScheduleStop } from '@/services/trip-schedule-service';
 import { deleteRecordings } from '@/services/recordingService';
@@ -273,25 +272,6 @@ export function RoutePlanView({
     );
   }, [stops, selectedDay]);
 
-  // 웹 일정 화면에 날짜별 이동경로 지도를 넣기 위한 핀 목록입니다 —
-  // my-route.tsx의 지도 탭과 같은 방식(순서 라벨 + 경로선)으로 만듭니다.
-  const dayMapPins = useMemo<KakaoMapPin[]>(
-    () =>
-      dayStops
-        .filter(
-          (stop): stop is PlanStop & { latitude: number; longitude: number } =>
-            typeof stop.latitude === 'number' && typeof stop.longitude === 'number',
-        )
-        .map((stop) => ({
-          id: stop.id,
-          lat: stop.latitude,
-          lng: stop.longitude,
-          label: String(stop.order),
-          color: COLORS.primary,
-        })),
-    [dayStops],
-  );
-
   // 스톱을 한 칸 위/아래로 옮기고, 바뀐 순서를 바로 저장합니다.
   const moveStop = useCallback(
     (index: number, direction: -1 | 1) => {
@@ -506,12 +486,6 @@ export function RoutePlanView({
                 {formatDayDate(selectedDay, tripStartDate)}
               </Text>
             </View>
-
-            {dayMapPins.length > 0 && (
-              <View style={styles.dayMapWeb}>
-                <KakaoMapView pins={dayMapPins} height={180} pathColor={COLORS.primary} level={5} />
-              </View>
-            )}
 
             {dayStops.map((stop, index) => {
               const memo = stopMemos[stop.id];
@@ -793,11 +767,6 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: '700',
     color: COLORS.textPrimary,
-  },
-  dayMapWeb: {
-    borderRadius: RADIUS.banner,
-    overflow: 'hidden',
-    marginBottom: 20,
   },
   scheduleLineWeb: {
     flexDirection: 'row',

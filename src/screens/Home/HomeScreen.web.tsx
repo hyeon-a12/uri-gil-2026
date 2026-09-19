@@ -372,9 +372,12 @@ export default function HomeScreenWeb() {
 
   // 추천 장소 카드에 "이미 방문한 곳"(별 배지)을 표시하기 위해, 지금까지
   // 찍어둔 모든 클립의 좌표를 한 번 불러옵니다. 장소명이 아니라 좌표
-  // 거리(100m 이내)로 비교합니다 — 장소명 표기가 조금 달라도 정확합니다.
+  // 거리로 비교합니다 — 장소명 표기가 조금 달라도 정확합니다. 반경은 GPS
+  // 오차(수 m~10여 m)는 보정하되, 한옥마을처럼 가게가 밀집된 곳에서 안 간
+  // 옆 가게까지 같이 별표 처리되지 않도록 30m로 좁게 잡습니다(100m는 너무
+  // 넓어서 전혀 다른 장소까지 방문한 것으로 잘못 표시됐음).
   const [visitedLocations, setVisitedLocations] = useState<{ lat: number; lng: number }[]>([]);
-  const VISITED_RADIUS_KM = 0.1;
+  const VISITED_RADIUS_KM = 0.03;
 
   const loadVisitedLocations = useCallback(async () => {
     try {

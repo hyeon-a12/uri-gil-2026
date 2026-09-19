@@ -154,7 +154,7 @@ export default function TripDetailScreen() {
   if (trip === undefined) {
     return (
       <View style={styles.screen}>
-        <ScreenHeader title="여행 상세" />
+        <ScreenHeader title="여행 상세" hideMenu />
       </View>
     );
   }
@@ -162,7 +162,7 @@ export default function TripDetailScreen() {
   if (trip === null) {
     return (
       <View style={styles.screen}>
-        <ScreenHeader title="여행 상세" />
+        <ScreenHeader title="여행 상세" hideMenu />
         <Text style={styles.errorText}>여행 정보를 찾을 수 없어요 (tripId: {tripId})</Text>
       </View>
     );
@@ -172,6 +172,7 @@ export default function TripDetailScreen() {
     <View style={styles.screen}>
       <ScreenHeader
         title={trip.title}
+        hideMenu
         right={
           <Pressable
             hitSlop={10}

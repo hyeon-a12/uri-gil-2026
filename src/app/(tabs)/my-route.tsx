@@ -1106,7 +1106,20 @@ export default function MyRouteScreen() {
 
       <View style={styles.content}>
         {selectedMode === "map" ? (
-          <View style={styles.mapScreen}>
+          // 지도 + 카드가 뷰포트보다 커지면(웹에서 특히 잘 생김) 잘리지 않게
+          // 화면 전체를 세로 스크롤 가능하게 합니다. 카드는 더 이상
+          // position:absolute로 화면 밖까지 띄우는 대신, 일반 흐름 안에서
+          // marginTop을 음수로 줘서 지도 아래쪽에 살짝 겹치게만 합니다 —
+          // 이러면 카드 높이가 스크롤 컨텐츠 높이에 그대로 반영돼서 항상
+          // 끝까지 스크롤해서 볼 수 있습니다.
+          <ScrollView
+            style={styles.mapScreen}
+            contentContainerStyle={[
+              styles.mapScreenContent,
+              Platform.OS !== "web" && { paddingBottom: insets.bottom + 130 },
+            ]}
+            showsVerticalScrollIndicator={false}
+          >
             {Platform.OS === "web" && currentTrip && (
               <View style={styles.routeSummaryWeb}>
                 <Text allowFontScaling={false} style={styles.routeSummaryWebCaption}>
@@ -1122,65 +1135,58 @@ export default function MyRouteScreen() {
               </View>
             )}
 
-            {/* mapFrame과 stopCardScroll을 같은 상대 위치 기준(wrapper) 안에
-                묶습니다. 웹에서는 이 위에 routeSummaryWeb 텍스트 블록이 먼저
-                오는데, stopCardScroll의 top이 "화면 맨 위 기준"이 아니라
-                "지도 기준"으로 계산되므로, 위에 뭐가 오든 카드가 항상 지도
-                바로 아래(내 위치 버튼을 가리지 않는 자리)에 위치합니다. */}
-            <View style={styles.mapFrameWrapper}>
-              <View
-                style={[
-                  styles.mapFrame,
-                  {
-                    height: mapHeight,
-                  },
-                ]}
-              >
-                <KakaoMapView
-                  ref={mapRef}
-                  pins={mapPins}
-                  height={mapHeight}
-                  currentLocation={deviceLocation}
-                  pathColor={COLORS.primary}
-                  focusOnLocationToken={locateToken || undefined}
-                />
+            <View
+              style={[
+                styles.mapFrame,
+                {
+                  height: mapHeight,
+                },
+              ]}
+            >
+              <KakaoMapView
+                ref={mapRef}
+                pins={mapPins}
+                height={mapHeight}
+                currentLocation={deviceLocation}
+                pathColor={COLORS.primary}
+                focusOnLocationToken={locateToken || undefined}
+              />
 
-                <MapControlButtons onPressLocate={handlePressLocate} />
-              </View>
-
-              {sortedStops.length > 0 ? (
-                <GestureScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  style={[styles.stopCardScroll, { top: SPACING.md + mapHeight - 16 }]}
-                  contentContainerStyle={styles.selectedCardWrapper}
-                  snapToInterval={STOP_CARD_SNAP_INTERVAL}
-                  snapToAlignment="start"
-                  decelerationRate="fast"
-                  onMomentumScrollEnd={handleStopCardScrollEnd}
-                  onScroll={Platform.OS === 'web' ? handleStopCardWebScroll : undefined}
-                  scrollEventThrottle={Platform.OS === 'web' ? 16 : undefined}
-                >
-                  {sortedStops.map((stop) => (
-                    <View key={stop.id} style={styles.stopCardSlide}>
-                      <SelectedStopCard
-                        stop={stop}
-                        onPreviewClip={setPreviewClip}
-                        onPressDetail={(pressedStop) =>
-                          setViewingPlace({
-                            id: pressedStop.id,
-                            name: pressedStop.name,
-                            lat: pressedStop.latitude!,
-                            lng: pressedStop.longitude!,
-                          })
-                        }
-                      />
-                    </View>
-                  ))}
-                </GestureScrollView>
-              ) : null}
+              <MapControlButtons onPressLocate={handlePressLocate} />
             </View>
-          </View>
+
+            {sortedStops.length > 0 ? (
+              <GestureScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.stopCardScroll}
+                contentContainerStyle={styles.selectedCardWrapper}
+                snapToInterval={STOP_CARD_SNAP_INTERVAL}
+                snapToAlignment="start"
+                decelerationRate="fast"
+                onMomentumScrollEnd={handleStopCardScrollEnd}
+                onScroll={Platform.OS === 'web' ? handleStopCardWebScroll : undefined}
+                scrollEventThrottle={Platform.OS === 'web' ? 16 : undefined}
+              >
+                {sortedStops.map((stop) => (
+                  <View key={stop.id} style={styles.stopCardSlide}>
+                    <SelectedStopCard
+                      stop={stop}
+                      onPreviewClip={setPreviewClip}
+                      onPressDetail={(pressedStop) =>
+                        setViewingPlace({
+                          id: pressedStop.id,
+                          name: pressedStop.name,
+                          lat: pressedStop.latitude!,
+                          lng: pressedStop.longitude!,
+                        })
+                      }
+                    />
+                  </View>
+                ))}
+              </GestureScrollView>
+            ) : null}
+          </ScrollView>
         ) : (
           <RoutePlanView
             hasTrip={!!currentTrip}
@@ -1375,11 +1381,11 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
   },
 
-  // mapFrame(지도)과 stopCardScroll(장소 카드 캐러셀)의 공통 위치 기준입니다.
-  // stopCardScroll의 top은 이 wrapper 기준으로 계산되므로, 웹에서 위에
-  // routeSummaryWeb 텍스트가 추가로 있어도 카드 위치가 밀리지 않습니다.
-  mapFrameWrapper: {
-    position: "relative",
+  // mapScreen을 감싼 ScrollView의 contentContainerStyle. 지도+카드 전체가
+  // 뷰포트보다 길어지면 이 여백 아래로 계속 스크롤해서 마지막 카드까지
+  // 잘리지 않고 볼 수 있습니다.
+  mapScreenContent: {
+    paddingBottom: 24,
   },
 
   mapFrame: {
@@ -1409,17 +1415,12 @@ const styles = StyleSheet.create({
     gap: SPACING.sm,
   },
 
-  // WebView(카카오맵)는 안드로이드에서 zIndex와 무관하게 다른 형제 뷰 위로
-  // 겹쳐 보이는 경우가 있어서, elevation까지 같이 줘야 이 카드 목록이 지도
-  // 위로 확실히 올라옵니다.
-  // 카드 목록을 세로 스크롤 흐름 밖으로 빼서 지도 위에 절대 위치로 고정합니다
-  // (top은 mapHeight에 따라 인라인으로 계산해서 넣습니다) — 화면을 세로로
-  // 스크롤해도 이 카드 목록은 움직이지 않고, 자기 자신만 가로로 스크롤됩니다.
+  // 일반 흐름(절대위치 아님) 안에서 음수 marginTop으로 지도 아래쪽에 살짝만
+  // 겹칩니다 — 이러면 카드 높이가 스크롤 컨텐츠 크기에 그대로 반영돼서
+  // (ScrollView가 잘리지 않고 끝까지 스크롤됨), WebView(카카오맵)가 안드로이드에서
+  // zIndex와 무관하게 형제 뷰 위로 겹쳐 보이는 문제만 elevation으로 방지합니다.
   stopCardScroll: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    zIndex: 30,
+    marginTop: -16,
     elevation: 10,
   },
 

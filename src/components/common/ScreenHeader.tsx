@@ -20,11 +20,15 @@ export function ScreenHeader({
   right,
   align = 'center',
   hideBack = false,
+  hideMenu = false,
 }: {
   title: string;
   right?: React.ReactNode;
   align?: 'center' | 'left';
   hideBack?: boolean;
+  /** 뒤로가기 버튼이 이미 있어서 웹 햄버거 메뉴가 굳이 필요 없는 화면(예: 여행
+   * 상세 - 편집 아이콘 자리에 햄버거까지 같이 뜨면 중복)에서 true로 넘깁니다. */
+  hideMenu?: boolean;
 }) {
   const insets = useSafeAreaInsets();
   // 홈 화면 헤더(AppHeader.web.tsx의 .uri-app-header)와 정확히 같은 높이/
@@ -58,7 +62,7 @@ export function ScreenHeader({
 
       <View style={styles.right}>
         {right}
-        {Platform.OS === 'web' && (
+        {Platform.OS === 'web' && !hideMenu && (
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="메뉴"
