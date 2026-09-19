@@ -1122,57 +1122,64 @@ export default function MyRouteScreen() {
               </View>
             )}
 
-            <View
-              style={[
-                styles.mapFrame,
-                {
-                  height: mapHeight,
-                },
-              ]}
-            >
-              <KakaoMapView
-                ref={mapRef}
-                pins={mapPins}
-                height={mapHeight}
-                currentLocation={deviceLocation}
-                pathColor={COLORS.primary}
-                focusOnLocationToken={locateToken || undefined}
-              />
-
-              <MapControlButtons onPressLocate={handlePressLocate} />
-            </View>
-
-            {sortedStops.length > 0 ? (
-              <GestureScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                style={[styles.stopCardScroll, { top: SPACING.md + mapHeight - 16 }]}
-                contentContainerStyle={styles.selectedCardWrapper}
-                snapToInterval={STOP_CARD_SNAP_INTERVAL}
-                snapToAlignment="start"
-                decelerationRate="fast"
-                onMomentumScrollEnd={handleStopCardScrollEnd}
-                onScroll={Platform.OS === 'web' ? handleStopCardWebScroll : undefined}
-                scrollEventThrottle={Platform.OS === 'web' ? 16 : undefined}
+            {/* mapFrame과 stopCardScroll을 같은 상대 위치 기준(wrapper) 안에
+                묶습니다. 웹에서는 이 위에 routeSummaryWeb 텍스트 블록이 먼저
+                오는데, stopCardScroll의 top이 "화면 맨 위 기준"이 아니라
+                "지도 기준"으로 계산되므로, 위에 뭐가 오든 카드가 항상 지도
+                바로 아래(내 위치 버튼을 가리지 않는 자리)에 위치합니다. */}
+            <View style={styles.mapFrameWrapper}>
+              <View
+                style={[
+                  styles.mapFrame,
+                  {
+                    height: mapHeight,
+                  },
+                ]}
               >
-                {sortedStops.map((stop) => (
-                  <View key={stop.id} style={styles.stopCardSlide}>
-                    <SelectedStopCard
-                      stop={stop}
-                      onPreviewClip={setPreviewClip}
-                      onPressDetail={(pressedStop) =>
-                        setViewingPlace({
-                          id: pressedStop.id,
-                          name: pressedStop.name,
-                          lat: pressedStop.latitude!,
-                          lng: pressedStop.longitude!,
-                        })
-                      }
-                    />
-                  </View>
-                ))}
-              </GestureScrollView>
-            ) : null}
+                <KakaoMapView
+                  ref={mapRef}
+                  pins={mapPins}
+                  height={mapHeight}
+                  currentLocation={deviceLocation}
+                  pathColor={COLORS.primary}
+                  focusOnLocationToken={locateToken || undefined}
+                />
+
+                <MapControlButtons onPressLocate={handlePressLocate} />
+              </View>
+
+              {sortedStops.length > 0 ? (
+                <GestureScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={[styles.stopCardScroll, { top: SPACING.md + mapHeight - 16 }]}
+                  contentContainerStyle={styles.selectedCardWrapper}
+                  snapToInterval={STOP_CARD_SNAP_INTERVAL}
+                  snapToAlignment="start"
+                  decelerationRate="fast"
+                  onMomentumScrollEnd={handleStopCardScrollEnd}
+                  onScroll={Platform.OS === 'web' ? handleStopCardWebScroll : undefined}
+                  scrollEventThrottle={Platform.OS === 'web' ? 16 : undefined}
+                >
+                  {sortedStops.map((stop) => (
+                    <View key={stop.id} style={styles.stopCardSlide}>
+                      <SelectedStopCard
+                        stop={stop}
+                        onPreviewClip={setPreviewClip}
+                        onPressDetail={(pressedStop) =>
+                          setViewingPlace({
+                            id: pressedStop.id,
+                            name: pressedStop.name,
+                            lat: pressedStop.latitude!,
+                            lng: pressedStop.longitude!,
+                          })
+                        }
+                      />
+                    </View>
+                  ))}
+                </GestureScrollView>
+              ) : null}
+            </View>
           </View>
         ) : (
           <RoutePlanView
@@ -1366,6 +1373,13 @@ const styles = StyleSheet.create({
   mapScreen: {
     flex: 1,
     backgroundColor: COLORS.background,
+  },
+
+  // mapFrame(지도)과 stopCardScroll(장소 카드 캐러셀)의 공통 위치 기준입니다.
+  // stopCardScroll의 top은 이 wrapper 기준으로 계산되므로, 웹에서 위에
+  // routeSummaryWeb 텍스트가 추가로 있어도 카드 위치가 밀리지 않습니다.
+  mapFrameWrapper: {
+    position: "relative",
   },
 
   mapFrame: {
