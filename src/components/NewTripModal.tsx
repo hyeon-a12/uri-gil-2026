@@ -8,6 +8,7 @@ import {
   StyleSheet,
   Modal,
   Dimensions,
+  Platform,
   StyleProp,
   ViewStyle,
   TextStyle,
@@ -447,6 +448,235 @@ export default function NewTripModal({
   const isStep1Valid = form.name.trim().length > 0;
   const isStep2Valid = !!form.startDate && !!form.endDate;
 
+  // 웹은 3단계 마법사 대신 한 페이지에 전부 보여달라는 팀 요청으로 이렇게
+  // 나뉩니다. 네이티브는 기존 3단계(기본정보→일정→테마) 그대로 유지하고,
+  // 웹에서만 아래 nameFields/scheduleFields/themeFields를 한 화면에
+  // 이어붙입니다 — 필드 내용(JSX) 자체는 완전히 같고 배치만 다릅니다.
+  const isSinglePage = Platform.OS === 'web';
+
+  const nameFields = (
+    <>
+      <Text style={styles.fieldLabel}>
+        여행 이름 <Text style={styles.required}>*</Text>
+      </Text>
+      <View style={styles.inputWithCounter}>
+        <TextInput
+          style={styles.textInput}
+          placeholder="예) 전주 한옥마을 2박 3일"
+          placeholderTextColor={COLORS.gray400}
+          value={form.name}
+          maxLength={24}
+          onChangeText={(text) => setForm((prev) => ({ ...prev, name: text }))}
+        />
+        <Text style={styles.charCount}>{form.name.length}/24</Text>
+      </View>
+    </>
+  );
+
+  const scheduleFields = (
+    <>
+      <Text style={styles.fieldLabel}>출발일</Text>
+
+      {(!form.startDate || !form.endDate) && (
+        <View style={styles.dateHintBadge}>
+          <Text style={styles.dateHintText}>
+            {!form.startDate ? '출발일을 선택하세요' : '도착일을 선택하세요'}
+          </Text>
+        </View>
+      )}
+
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.monthRow}>
+        {months.map((m, idx) => (
+          <TouchableOpacity
+            key={`${m.year}-${m.month}`}
+            style={[styles.monthChip, selectedMonthIdx === idx && styles.monthChipSelected]}
+            onPress={() => setSelectedMonthIdx(idx)}
+          >
+            <Text
+              style={[
+                styles.monthChipText,
+                selectedMonthIdx === idx && styles.monthChipTextSelected,
+              ]}
+            >
+              {m.month + 1}월
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+
+      <View style={styles.weekdayRow}>
+        {['일', '월', '화', '수', '목', '금', '토'].map((d) => (
+          <Text key={d} style={styles.weekdayText}>
+            {d}
+          </Text>
+        ))}
+      </View>
+
+      <View style={styles.calendarGrid}>
+        {calendarWeeks.map((week, weekIdx) => {
+          const segments = buildWeekSegments(
+            week,
+            (date) =>
+              isSameDate(date, form.startDate) ||
+              isSameDate(date, form.endDate) ||
+              isDateInRange(date, form.startDate, form.endDate),
+          );
+
+          return (
+            <View key={weekIdx} style={styles.calendarWeekRow}>
+              {segments.map((segment, segIdx) => {
+                if (segment.type === 'blank') {
+                  return <View key={segIdx} style={styles.dayCell} />;
+                }
+
+                if (segment.type === 'day') {
+                  const { date } = segment;
+                  return (
+                    <TouchableOpacity
+                      key={segIdx}
+                      style={styles.dayCell}
+                      onPress={() => handleSelectDate(date)}
+                    >
+                      <View style={styles.dayCircle}>
+                        <Text style={styles.dayText}>{date.getDate()}</Text>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                }
+
+                const { dates } = segment;
+
+                if (dates.length === 1) {
+                  const date = dates[0];
+                  return (
+                    <TouchableOpacity
+                      key={segIdx}
+                      style={styles.dayCell}
+                      onPress={() => handleSelectDate(date)}
+                    >
+                      <View style={[styles.dayCircle, styles.dayCircleSelected]}>
+                        <Text style={[styles.dayText, styles.dayTextSelected]}>
+                          {date.getDate()}
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                }
+
+                const trackInset = CALENDAR_CELL_WIDTH / 2;
+                return (
+                  <View
+                    key={segIdx}
+                    style={[styles.rangeTrack, { width: CALENDAR_CELL_WIDTH * dates.length }]}
+                  >
+                    <View
+                      style={[
+                        styles.rangeTrackBackground,
+                        { left: trackInset, right: trackInset },
+                      ]}
+                    />
+                    {dates.map((date) => {
+                      const isEndpoint =
+                        isSameDate(date, form.startDate) || isSameDate(date, form.endDate);
+                      return (
+                        <TouchableOpacity
+                          key={date.getTime()}
+                          style={styles.rangeTrackCell}
+                          onPress={() => handleSelectDate(date)}
+                        >
+                          {isEndpoint ? (
+                            <View style={[styles.dayCircle, styles.dayCircleSelected]}>
+                              <Text style={[styles.dayText, styles.dayTextSelected]}>
+                                {date.getDate()}
+                              </Text>
+                            </View>
+                          ) : (
+                            <Text style={styles.dayText}>{date.getDate()}</Text>
+                          )}
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                );
+              })}
+            </View>
+          );
+        })}
+      </View>
+
+      <Text style={styles.fieldLabel}>여행 기간</Text>
+      <View style={styles.stepperRow}>
+        <View style={styles.partyLabelRow}>
+          <Ionicons name="calendar-outline" size={16} color={COLORS.black} />
+          <Text style={styles.stepperLabel}>
+            {form.startDate && form.endDate
+              ? `${form.startDate.getMonth() + 1}월 ${form.startDate.getDate()}일 → ${
+                  form.endDate.getMonth() + 1
+                }월 ${form.endDate.getDate()}일 (${nights}박 ${nights + 1}일)`
+              : '-'}
+          </Text>
+        </View>
+      </View>
+
+      <Text style={styles.fieldLabel}>여행 인원</Text>
+      <View style={styles.stepperRow}>
+        <View style={styles.partyLabelRow}>
+          <Ionicons name="people-outline" size={18} color={COLORS.black} />
+          <Text style={styles.stepperLabel}>{getPartySizeLabel(form.partySize)}</Text>
+        </View>
+        <Stepper
+          value={form.partySize}
+          min={1}
+          max={20}
+          onChange={(v) => setForm((prev) => ({ ...prev, partySize: v }))}
+        />
+      </View>
+    </>
+  );
+
+  const themeFields = (
+    <>
+      <Text style={styles.fieldLabel}>
+        여행 테마 <Text style={styles.fieldLabelMuted}>(중복 선택 가능)</Text>
+      </Text>
+      <Text style={styles.fieldHint}>선택한 테마를 바탕으로 장소 추천을 받을 수 있어요</Text>
+      <View style={styles.chipWrap}>
+        {THEMES.map((theme) => (
+          <SelectableChip
+            key={theme}
+            label={theme}
+            selected={form.themes.includes(theme)}
+            onPress={() => toggleTheme(theme)}
+            style={styles.themeChip}
+            textStyle={styles.themeChipText}
+          />
+        ))}
+      </View>
+
+      <Text style={[styles.fieldLabel, { marginTop: SPACING.lg }]}>여행 요약</Text>
+      <View style={styles.summaryCard}>
+        <SummaryRow icon="pencil-outline" label="여행 이름" value={form.name || '-'} />
+        <SummaryRow
+          icon="calendar-outline"
+          label="일정"
+          value={
+            form.startDate && form.endDate
+              ? `${form.startDate.getMonth() + 1}월 ${form.startDate.getDate()}~${form.endDate.getDate()}일 (${nights}박 ${
+                  nights + 1
+                }일)`
+              : '-'
+          }
+        />
+        <SummaryRow icon="people-outline" label="인원" value={`${form.partySize}명`} />
+        <SummaryRow
+          icon="pricetags-outline"
+          label="테마"
+          value={form.themes.length > 0 ? form.themes.join(', ') : '미선택'}
+        />
+      </View>
+    </>
+  );
+
   return (
     <Modal
       visible={visible}
@@ -455,7 +685,15 @@ export default function NewTripModal({
       onRequestClose={handleClose}
     >
       <View style={styles.overlay}>
-        <View style={[styles.card, step === 'success' && styles.cardSuccess]}>
+        <View
+          style={[
+            styles.card,
+            // 웹 한 페이지 버전은 세 단계 내용이 다 붙어있어서 기존 60%
+            // 높이로는 너무 빡빡해 보여, 화면의 좀 더 많은 부분을 씁니다.
+            isSinglePage && { height: SCREEN_HEIGHT * 0.82 },
+            step === 'success' && styles.cardSuccess,
+          ]}
+        >
           {step !== 'success' && (
             <>
               <View style={styles.headerRow}>
@@ -480,317 +718,102 @@ export default function NewTripModal({
             </>
           )}
 
-          {step === 1 && <StepIndicator currentStep={1} label="기본 정보" />}
-          {step === 2 && <StepIndicator currentStep={2} label="일정" />}
-          {step === 3 && <StepIndicator currentStep={3} label="테마" />}
-
-          {/* ── STEP 1: 기본 정보 ─────────────────────────── */}
-          {step === 1 && (
+          {isSinglePage ? (
+            // 웹: 3단계 마법사 대신 한 페이지에 전부 이어붙입니다.
             <ScrollView
               style={styles.body}
               showsVerticalScrollIndicator={false}
               contentContainerStyle={{ paddingBottom: bottomScrollClearance }}
             >
-              <Text style={styles.fieldLabel}>
-                여행 이름 <Text style={styles.required}>*</Text>
-              </Text>
-              <View style={styles.inputWithCounter}>
-                <TextInput
-                  style={styles.textInput}
-                  placeholder="예) 전주 한옥마을 2박 3일"
-                  placeholderTextColor={COLORS.gray400}
-                  value={form.name}
-                  maxLength={24}
-                  onChangeText={(text) =>
-                    setForm((prev) => ({ ...prev, name: text }))
-                  }
-                />
-                <Text style={styles.charCount}>{form.name.length}/24</Text>
-              </View>
+              {nameFields}
+              <View style={{ height: 24 }} />
+              {scheduleFields}
+              <View style={{ height: 24 }} />
+              {themeFields}
 
               <View style={{ height: 24 }} />
               <PrimaryButton
-                label="다음 →"
-                disabled={!isStep1Valid}
-                onPress={() => setStep(2)}
+                label={mode === 'edit' ? '저장' : '여행 만들기'}
+                icon={mode !== 'edit'}
+                disabled={!(isStep1Valid && isStep2Valid)}
+                onPress={mode === 'edit' ? handleSave : handleCreate}
               />
               <View style={{ height: 20 }} />
             </ScrollView>
-          )}
+          ) : (
+            <>
+              {step === 1 && <StepIndicator currentStep={1} label="기본 정보" />}
+              {step === 2 && <StepIndicator currentStep={2} label="일정" />}
+              {step === 3 && <StepIndicator currentStep={3} label="테마" />}
 
-          {/* ── STEP 2: 일정 ──────────────────────────────── */}
-          {step === 2 && (
-            <ScrollView
-              style={styles.body}
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={{ paddingBottom: bottomScrollClearance }}
-            >
-              <Text style={styles.fieldLabel}>출발일</Text>
-
-              {(!form.startDate || !form.endDate) && (
-                <View style={styles.dateHintBadge}>
-                  <Text style={styles.dateHintText}>
-                    {!form.startDate
-                      ? '출발일을 선택하세요'
-                      : '도착일을 선택하세요'}
-                  </Text>
-                </View>
-              )}
-
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                style={styles.monthRow}
-              >
-                {months.map((m, idx) => (
-                  <TouchableOpacity
-                    key={`${m.year}-${m.month}`}
-                    style={[
-                      styles.monthChip,
-                      selectedMonthIdx === idx && styles.monthChipSelected,
-                    ]}
-                    onPress={() => setSelectedMonthIdx(idx)}
-                  >
-                    <Text
-                      style={[
-                        styles.monthChipText,
-                        selectedMonthIdx === idx && styles.monthChipTextSelected,
-                      ]}
-                    >
-                      {m.month + 1}월
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-
-              <View style={styles.weekdayRow}>
-                {['일', '월', '화', '수', '목', '금', '토'].map((d) => (
-                  <Text key={d} style={styles.weekdayText}>
-                    {d}
-                  </Text>
-                ))}
-              </View>
-
-              <View style={styles.calendarGrid}>
-                {calendarWeeks.map((week, weekIdx) => {
-                  const segments = buildWeekSegments(
-                    week,
-                    (date) =>
-                      isSameDate(date, form.startDate) ||
-                      isSameDate(date, form.endDate) ||
-                      isDateInRange(date, form.startDate, form.endDate),
-                  );
-
-                  return (
-                    <View key={weekIdx} style={styles.calendarWeekRow}>
-                      {segments.map((segment, segIdx) => {
-                        if (segment.type === 'blank') {
-                          return <View key={segIdx} style={styles.dayCell} />;
-                        }
-
-                        if (segment.type === 'day') {
-                          const { date } = segment;
-                          return (
-                            <TouchableOpacity
-                              key={segIdx}
-                              style={styles.dayCell}
-                              onPress={() => handleSelectDate(date)}
-                            >
-                              <View style={styles.dayCircle}>
-                                <Text style={styles.dayText}>
-                                  {date.getDate()}
-                                </Text>
-                              </View>
-                            </TouchableOpacity>
-                          );
-                        }
-
-                        // segment.type === 'range'
-                        const { dates } = segment;
-
-                        // 구간에 날짜가 1개뿐이면(도착일을 아직 안 고른 채
-                        // 출발일 하나만 선택된 상태) 이어줄 상대가 없으니
-                        // 트랙 없이 원 하나만 평소 달력 칸 크기로 그립니다.
-                        if (dates.length === 1) {
-                          const date = dates[0];
-                          return (
-                            <TouchableOpacity
-                              key={segIdx}
-                              style={styles.dayCell}
-                              onPress={() => handleSelectDate(date)}
-                            >
-                              <View style={[styles.dayCircle, styles.dayCircleSelected]}>
-                                <Text style={[styles.dayText, styles.dayTextSelected]}>
-                                  {date.getDate()}
-                                </Text>
-                              </View>
-                            </TouchableOpacity>
-                          );
-                        }
-
-                        const trackInset = CALENDAR_CELL_WIDTH / 2;
-                        return (
-                          <View
-                            key={segIdx}
-                            style={[
-                              styles.rangeTrack,
-                              { width: CALENDAR_CELL_WIDTH * dates.length },
-                            ]}
-                          >
-                            <View
-                              style={[
-                                styles.rangeTrackBackground,
-                                { left: trackInset, right: trackInset },
-                              ]}
-                            />
-                            {dates.map((date) => {
-                              const isEndpoint =
-                                isSameDate(date, form.startDate) ||
-                                isSameDate(date, form.endDate);
-                              return (
-                                <TouchableOpacity
-                                  key={date.getTime()}
-                                  style={styles.rangeTrackCell}
-                                  onPress={() => handleSelectDate(date)}
-                                >
-                                  {isEndpoint ? (
-                                    <View
-                                      style={[styles.dayCircle, styles.dayCircleSelected]}
-                                    >
-                                      <Text
-                                        style={[styles.dayText, styles.dayTextSelected]}
-                                      >
-                                        {date.getDate()}
-                                      </Text>
-                                    </View>
-                                  ) : (
-                                    <Text style={styles.dayText}>{date.getDate()}</Text>
-                                  )}
-                                </TouchableOpacity>
-                              );
-                            })}
-                          </View>
-                        );
-                      })}
-                    </View>
-                  );
-                })}
-              </View>
-
-              <Text style={styles.fieldLabel}>여행 기간</Text>
-              <View style={styles.stepperRow}>
-                <View style={styles.partyLabelRow}>
-                  <Ionicons
-                    name="calendar-outline"
-                    size={16}
-                    color={COLORS.black}
-                  />
-                  <Text style={styles.stepperLabel}>
-                    {form.startDate && form.endDate
-                      ? `${form.startDate.getMonth() + 1}월 ${form.startDate.getDate()}일 → ${
-                          form.endDate.getMonth() + 1
-                        }월 ${form.endDate.getDate()}일 (${nights}박 ${nights + 1}일)`
-                      : '-'}
-                  </Text>
-                </View>
-              </View>
-
-              <Text style={styles.fieldLabel}>여행 인원</Text>
-              <View style={styles.stepperRow}>
-                <View style={styles.partyLabelRow}>
-                  <Ionicons name="people-outline" size={18} color={COLORS.black} />
-                  <Text style={styles.stepperLabel}>
-                    {getPartySizeLabel(form.partySize)}
-                  </Text>
-                </View>
-                <Stepper
-                  value={form.partySize}
-                  min={1}
-                  max={20}
-                  onChange={(v) => setForm((prev) => ({ ...prev, partySize: v }))}
-                />
-              </View>
-
-              <View style={{ height: 24 }} />
-              <View style={styles.footerRow}>
-                <TouchableOpacity style={styles.backButton} onPress={() => setStep(1)}>
-                  <Ionicons name="chevron-back" size={20} color={COLORS.black} />
-                </TouchableOpacity>
-                <View style={{ flex: 1, marginLeft: SPACING.sm }}>
+              {/* ── STEP 1: 기본 정보 ─────────────────────────── */}
+              {step === 1 && (
+                <ScrollView
+                  style={styles.body}
+                  showsVerticalScrollIndicator={false}
+                  contentContainerStyle={{ paddingBottom: bottomScrollClearance }}
+                >
+                  {nameFields}
+                  <View style={{ height: 24 }} />
                   <PrimaryButton
                     label="다음 →"
-                    disabled={!isStep2Valid}
-                    onPress={() => setStep(3)}
+                    disabled={!isStep1Valid}
+                    onPress={() => setStep(2)}
                   />
-                </View>
-              </View>
-              <View style={{ height: 20 }} />
-            </ScrollView>
-          )}
+                  <View style={{ height: 20 }} />
+                </ScrollView>
+              )}
 
-          {/* ── STEP 3: 테마 + 요약 ───────────────────────── */}
-          {step === 3 && (
-            <ScrollView
-              style={styles.body}
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={{ paddingBottom: bottomScrollClearance }}
-            >
-              <Text style={styles.fieldLabel}>
-                여행 테마 <Text style={styles.fieldLabelMuted}>(중복 선택 가능)</Text>
-              </Text>
-              <Text style={styles.fieldHint}>
-                선택한 테마를 바탕으로 장소 추천을 받을 수 있어요
-              </Text>
-              <View style={styles.chipWrap}>
-                {THEMES.map((theme) => (
-                  <SelectableChip
-                    key={theme}
-                    label={theme}
-                    selected={form.themes.includes(theme)}
-                    onPress={() => toggleTheme(theme)}
-                    style={styles.themeChip}
-                    textStyle={styles.themeChipText}
-                  />
-                ))}
-              </View>
+              {/* ── STEP 2: 일정 ──────────────────────────────── */}
+              {step === 2 && (
+                <ScrollView
+                  style={styles.body}
+                  showsVerticalScrollIndicator={false}
+                  contentContainerStyle={{ paddingBottom: bottomScrollClearance }}
+                >
+                  {scheduleFields}
+                  <View style={{ height: 24 }} />
+                  <View style={styles.footerRow}>
+                    <TouchableOpacity style={styles.backButton} onPress={() => setStep(1)}>
+                      <Ionicons name="chevron-back" size={20} color={COLORS.black} />
+                    </TouchableOpacity>
+                    <View style={{ flex: 1, marginLeft: SPACING.sm }}>
+                      <PrimaryButton
+                        label="다음 →"
+                        disabled={!isStep2Valid}
+                        onPress={() => setStep(3)}
+                      />
+                    </View>
+                  </View>
+                  <View style={{ height: 20 }} />
+                </ScrollView>
+              )}
 
-              <Text style={[styles.fieldLabel, { marginTop: SPACING.lg }]}>여행 요약</Text>
-              <View style={styles.summaryCard}>
-                <SummaryRow icon="pencil-outline" label="여행 이름" value={form.name || '-'} />
-                <SummaryRow
-                  icon="calendar-outline"
-                  label="일정"
-                  value={
-                    form.startDate && form.endDate
-                      ? `${form.startDate.getMonth() + 1}월 ${form.startDate.getDate()}~${form.endDate.getDate()}일 (${nights}박 ${
-                          nights + 1
-                        }일)`
-                      : '-'
-                  }
-                />
-                <SummaryRow icon="people-outline" label="인원" value={`${form.partySize}명`} />
-                <SummaryRow
-                  icon="pricetags-outline"
-                  label="테마"
-                  value={form.themes.length > 0 ? form.themes.join(', ') : '미선택'}
-                />
-              </View>
-
-              <View style={{ height: 24 }} />
-              <View style={styles.footerRow}>
-                <TouchableOpacity style={styles.backButton} onPress={() => setStep(2)}>
-                  <Ionicons name="chevron-back" size={20} color={COLORS.black} />
-                </TouchableOpacity>
-                <View style={{ flex: 1, marginLeft: SPACING.sm }}>
-                  <PrimaryButton
-                    label={mode === 'edit' ? '저장' : '여행 만들기'}
-                    icon={mode !== 'edit'}
-                    onPress={mode === 'edit' ? handleSave : handleCreate}
-                  />
-                </View>
-              </View>
-              <View style={{ height: 20 }} />
-            </ScrollView>
+              {/* ── STEP 3: 테마 + 요약 ───────────────────────── */}
+              {step === 3 && (
+                <ScrollView
+                  style={styles.body}
+                  showsVerticalScrollIndicator={false}
+                  contentContainerStyle={{ paddingBottom: bottomScrollClearance }}
+                >
+                  {themeFields}
+                  <View style={{ height: 24 }} />
+                  <View style={styles.footerRow}>
+                    <TouchableOpacity style={styles.backButton} onPress={() => setStep(2)}>
+                      <Ionicons name="chevron-back" size={20} color={COLORS.black} />
+                    </TouchableOpacity>
+                    <View style={{ flex: 1, marginLeft: SPACING.sm }}>
+                      <PrimaryButton
+                        label={mode === 'edit' ? '저장' : '여행 만들기'}
+                        icon={mode !== 'edit'}
+                        onPress={mode === 'edit' ? handleSave : handleCreate}
+                      />
+                    </View>
+                  </View>
+                  <View style={{ height: 20 }} />
+                </ScrollView>
+              )}
+            </>
           )}
 
           {/* ── SUCCESS: 여행 생성 완료 ─────────────────────
@@ -905,7 +928,7 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.md,
   },
   headerTitle: {
-    fontSize: 17,
+    fontSize: 15,
     fontWeight: '700',
     color: COLORS.black,
   },
@@ -930,7 +953,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.accent,
   },
   stepCircleText: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
     color: COLORS.gray400,
   },
@@ -945,12 +968,12 @@ const styles = StyleSheet.create({
   },
   stepLabel: {
     marginLeft: SPACING.sm,
-    fontSize: 12,
+    fontSize: 11,
     color: COLORS.gray500,
   },
   body: { flex: 1 },
   fieldLabel: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
     color: COLORS.black,
     marginTop: SPACING.md,
@@ -959,10 +982,10 @@ const styles = StyleSheet.create({
   fieldLabelMuted: {
     fontWeight: '400',
     color: COLORS.gray400,
-    fontSize: 12,
+    fontSize: 11,
   },
   fieldHint: {
-    fontSize: 12,
+    fontSize: 11,
     color: COLORS.gray400,
     marginTop: -4,
     marginBottom: SPACING.sm,
@@ -979,7 +1002,7 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.sm,
   },
   dateHintText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '700',
     color: COLORS.accent,
   },
@@ -988,7 +1011,7 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.card,
     paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.sm * 1.5,
-    fontSize: 15,
+    fontSize: 14,
     color: COLORS.black,
   },
   inputWithCounter: {
@@ -998,7 +1021,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: 14,
     bottom: 12,
-    fontSize: 11,
+    fontSize: 10,
     color: COLORS.gray400,
   },
   chipWrap: {
@@ -1023,10 +1046,10 @@ const styles = StyleSheet.create({
     paddingVertical: SPACING.sm * 1.1,
   },
   themeChipText: {
-    fontSize: 14,
+    fontSize: 13,
   },
   chipText: {
-    fontSize: 13,
+    fontSize: 12,
     color: COLORS.gray500,
   },
   chipTextSelected: {
@@ -1048,7 +1071,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.accent,
   },
   monthChipText: {
-    fontSize: 13,
+    fontSize: 12,
     color: COLORS.gray500,
   },
   monthChipTextSelected: {
@@ -1062,7 +1085,7 @@ const styles = StyleSheet.create({
   weekdayText: {
     flex: 1,
     textAlign: 'center',
-    fontSize: 12,
+    fontSize: 11,
     color: COLORS.gray400,
   },
   calendarGrid: {},
@@ -1088,7 +1111,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.accent,
   },
   dayText: {
-    fontSize: 13,
+    fontSize: 12,
     color: COLORS.black,
   },
   dayTextSelected: {
@@ -1124,7 +1147,7 @@ const styles = StyleSheet.create({
     paddingVertical: SPACING.sm * 1.8,
   },
   stepperLabel: {
-    fontSize: 13,
+    fontSize: 12,
     color: COLORS.black,
     flexShrink: 1,
   },
@@ -1148,7 +1171,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   stepperValue: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '700',
     color: COLORS.black,
     minWidth: 16,
@@ -1167,12 +1190,12 @@ const styles = StyleSheet.create({
     gap: SPACING.sm,
   },
   summaryLabel: {
-    fontSize: 12,
+    fontSize: 11,
     color: COLORS.gray400,
     width: 56,
   },
   summaryValue: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
     color: COLORS.black,
     flex: 1,
@@ -1202,12 +1225,12 @@ const styles = StyleSheet.create({
   },
   primaryButtonText: {
     color: COLORS.white,
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '700',
   },
   primaryButtonTextDisabled: {
     color: COLORS.gray400,
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '700',
   },
   successBody: {

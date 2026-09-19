@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -112,6 +113,77 @@ function MemoEditorModal({
   );
 }
 
+type ActionSheetOption = {
+  text: string;
+  onPress?: () => void;
+  style?: 'cancel' | 'destructive';
+};
+
+type ActionSheetState = {
+  title: string;
+  message: string;
+  options: ActionSheetOption[];
+} | null;
+
+/**
+ * react-native-web의 Alert.alert()는 아무 동작도 안 하는 빈 함수라서
+ * (react-native-web/src/exports/Alert), 웹에서는 스톱의 "순서 변경/삭제"
+ * 메뉴가 완전히 먹통이었습니다. 네이티브의 Alert.alert(title, message,
+ * options) 호출부는 그대로 두고, 웹에서만 이 모달로 똑같은 옵션 목록을
+ * 보여줍니다.
+ */
+function ActionSheetModal({
+  state,
+  onDismiss,
+}: {
+  state: ActionSheetState;
+  onDismiss: () => void;
+}) {
+  return (
+    <Modal visible={!!state} transparent animationType="fade" onRequestClose={onDismiss}>
+      <Pressable style={styles.actionSheetBackdrop} onPress={onDismiss}>
+        <Pressable style={styles.actionSheetCard} onPress={() => {}}>
+          {state && (
+            <>
+              <Text allowFontScaling={false} style={styles.actionSheetTitle}>
+                {state.title}
+              </Text>
+              <Text allowFontScaling={false} style={styles.actionSheetMessage}>
+                {state.message}
+              </Text>
+
+              {state.options.map((option, index) => (
+                <Pressable
+                  key={`${option.text}-${index}`}
+                  onPress={() => {
+                    onDismiss();
+                    option.onPress?.();
+                  }}
+                  style={({ pressed }) => [
+                    styles.actionSheetOption,
+                    pressed && styles.cardPressed,
+                  ]}
+                >
+                  <Text
+                    allowFontScaling={false}
+                    style={[
+                      styles.actionSheetOptionText,
+                      option.style === 'destructive' && styles.actionSheetOptionTextDestructive,
+                      option.style === 'cancel' && styles.actionSheetOptionTextCancel,
+                    ]}
+                  >
+                    {option.text}
+                  </Text>
+                </Pressable>
+              ))}
+            </>
+          )}
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
 export type RoutePlanViewProps = {
   hasTrip: boolean;
   tripId?: string;
@@ -149,6 +221,18 @@ export function RoutePlanView({
   const [memoModalVisible, setMemoModalVisible] = useState(false);
   const [activeStopId, setActiveStopId] = useState<string | null>(null);
   const [memoDraft, setMemoDraft] = useState('');
+  const [webActionSheet, setWebActionSheet] = useState<ActionSheetState>(null);
+
+  // Alert.alert(title, message, options)의 웹/네이티브 공용 래퍼입니다.
+  // react-native-web의 Alert.alert는 빈 함수라 웹에서는 ActionSheetModal로
+  // 대체합니다(위 ActionSheetModal 설명 참고).
+  const confirmDialog = useCallback((title: string, message: string, options: ActionSheetOption[]) => {
+    if (Platform.OS === 'web') {
+      setWebActionSheet({ title, message, options });
+      return;
+    }
+    Alert.alert(title, message, options);
+  }, []);
 
   // 메모를 AsyncStorage에 저장해서, 일정/지도 탭을 오가며 이 컴포넌트가
   // 언마운트-리마운트돼도(my-route.tsx가 탭에 따라 조건부로 렌더링함) 메모가
@@ -261,7 +345,7 @@ export function RoutePlanView({
         onPress: () => {
           if (stop.clips.length > 0) {
             // 클립이 있으면 한 번 더 확인 — 같이 지워진다는 걸 명확히 알려줍니다.
-            Alert.alert(
+            confirmDialog(
               '이 장소를 삭제할까요?',
               `촬영된 클립 ${stop.clips.length}개도 함께 삭제되고, 복구할 수 없어요.`,
               [
@@ -276,9 +360,9 @@ export function RoutePlanView({
       });
       options.push({ text: '취소', style: 'cancel' });
 
-      Alert.alert(stop.name, '순서를 바꾸거나 삭제할 수 있어요.', options);
+      confirmDialog(stop.name, '순서를 바꾸거나 삭제할 수 있어요.', options);
     },
-    [dayStops.length, moveStop, deleteStop],
+    [dayStops.length, moveStop, deleteStop, confirmDialog],
   );
 
   const activeStop = useMemo(
@@ -321,11 +405,7 @@ export function RoutePlanView({
   if (!hasTrip) {
     return (
       <View style={styles.planEmptyState}>
-        <Image
-          source={require('@/assets/images/HanOk.png')}
-          style={{ width: 32, height: 32 }}
-          contentFit="contain"
-        />
+        <Ionicons name="map-outline" size={32} color={COLORS.textTertiary} />
         <Text allowFontScaling={false} style={styles.planEmptyTitle}>
           선택된 여행이 없어요
         </Text>
@@ -505,6 +585,8 @@ export function RoutePlanView({
           onClose={closeMemoEditor}
         />
       ) : null}
+
+      <ActionSheetModal state={webActionSheet} onDismiss={() => setWebActionSheet(null)} />
     </View>
   );
 }
@@ -528,7 +610,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 40,
-    paddingBottom: 120,
+    // 네이티브는 하단에 떠 있는 지도/일정 캡슐 버튼에 안 가리게 여백을
+    // 남겨두는데, 웹은 그 버튼이 상단으로 옮겨가서(WebRouteSwitch) 이
+    // 여백이 필요 없습니다 — 오히려 화면 중앙보다 위로 치우쳐 보이게 합니다.
+    paddingBottom: Platform.OS === 'web' ? 0 : 120,
     gap: SPACING.sm,
   },
 
@@ -885,5 +970,46 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 17,
     fontWeight: '800',
+  },
+
+  actionSheetBackdrop: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0,0,0,0.4)',
+  },
+  actionSheetCard: {
+    backgroundColor: COLORS.background,
+    borderTopLeftRadius: RADIUS.sheet,
+    borderTopRightRadius: RADIUS.sheet,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 32,
+  },
+  actionSheetTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: COLORS.textPrimary,
+  },
+  actionSheetMessage: {
+    marginTop: 4,
+    marginBottom: 12,
+    fontSize: 12,
+    color: COLORS.textSecondary,
+  },
+  actionSheetOption: {
+    paddingVertical: 14,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+  },
+  actionSheetOptionText: {
+    fontSize: 15,
+    color: COLORS.textPrimary,
+    textAlign: 'center',
+  },
+  actionSheetOptionTextDestructive: {
+    color: '#E14D3F',
+  },
+  actionSheetOptionTextCancel: {
+    color: COLORS.textSecondary,
   },
 });

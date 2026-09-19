@@ -18,7 +18,7 @@ import { Ionicons, Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as MediaLibrary from 'expo-media-library/legacy';
 
 import { ClipPreviewModal } from '@/components/ClipPreview/ClipPreviewModal'
-import { HapticPressable } from '@/components/common';
+import { HapticPressable, ScreenHeader } from '@/components/common';
 import { deleteRecording, getRecordingsByFolder } from '@/services/recordingService';
 import { useTripStore } from '@/store/useTripStore';
 import { ClipItem } from '@/types/home';
@@ -275,59 +275,91 @@ export default function ClipSelectScreen() {
     );
   };
 
+  const runDeleteClip = async (targetClip: ClipItem) => {
+    try {
+      await deleteRecording(targetClip.id);
+
+      // 서버에도 삭제 반영 시도 (실패해도 로컬 삭제는 이미 끝났으니 무시)
+      if (targetClip.serverId) {
+        try {
+          await apiFetch(`/clips/${targetClip.serverId}`, {
+            method: 'DELETE',
+          });
+        } catch (serverError) {
+          console.error('[handleDelete] 서버 클립 삭제 실패:', serverError);
+        }
+      } else {
+        console.warn('[handleDelete] serverId가 없어 서버 삭제를 건너뜁니다.');
+      }
+
+      setClips((prev) => prev.filter((c) => c.id !== targetClip.id));
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        next.delete(targetClip.id);
+        return next;
+      });
+    } catch (error) {
+      console.error('[handleDelete] 실패:', error);
+      if (Platform.OS === 'web') {
+        window.alert('삭제 실패');
+      } else {
+        Alert.alert('삭제 실패');
+      }
+    }
+  };
+
   const handleDelete = () => {
     if (!selectedMenuClip) return;
     const targetClip = selectedMenuClip;
     setSelectedMenuClip(null);
+
+    // react-native-web의 Alert.alert는 빈 함수라 웹에서는 확인창이 아예
+    // 안 떴습니다 — window.confirm으로 대체합니다.
+    if (Platform.OS === 'web') {
+      if (window.confirm(`${targetClip.title} 클립을 삭제할까요?`)) {
+        void runDeleteClip(targetClip);
+      }
+      return;
+    }
 
     Alert.alert(
       '클립 삭제',
       `${targetClip.title} 클립을 삭제할까요?`,
       [
         {text: '취소', style: 'cancel'},
-        {
-          text: '삭제', style: 'destructive', onPress: async () => {
-            try {
-              await deleteRecording(targetClip.id);
-
-              // 서버에도 삭제 반영 시도 (실패해도 로컬 삭제는 이미 끝났으니 무시)
-              if (targetClip.serverId) {
-                try {
-                  await apiFetch(`/clips/${targetClip.serverId}`, {
-                    method: 'DELETE',
-                  });
-                } catch (serverError) {
-                  console.error('[handleDelete] 서버 클립 삭제 실패:', serverError);
-                }
-              } else {
-                console.warn('[handleDelete] serverId가 없어 서버 삭제를 건너뜁니다.');
-              }
-
-              setClips((prev) => prev.filter((c) => c.id !== targetClip.id));
-              setSelectedIds((prev) => {
-                const next = new Set(prev);
-                next.delete(targetClip.id);
-                return next;
-              });
-            } catch (error) {
-              console.error('[handleDelete] 실패:', error);
-              Alert.alert(
-                '삭제 실패',
-              );
-            }
-          },
-        },
+        {text: '삭제', style: 'destructive', onPress: () => void runDeleteClip(targetClip)},
       ],
     );
   };
 
+  const goToVideoEdit = () => {
+    const clipIdList = selectedClips.map((clip) => clip.id).join(',');
+    router.push({
+      pathname: '/video-edit',
+      params: {
+        clipIds: clipIdList,
+        folderId: folderId,
+      },
+    });
+  };
+
   const handleComplete = () => {
     if (selectedCount === 0) {
-      Alert.alert(
-        '선택된 클립이 없습니다',
-        '영상에 사용할 클립을 한 개 이상 선택해주세요.',
-      );
+      if (Platform.OS === 'web') {
+        window.alert('영상에 사용할 클립을 한 개 이상 선택해주세요.');
+      } else {
+        Alert.alert(
+          '선택된 클립이 없습니다',
+          '영상에 사용할 클립을 한 개 이상 선택해주세요.',
+        );
+      }
+      return;
+    }
 
+    if (Platform.OS === 'web') {
+      if (window.confirm(`${selectedCount}개의 클립으로 영상을 생성할까요?`)) {
+        goToVideoEdit();
+      }
       return;
     }
 
@@ -336,58 +368,14 @@ export default function ClipSelectScreen() {
       `${selectedCount}개의 클립으로 영상을 생성할까요?`,
       [
         { text: '취소', style: 'cancel' },
-        {
-          text: '생성하기',
-          onPress: () => {
-            const clipIdList = selectedClips
-              .map((clip) => clip.id)
-              .join(',');
-            
-            router.push({
-              pathname: '/video-edit',
-              params: {
-                clipIds: clipIdList,
-                folderId: folderId,
-              },
-            });
-          },
-        },
+        { text: '생성하기', onPress: goToVideoEdit },
       ],
     );
   };
 
   return (
     <View style={styles.screen}>
-      <View
-        style={[
-          styles.header,
-          {
-            paddingTop: insets.top + 10,
-          },
-        ]}
-      >
-        <Pressable
-          hitSlop={12}
-          onPress={() => router.back()}
-          style={styles.headerButton}
-        >
-          <Ionicons
-            name="chevron-back"
-            size={25}
-            color={COLORS.textPrimary}
-          />
-        </Pressable>
-
-        <Text
-          allowFontScaling={false}
-          style={styles.headerTitle}
-        >
-          클립 선택
-        </Text>
-
-        {/* 뒤로가기 버튼과의 좌우 균형을 위한 빈 자리 */}
-        <View style={styles.headerButton} />
-      </View>
+      <ScreenHeader title="클립 선택" />
 
       <View style={styles.selectionToolbar}>
         <Pressable
@@ -409,7 +397,13 @@ export default function ClipSelectScreen() {
         renderItem={({ item }) => renderSingleClip(item)}
         contentContainerStyle={[
           styles.listContent,
-          { paddingBottom: FOOTER_HEIGHT + insets.bottom + 16 },
+          {
+            paddingBottom:
+              FOOTER_HEIGHT +
+              insets.bottom +
+              16 +
+              (Platform.OS === 'web' ? SPACING.md : 0),
+          },
         ]}
       />
 
@@ -427,7 +421,13 @@ export default function ClipSelectScreen() {
         </View>
       )}
 
-      <View style={[styles.footer, { paddingBottom: insets.bottom }]}>
+      <View
+        style={[
+          styles.footer,
+          Platform.OS === 'web' && styles.footerWeb,
+          { paddingBottom: insets.bottom },
+        ]}
+      >
         <View style={styles.footerInfo}>
           <View style={styles.footerRow}>
             <Text style={styles.footerLabel}>클립 개수</Text>
@@ -446,6 +446,7 @@ export default function ClipSelectScreen() {
         <HapticPressable
           style={[
             styles.createButton,
+            Platform.OS === 'web' && styles.createButtonWeb,
             selectedCount === 0 && styles.createButtonDisabled,
           ]}
           disabled={selectedCount === 0}
@@ -514,34 +515,6 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
   },
 
-  header: {
-    minHeight: 92,
-    paddingHorizontal: SPACING.md,
-    paddingBottom: SPACING.md,
-
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'space-between',
-
-    backgroundColor: COLORS.background,
-  },
-    headerButton: {
-    width: 48,
-    height: 42,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerTitle: {
-    paddingBottom: SPACING.sm,
-
-    color: COLORS.textPrimary,
-
-    fontSize: 19,
-    lineHeight: 25,
-    fontWeight: '700',
-
-    letterSpacing: -0.4,
-  },
   selectionToolbar: {
     paddingHorizontal: SPACING.lg,
     paddingTop: SPACING.xs,
@@ -896,6 +869,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.screenH,
     paddingTop: SPACING.md,
   },
+  // 웹에서는 바닥에 붙는 바 대신 여백을 두고 뜬 카드 형태로 보이도록,
+  // 테두리선을 없애고 둥근 모서리 + 좌우/하단 여백을 줍니다.
+  footerWeb: {
+    left: SPACING.md,
+    right: SPACING.md,
+    bottom: SPACING.md,
+    minHeight: 80,
+    borderRadius: RADIUS.banner,
+    borderTopWidth: 0,
+    paddingTop: SPACING.sm,
+  },
   footerInfo: {
     flex: 1,
     gap: SPACING.xs,
@@ -920,6 +904,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.md,
     borderRadius: RADIUS.card,
+  },
+  // 플로팅 카드가 낮아진 만큼 버튼 세로 크기도 같이 줄입니다.
+  createButtonWeb: {
+    paddingVertical: 11,
   },
   createButtonDisabled: {
     backgroundColor: '#FFB8A4',

@@ -24,6 +24,8 @@ import { COLORS as SHARED_COLORS } from '@/constants/color';
 import { getRecordingsByFolder } from '@/services/recordingService';
 import { getAllFolders } from '@/services/folderService';
 import { apiFetch } from '@/services/api';
+import { Platform } from 'react-native';
+
 
 const COLORS = {
   background: SHARED_COLORS.background,
@@ -272,6 +274,7 @@ function uploadFormData(
   });
 }
 
+// [앱 -> 웹에 따른 함수 로직 변경] 20260918
 async function renderVideo(exportData: {
   folderId?: string;
   clips: {
@@ -285,7 +288,6 @@ async function renderVideo(exportData: {
     timeStyle: TextElementStyle;
     placeStyle: TextElementStyle;
   };
-  
 }): Promise<{ success: boolean; message?: string; videoUri?: string }> {
   if (!process.env.EXPO_PUBLIC_SERVER_URL) {
     return { success: false, message: '.env에 EXPO_PUBLIC_SERVER_URL이 설정되어 있지 않습니다. .env.example을 참고해 자신의 PC IP로 채워주세요.' };
@@ -295,14 +297,15 @@ async function renderVideo(exportData: {
   try {
     const formData = new FormData();
 
-    for (let i=0; i<exportData.clips.length; i++) {
+    for (let i = 0; i < exportData.clips.length; i++) {
       const clip = exportData.clips[i];
       if (!clip.videoUri) continue;
 
+      // [변경] 카메라 녹화 포맷(webm)에 맞춰 확장자와 MIME 타입 수정
       formData.append('videos', {
         uri: clip.videoUri,
-        name: `${clip.id}.mp4`,
-        type: 'video/mp4',
+        name: `${clip.id}.webm`,
+        type: 'video/webm',
       } as any);
     }
 
@@ -334,33 +337,43 @@ async function renderVideo(exportData: {
     }
 
     if (result.downloadUrl) {
-      const localPath = FileSystem.documentDirectory + `output_${Date.now()}.mp4`;
-      const downloadResult = await FileSystem.downloadAsync(result.downloadUrl, localPath);
+      // [변경] 웹 환경일 경우 a 태그를 활용한 브라우저 다운로드 실행
+      if (Platform.OS === 'web') {
+        const link = document.createElement('a');
+        link.href = result.downloadUrl;
+        // [변경] 서버 병합 최종 결과물에 따라 .mp4 확장자 지정
+        link.download = `output_${Date.now()}.mp4`; 
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
 
-      // 파일이 실제로 존재하고 크기가 있는지 확인
-      const fileInfo = await FileSystem.getInfoAsync(downloadResult.uri);
+        return { success: true, videoUri: result.downloadUrl };
+      } else {
+        // 모바일 환경은 기존 expo-file-system 다운로드 로직 수행
+        const localPath = FileSystem.documentDirectory + `output_${Date.now()}.mp4`;
+        const downloadResult = await FileSystem.downloadAsync(result.downloadUrl, localPath);
 
-      if (!fileInfo.exists || fileInfo.size === 0) {
-        return { success: false, message: '다운로드된 파일이 비어있습니다.' };
-      }
+        const fileInfo = await FileSystem.getInfoAsync(downloadResult.uri);
 
-      // 갤러리 저장
-      const { status } = await MediaLibrary.requestPermissionsAsync(true);
-      if (status !== 'granted') {
-        return {
-          success: false,
-          message: '갤러리 접근 권한이 필요합니다.'
-        };
-      }
+        if (!fileInfo.exists || fileInfo.size === 0) {
+          return { success: false, message: '다운로드된 파일이 비어있습니다.' };
+        }
 
-      try {
-        const asset = await MediaLibrary.createAssetAsync(downloadResult.uri);
-        return { success: true, videoUri: asset.uri };
-      } catch (assetError) {
-        // createAssetAsync가 에러를 던져도 실제로는 파일이 저장된 경우가
-        // 있어서(iOS 알려진 이슈), 일단 성공으로 처리합니다.
-        console.error('[renderVideo] createAssetAsync 실패(저장은 됐을 수 있음):', assetError);
-        return { success: true, videoUri: undefined };
+        const { status } = await MediaLibrary.requestPermissionsAsync(true);
+        if (status !== 'granted') {
+          return {
+            success: false,
+            message: '갤러리 접근 권한이 필요합니다.'
+          };
+        }
+
+        try {
+          const asset = await MediaLibrary.createAssetAsync(downloadResult.uri);
+          return { success: true, videoUri: asset.uri };
+        } catch (assetError) {
+          console.error('[renderVideo] createAssetAsync 실패(저장은 됐을 수 있음):', assetError);
+          return { success: true, videoUri: undefined };
+        }
       }
     }
 

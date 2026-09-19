@@ -1,6 +1,7 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import {
   FlatList,
+  Platform,
   StyleSheet,
   View,
 } from 'react-native';
@@ -101,10 +102,14 @@ export default function MyRoutesScreen() {
 
   return (
     <View style={styles.screen}>
-      <ScreenHeader title="내 여행" />
+      <ScreenHeader
+        title="내 여행"
+        align={Platform.OS === 'web' ? 'left' : 'center'}
+        hideBack={Platform.OS === 'web'}
+      />
 
       <View style={styles.body}>
-        <View style={styles.tabs}>
+        <View style={[styles.tabs, Platform.OS === 'web' && styles.tabsWeb]}>
           <FilterChip
             label="전체"
             active={tab === 'all'}
@@ -182,7 +187,11 @@ function FilterChip({
 }) {
   return (
     <HapticPressable
-      style={[styles.chip, active && styles.chipActive]}
+      style={[
+        styles.chip,
+        Platform.OS === 'web' && styles.chipWeb,
+        active && styles.chipActive,
+      ]}
       onPress={onPress}
     >
       <Text
@@ -213,6 +222,16 @@ const styles = StyleSheet.create({
     gap: 8,
     marginBottom: 14,
   },
+  // 내 경로 화면의 지도/일정 캡슐 바(webRouteSwitch)와 높이·위치를 맞춘
+  // 웹 전용 오버라이드입니다 — 헤더 바로 아래 같은 간격(SPACING.md)을 두고,
+  // 칩 높이도 캡슐 버튼 높이(26px)에 맞춥니다.
+  tabsWeb: {
+    marginTop: SPACING.md,
+    marginBottom: SPACING.md,
+    // body의 paddingHorizontal(16)이 헤더 좌우 여백(18)이랑 2px 안 맞아서
+    // 태그 줄만 살짝 밀어 맞춥니다.
+    marginHorizontal: 2,
+  },
 
   listContent: {
     flexGrow: 1,
@@ -235,6 +254,10 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bg,
     borderWidth: 1,
     borderColor: colors.border,
+  },
+  // 클립 관리 화면의 필터 태그(filterChipWeb)와 같은 스타일로 맞췄습니다.
+  chipWeb: {
+    height: 36,
   },
 
   chipActive: {

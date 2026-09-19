@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { StyleSheet, View, ScrollView, Pressable, Alert } from 'react-native';
+import { StyleSheet, View, ScrollView, Pressable, Alert, Platform } from 'react-native';
 import { Image } from 'expo-image';
 import * as SecureStore from '@/services/secureStorage';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -13,6 +13,7 @@ import { getAllRecordings } from '@/services/recordingService';
 import { useProfileStore, hydrateProfile } from '@/store/useProfileStore';
 import { useAuthStore } from '@/store/useAuthStore';
 import { clearCurrentTrip } from '@/store/useTripStore';
+import { useWebMenuStore } from '@/store/useWebMenuStore';
 
 export default function MyPageScreen() {
   const router = useRouter();
@@ -50,33 +51,40 @@ export default function MyPageScreen() {
     }, []),
   );
 
+  const performLogout = async () => {
+    await SecureStore.deleteItemAsync('access_token');
+    await SecureStore.deleteItemAsync('user_id');
+    await SecureStore.deleteItemAsync('nickname');
+
+    // 화면이 넘어가기 전에 여기서 프로필을 기본값으로 리셋하면, 아직
+    // 마이페이지가 화면에 떠있는 짧은 순간 동안 "텅굴이"(기본 닉네임)로
+    // 바뀐 인사말이 한 프레임 보였다가 사라집니다. onboarding으로 먼저
+    // 넘어간 뒤에 정리해서 그 깜빡임을 없앱니다.
+    useAuthStore.getState().setLoggedIn(false);
+    router.replace('/onboarding');
+
+    // useTripStore/useProfileStore는 메모리 캐시라 SecureStore를 지워도
+    // 자동으로 비워지지 않습니다. user_id가 사라진 상태에서 다시 채우면
+    // (getCurrentUserId()가 null을 반환하므로) 기본값으로 초기화됩니다 —
+    // 같은 기기에서 바로 다른 계정으로 로그인해도 방금 계정의 여행/프로필이
+    // 화면에 남아있지 않도록 합니다.
+    await clearCurrentTrip();
+    await hydrateProfile();
+  };
+
   const handleLogout = () => {
+    // react-native-web의 Alert.alert는 빈 함수라(호출해도 아무 UI도 안 뜸),
+    // 웹에서는 로그아웃 버튼을 눌러도 확인창 없이 그냥 아무 반응이 없었습니다.
+    if (Platform.OS === 'web') {
+      if (window.confirm('로그아웃 하시겠어요?')) {
+        void performLogout();
+      }
+      return;
+    }
+
     Alert.alert('로그아웃', '로그아웃 하시겠어요?', [
       { text: '취소', style: 'cancel' },
-      {
-        text: '로그아웃',
-        style: 'destructive',
-        onPress: async () => {
-          await SecureStore.deleteItemAsync('access_token');
-          await SecureStore.deleteItemAsync('user_id');
-          await SecureStore.deleteItemAsync('nickname');
-
-          // 화면이 넘어가기 전에 여기서 프로필을 기본값으로 리셋하면, 아직
-          // 마이페이지가 화면에 떠있는 짧은 순간 동안 "텅굴이"(기본 닉네임)로
-          // 바뀐 인사말이 한 프레임 보였다가 사라집니다. onboarding으로 먼저
-          // 넘어간 뒤에 정리해서 그 깜빡임을 없앱니다.
-          useAuthStore.getState().setLoggedIn(false);
-          router.replace('/onboarding');
-
-          // useTripStore/useProfileStore는 메모리 캐시라 SecureStore를 지워도
-          // 자동으로 비워지지 않습니다. user_id가 사라진 상태에서 다시 채우면
-          // (getCurrentUserId()가 null을 반환하므로) 기본값으로 초기화됩니다 —
-          // 같은 기기에서 바로 다른 계정으로 로그인해도 방금 계정의 여행/프로필이
-          // 화면에 남아있지 않도록 합니다.
-          await clearCurrentTrip();
-          await hydrateProfile();
-        },
-      },
+      { text: '로그아웃', style: 'destructive', onPress: () => void performLogout() },
     ]);
   };
 
@@ -95,7 +103,18 @@ export default function MyPageScreen() {
               <Feather name="user" size={24} color={colors.textTertiary} />
             )}
           </View>
-          <Text style={styles.greetingText}>안녕하세요 {profile.nickname}님</Text>
+          <Text style={[styles.greetingText, { flex: 1 }]}>안녕하세요 {profile.nickname}님</Text>
+
+          {Platform.OS === 'web' && (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="메뉴"
+              hitSlop={12}
+              onPress={() => useWebMenuStore.getState().open()}
+            >
+              <Feather name="menu" size={23} color={colors.text} />
+            </Pressable>
+          )}
         </View>
 
         <View style={styles.section}>
