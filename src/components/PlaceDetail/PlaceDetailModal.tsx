@@ -118,7 +118,10 @@ export function PlaceDetailModal({
   // 팝업도 탭바 높이만큼 바닥에서 띄워주지 않으면 버튼이 탭바 뒤에 깔려서
   // 안 보입니다 — 탭바 쪽과 똑같은 공식으로 높이를 계산합니다.
   const insets = useSafeAreaInsets();
-  const tabBarHeight = 105 + (Platform.OS === 'android' ? insets.bottom * 0.1 : 0);
+  // 웹은 하단 탭바 대신 햄버거 메뉴를 쓰고 탭바 자체가 없어서(display:none),
+  // 이 자리를 띄워둘 필요가 없습니다.
+  const tabBarHeight =
+    Platform.OS === 'web' ? 0 : 105 + (Platform.OS === 'android' ? insets.bottom * 0.1 : 0);
 
   const [mounted, setMounted] = useState(false);
   const [snapshot, setSnapshot] = useState<{

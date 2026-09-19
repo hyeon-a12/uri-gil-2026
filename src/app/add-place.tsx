@@ -245,7 +245,7 @@ export default function AddPlaceScreen() {
                 style={({ pressed }) => [styles.menuButton, { top: insets.top + 10 }, pressed && styles.backButtonPressed]}
                 hitSlop={10}
               >
-                <Ionicons name="menu-outline" size={20} color={COLORS.textPrimary} />
+                <Ionicons name="menu-outline" size={23} color={COLORS.textPrimary} />
               </Pressable>
             )}
 

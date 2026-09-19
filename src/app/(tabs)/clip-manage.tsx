@@ -239,7 +239,10 @@ export default function ClipManageScreen() {
       >
         <View style={styles.folderCardTopRow}>
           <View style={styles.folderTitleRow}>
-            <Text style={styles.folderTitle} numberOfLines={1}>
+            <Text
+              style={[styles.folderTitle, Platform.OS === 'web' && styles.folderTitleWeb]}
+              numberOfLines={1}
+            >
               {item.title}
             </Text>
             {status && (
@@ -274,7 +277,7 @@ export default function ClipManageScreen() {
           </TouchableOpacity>
         </View>
 
-        <Text style={styles.folderSubText}>
+        <Text style={[styles.folderSubText, Platform.OS === 'web' && styles.folderSubTextWeb]}>
           {item.dateRange} · 클립 {item.clipCount}
         </Text>
 
@@ -652,6 +655,11 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: COLORS.textPrimary,
   },
+  // 내 여행 화면(ListRow)의 제목 스타일에 맞춥니다.
+  folderTitleWeb: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
   statusBadge: {
     paddingHorizontal: SPACING.sm,
     paddingVertical: 2,
@@ -679,6 +687,10 @@ const styles = StyleSheet.create({
     marginTop: SPACING.xs,
     fontSize: 13,
     color: COLORS.textSecondary,
+  },
+  // 내 여행 화면(ListRow)의 부제목 스타일에 맞춥니다.
+  folderSubTextWeb: {
+    fontSize: 12,
   },
   folderPreviewRow: {
     flexDirection: 'row',

@@ -12,6 +12,12 @@ import NewTripModal from '@/components/NewTripModal';
 import { useCreateTripModal } from '@/hooks/useCreateTripModal';
 import type { RecordingData } from '@/types/recording';
 import type { ClipItem } from '@/types/home';
+import {
+  PlaceDetailModal,
+  fetchKakaoPlaceInfo,
+  type KakaoPlaceInfo,
+  type PlaceDetailView,
+} from '@/components/PlaceDetail/PlaceDetailModal';
 
 /**
  * HomeScreen.tsx(네이티브, 전체화면 지도+바텀시트+AI추천 오버레이)의
@@ -71,6 +77,19 @@ interface RecommendedPlace {
 
 type TourCacheEntry = { timestamp: number; places: RecommendedPlace[] };
 
+// 네이티브 HomeScreen.tsx의 placeDetailFromRecommended와 동일한 매핑입니다
+// (distance는 km 단위라 PlaceDetailView가 기대하는 m 단위로 변환).
+function placeDetailFromRecommended(place: RecommendedPlace): PlaceDetailView {
+  return {
+    id: place.id,
+    name: place.name,
+    lat: place.lat,
+    lng: place.lng,
+    imageUrl: place.imageUrl,
+    distanceMeters: place.distance !== undefined ? place.distance * 1000 : undefined,
+  };
+}
+
 function getDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
   const R = 6371.0;
   const dLat = (lat2 - lat1) * (Math.PI / 180);
@@ -93,6 +112,20 @@ async function fetchSpotPhoto(keyword: string) {
   } catch {
     return null;
   }
+}
+
+// 카카오 로컬 API는 사진을 안 주고, 관광공사 사진 API도 음식점/카페 같은
+// 일반 장소는 거의 못 찾습니다 — 실제 사진 대신, 그 위치를 보여주는
+// OpenStreetMap 타일 이미지를 카드 사진 자리에 대신 씁니다(별도 API 키
+// 필요 없는 무료 타일 서버). 표준 슬리피맵 타일 좌표 변환 공식입니다.
+function buildOsmTileUrl(lat: number, lng: number, zoom = 16): string {
+  const n = 2 ** zoom;
+  const x = Math.floor(((lng + 180) / 360) * n);
+  const latRad = (lat * Math.PI) / 180;
+  const y = Math.floor(
+    ((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) * n,
+  );
+  return `https://tile.openstreetmap.org/${zoom}/${x}/${y}.png`;
 }
 
 async function fetchKakaoPlaces(
@@ -127,13 +160,18 @@ async function fetchKakaoPlaces(
     return await Promise.all(
       documents.map(async (doc, index) => {
         const photoInfo = await fetchSpotPhoto(doc.place_name);
+        const placeLat = parseFloat(doc.y);
+        const placeLng = parseFloat(doc.x);
         return {
           id: `${doc.id}_${index}`,
           name: doc.place_name,
-          imageUrl: photoInfo && photoInfo !== TOUR_API_ERROR ? photoInfo.galWebImageUrl : undefined,
+          imageUrl:
+            photoInfo && photoInfo !== TOUR_API_ERROR
+              ? photoInfo.galWebImageUrl
+              : buildOsmTileUrl(placeLat, placeLng),
           distance: doc.distance ? Number(doc.distance) / 1000 : undefined,
-          lat: parseFloat(doc.y),
-          lng: parseFloat(doc.x),
+          lat: placeLat,
+          lng: placeLng,
           category: tag,
         };
       }),
@@ -271,6 +309,32 @@ export default function HomeScreenWeb() {
   const [kakaoPlaces, setKakaoPlaces] = useState<RecommendedPlace[]>([]);
   const [isLoadingKakaoPlaces, setIsLoadingKakaoPlaces] = useState(false);
 
+  // 장소 카드를 누르면 뜨는 정보 팝업 — 네이티브 HomeScreen.tsx와 같은
+  // PlaceDetailModal을 그대로 재사용합니다.
+  const [viewingPlace, setViewingPlace] = useState<PlaceDetailView | null>(null);
+  const [placeExtraInfo, setPlaceExtraInfo] = useState<KakaoPlaceInfo | null>(null);
+  const [isLoadingPlaceInfo, setIsLoadingPlaceInfo] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+    (async () => {
+      if (!viewingPlace) {
+        setPlaceExtraInfo(null);
+        return;
+      }
+      setIsLoadingPlaceInfo(true);
+      setPlaceExtraInfo(null);
+      const info = await fetchKakaoPlaceInfo(viewingPlace.name, viewingPlace.lat, viewingPlace.lng);
+      if (isMounted) {
+        setPlaceExtraInfo(info);
+        setIsLoadingPlaceInfo(false);
+      }
+    })();
+    return () => {
+      isMounted = false;
+    };
+  }, [viewingPlace]);
+
   const loadTodayMoments = useCallback(async () => {
     if (!currentTrip) {
       setTodayMoments([]);
@@ -374,13 +438,18 @@ export default function HomeScreenWeb() {
           sortedSpots.map(async (spot: any, index: number) => {
             const photoInfo = await fetchSpotPhoto(spot.hubTatsNm);
             if (photoInfo === TOUR_API_ERROR) hadPhotoApiError = true;
+            const spotLat = parseFloat(spot.mapY);
+            const spotLng = parseFloat(spot.mapX);
             return {
               id: `${spot.hubTatsNm}_${index}`,
               name: spot.hubTatsNm,
-              imageUrl: photoInfo && photoInfo !== TOUR_API_ERROR ? photoInfo.galWebImageUrl : undefined,
+              imageUrl:
+                photoInfo && photoInfo !== TOUR_API_ERROR
+                  ? photoInfo.galWebImageUrl
+                  : buildOsmTileUrl(spotLat, spotLng),
               distance: spot.distance,
-              lat: parseFloat(spot.mapY),
-              lng: parseFloat(spot.mapX),
+              lat: spotLat,
+              lng: spotLng,
               category: spot.hubCtgryMclsNm || spot.hubCtgryLclsNm || undefined,
             };
           }),
@@ -501,7 +570,11 @@ export default function HomeScreenWeb() {
           ) : (
             <div className="uri-place-grid">
               {filteredPlaces.map((place) => (
-                <div key={place.id} className="uri-place-card">
+                <div
+                  key={place.id}
+                  className="uri-place-card"
+                  onClick={() => setViewingPlace(placeDetailFromRecommended(place))}
+                >
                   {place.imageUrl ? (
                     <RNImage source={{ uri: place.imageUrl }} style={styles.placeCardImage} />
                   ) : (
@@ -557,6 +630,13 @@ export default function HomeScreenWeb() {
       </div>
 
       <NewTripModal visible={createModalVisible} onClose={closeCreateModal} onCreated={handleCreatedTrip} />
+
+      <PlaceDetailModal
+        place={viewingPlace}
+        extraInfo={placeExtraInfo}
+        isLoadingExtraInfo={isLoadingPlaceInfo}
+        onClose={() => setViewingPlace(null)}
+      />
     </main>
   );
 }

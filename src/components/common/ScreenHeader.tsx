@@ -66,7 +66,7 @@ export function ScreenHeader({
             onPress={() => useWebMenuStore.getState().open()}
             style={styles.menuButton}
           >
-            <Ionicons name="menu-outline" size={22} color={colors.text} />
+            <Ionicons name="menu-outline" size={23} color={colors.text} />
           </Pressable>
         )}
       </View>

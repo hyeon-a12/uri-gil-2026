@@ -25,6 +25,7 @@ import { getRecordingsByFolder } from '@/services/recordingService';
 import { getAllFolders } from '@/services/folderService';
 import { apiFetch } from '@/services/api';
 import { Platform } from 'react-native';
+import { useWebMenuStore } from '@/store/useWebMenuStore';
 
 
 const COLORS = {
@@ -947,6 +948,21 @@ export default function VideoEditScreen() {
           <Ionicons name="chevron-back" size={22} color={COLORS.black} />
         </TouchableOpacity>
 
+        {/* 다른 웹 화면들은 전부 헤더에 햄버거 메뉴 버튼이 있는데, 이 화면만
+            빠져있었습니다 — 뒤로가기 버튼 옆 빈 공간에 넣습니다(내보내기
+            버튼과 안 겹치는 자리). */}
+        {Platform.OS === 'web' && (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="메뉴"
+            hitSlop={10}
+            onPress={() => useWebMenuStore.getState().open()}
+            style={styles.menuButtonWeb}
+          >
+            <Ionicons name="menu-outline" size={23} color={COLORS.black} />
+          </Pressable>
+        )}
+
         <HapticPressable style={styles.exportButton} onPress={handleExport}>
           <Text allowFontScaling={false} style={styles.exportButtonText}>
             생성하기
@@ -1690,6 +1706,17 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
     color: '#FFFFFF',
+  },
+  // 헤더가 클립 관리/내 경로처럼 불투명 배경 바라서(장소 추가 화면처럼 지도
+  // 위에 뜨는 헤더가 아님), 그 화면들과 같은 그림자 없는 단순 아이콘
+  // 버튼으로 맞춥니다. 뒤로가기 버튼(32px, 왼쪽 여백 16) 바로 오른쪽의
+  // 빈 자리에 절대 위치로 넣어서 기존 space-between 레이아웃을 안 건드립니다.
+  menuButtonWeb: {
+    position: 'absolute',
+    left: 58,
+    top: 0,
+    bottom: 0,
+    justifyContent: 'center',
   },
 
   previewWrapper: {
