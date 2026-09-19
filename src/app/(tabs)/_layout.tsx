@@ -1,6 +1,5 @@
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { router, Tabs } from 'expo-router';
-import { Image } from 'expo-image';
 import { Platform, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppText as Text } from '@/components/AppText';
@@ -63,30 +62,42 @@ function TabItem({
   );
 }
 
-function CameraTabButton() {
-  const handlePress = () => {
-    const currentTrip = useTripStore.getState().currentTrip;
+// 탭바 가운데 촬영 버튼(네이티브)과 웹 전역 플로팅 촬영 버튼이 똑같이 써야
+// 하는 로직이라 공용 함수로 뺐습니다 — 진행 중인 여행이 없으면 먼저
+// 안내하고, 있으면 바로 촬영 화면으로 이동합니다.
+function handleCameraPress() {
+  const currentTrip = useTripStore.getState().currentTrip;
 
-    if (!currentTrip) {
-      Alert.alert(
-        '진행 중인 여행이 없습니다',
-        '촬영한 클립을 저장할 여행을 먼저 선택하거나 만들어주세요.',
-        [
-          { text: '취소', style: 'cancel' },
-          {
-            text: '여행 만들러 가기',
-            onPress: () => router.push('/(tabs)/home'),
-          },
-        ],
-      );
+  if (!currentTrip) {
+    // react-native-web의 Alert.alert는 빈 함수라 웹에서는 아무것도 안 뜹니다
+    // (RoutePlanView에서 겪은 것과 같은 문제) — window.confirm으로 대체합니다.
+    if (Platform.OS === 'web') {
+      if (window.confirm('진행 중인 여행이 없습니다. 여행을 먼저 선택하거나 만들어주세요.')) {
+        router.push('/(tabs)/home');
+      }
       return;
     }
 
-    router.push('/camera');
-  };
+    Alert.alert(
+      '진행 중인 여행이 없습니다',
+      '촬영한 클립을 저장할 여행을 먼저 선택하거나 만들어주세요.',
+      [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '여행 만들러 가기',
+          onPress: () => router.push('/(tabs)/home'),
+        },
+      ],
+    );
+    return;
+  }
 
+  router.push('/camera');
+}
+
+function CameraTabButton() {
   return (
-    <Pressable onPress={handlePress} style={styles.cameraButtonWrap}>
+    <Pressable onPress={handleCameraPress} style={styles.cameraButtonWrap}>
       <View style={styles.cameraButton}>
         <CameraIcon
           width={27}
@@ -94,6 +105,23 @@ function CameraTabButton() {
           fill="#FFFFFF"
         />
       </View>
+    </Pressable>
+  );
+}
+
+// 웹 전역 촬영 플로팅 버튼입니다. 햄버거 메뉴 패널(WebSideMenu)은 (tabs)
+// 그룹 바깥 화면(add-place, trip-detail 등)에서도 보여야 해서 루트
+// 레이아웃(src/app/_layout.tsx)으로 옮겼습니다 — 여기 남은 건 탭 화면에서만
+// 보이면 되는 촬영 버튼뿐입니다.
+function WebCameraFab() {
+  const insets = useSafeAreaInsets();
+  return (
+    <Pressable
+      onPress={handleCameraPress}
+      hitSlop={10}
+      style={[styles.webCameraFab, { bottom: insets.bottom + 20 }]}
+    >
+      <CameraIcon width={26} height={26} fill="#FFFFFF" />
     </Pressable>
   );
 }
@@ -117,13 +145,19 @@ export default function TabLayout() {
         screenOptions={{
           headerShown: false,
           tabBarShowLabel: false,
-          tabBarStyle: [
-            styles.tabBar,
-            {
-              height: 105 + extraBottom,
-              paddingBottom: 10 + extraBottom,
-            },
-          ],
+          // 웹은 하단 탭바 대신 햄버거 메뉴(WebNavOverlay)를 쓰므로 탭바
+          // 자체를 숨깁니다. 라우트/네비게이션 구조는 그대로 유지되고
+          // (router.push로 계속 이동), 화면에 그려지는 탭바만 없앱니다.
+          tabBarStyle:
+            Platform.OS === 'web'
+              ? { display: 'none' }
+              : [
+                  styles.tabBar,
+                  {
+                    height: 105 + extraBottom,
+                    paddingBottom: 10 + extraBottom,
+                  },
+                ],
           tabBarHideOnKeyboard: true,
         }}>
         <Tabs.Screen
@@ -171,6 +205,7 @@ export default function TabLayout() {
           }}
         />
       </Tabs>
+      {Platform.OS === 'web' && <WebCameraFab />}
       </GestureHandlerRootView>
   );
 }
@@ -266,5 +301,23 @@ const styles = StyleSheet.create({
 
     textAlign: 'center',
     includeFontPadding: false,
+  },
+
+  // ── 웹 전용: 햄버거 메뉴(사이드메뉴) + 전역 촬영 FAB ──────────────
+  webCameraFab: {
+    position: 'absolute',
+    right: 16,
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: ACTIVE,
+    shadowColor: ACTIVE,
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
+    zIndex: 20,
   },
 });

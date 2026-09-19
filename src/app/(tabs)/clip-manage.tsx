@@ -1,5 +1,6 @@
 import React, { useCallback, useState } from 'react';
 import {
+  Platform,
   StyleSheet,
   View,
   TouchableOpacity,
@@ -23,6 +24,7 @@ import {
 } from '@/services/folderService';
 import { getRecordingsByFolder } from '@/services/recordingService';
 import { useTripStore } from '@/store/useTripStore';
+import { useWebMenuStore } from '@/store/useWebMenuStore';
 import NewTripModal from '@/components/NewTripModal';
 import { useCreateTripModal } from '@/hooks/useCreateTripModal';
 import { HapticPressable } from '@/components/common';
@@ -73,13 +75,17 @@ function StatusChip({
 }) {
   return (
     <HapticPressable
-      style={[styles.filterChip, selected && styles.filterChipSelected]}
+      style={[
+        styles.filterChip,
+        Platform.OS === 'web' && styles.filterChipWeb,
+        selected && styles.filterChipSelected,
+      ]}
       onPress={onPress}
     >
       <Text style={[styles.filterChipText, selected && styles.filterChipTextSelected]}>
         {label}
       </Text>
-      {count !== undefined && (
+      {count !== undefined && Platform.OS !== 'web' && (
         <Text
           style={[
             styles.filterChipCount,
@@ -289,40 +295,65 @@ export default function ClipManageScreen() {
 
   return (
     <View style={styles.screen}>
-      <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
-        <View style={styles.headerTextArea}>
-          <Text allowFontScaling={false} style={styles.headerTitle}>
+      <View
+        style={[
+          styles.header,
+          Platform.OS === 'web' && styles.webHeaderOverride,
+          Platform.OS !== 'web' && { paddingTop: insets.top + 10 },
+        ]}
+      >
+        <View style={[styles.headerTextArea, Platform.OS === 'web' && styles.headerTextAreaWeb]}>
+          <Text
+            allowFontScaling={false}
+            style={[styles.headerTitle, Platform.OS === 'web' && styles.headerTitleWeb]}
+          >
             클립 관리
           </Text>
-          <Text allowFontScaling={false} style={styles.headerStats}>
-            여행 {folders.length}개 · 클립 {totalClipCount}개
-          </Text>
+          {Platform.OS !== 'web' && (
+            <Text allowFontScaling={false} style={styles.headerStats}>
+              여행 {folders.length}개 · 클립 {totalClipCount}개
+            </Text>
+          )}
         </View>
+
+        {Platform.OS === 'web' && (
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel="메뉴"
+            hitSlop={12}
+            onPress={() => useWebMenuStore.getState().open()}
+            style={styles.headerButton}
+          >
+            <Ionicons name="menu-outline" size={23} color={COLORS.textPrimary} />
+          </TouchableOpacity>
+        )}
       </View>
 
-      <View style={styles.searchContainer}>
-        <View style={styles.searchBox}>
-          <Ionicons
-            name="search"
-            size={18}
-            color={COLORS.textSecondary}
-            style={styles.searchIcon}
-          />
-          <TextInput
-            style={styles.searchInput}
-            placeholder='여행 검색'
-            placeholderTextColor={COLORS.textSecondary}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-          />
+      {Platform.OS !== 'web' && (
+        <View style={styles.searchContainer}>
+          <View style={styles.searchBox}>
+            <Ionicons
+              name="search"
+              size={18}
+              color={COLORS.textSecondary}
+              style={styles.searchIcon}
+            />
+            <TextInput
+              style={styles.searchInput}
+              placeholder='여행 검색'
+              placeholderTextColor={COLORS.textSecondary}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+            />
+          </View>
         </View>
-      </View>
+      )}
 
       <ScrollView
         horizontal
         style={styles.filterScroll}
         showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.filterRow}
+        contentContainerStyle={[styles.filterRow, Platform.OS === 'web' && styles.filterRowWeb]}
       >
         <StatusChip
           label="전체"
@@ -416,6 +447,17 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     backgroundColor: COLORS.background,
   },
+  // 홈 화면 헤더(AppHeader.web.tsx의 .uri-app-header)와 정확히 같은 높이/
+  // 좌우 여백(68px, 18px)으로 맞춥니다. 네이티브 header는 제목을 아래쪽에
+  // 정렬하려고 92px로 크게 잡는데, 웹에서는 그 값을 완전히 덮어씁니다.
+  webHeaderOverride: {
+    height: 68,
+    minHeight: 68,
+    paddingHorizontal: 18,
+    paddingTop: 0,
+    paddingBottom: 0,
+    alignItems: 'center',
+  },
   headerButton: {
     width: 48,
     height: 42,
@@ -425,6 +467,13 @@ const styles = StyleSheet.create({
   headerTextArea: {
     flex: 1,
     alignItems: 'center',
+  },
+  // 홈/내 경로처럼 좌측 정렬 헤더로 맞추기 위한 웹 전용 오버라이드.
+  headerTextAreaWeb: {
+    alignItems: 'flex-start',
+  },
+  headerTitleWeb: {
+    fontSize: 18,
   },
   headerTitle: {
     color: COLORS.textPrimary,
@@ -457,6 +506,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: SPACING.sm,
   },
+  // 웹은 검색창을 없애서 헤더 바로 아래로 태그가 붙는데, 내 여행 화면의
+  // 태그 위치(헤더에서 SPACING.md만큼 떨어짐)와 맞춥니다.
+  filterRowWeb: {
+    paddingTop: SPACING.md,
+    // 헤더 좌우 여백(18px)이랑 맞춥니다 — 기존 SPACING.screenH(20)는
+    // 헤더보다 2px 더 넓었습니다.
+    paddingHorizontal: 18,
+  },
   filterChip: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -466,6 +523,9 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
     borderWidth: 1,
     borderColor: COLORS.border,
+  },
+  filterChipWeb: {
+    height: 36,
   },
   filterChipSelected: {
     backgroundColor: COLORS.textPrimary,

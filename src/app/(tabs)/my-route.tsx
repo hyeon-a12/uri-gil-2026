@@ -8,6 +8,7 @@ import {
   type PlaceDetailView,
 } from "@/components/PlaceDetail/PlaceDetailModal";
 import { RoutePlanView } from '@/components/RoutePlanView';
+import { TripSwitchSheet } from '@/components/common/TripSwitchSheet';
 import { MapLocateButton } from '@/components/common';
 import { RADIUS, COLORS as SHARED_COLORS, SPACING } from '@/constants/color';
 import { navigateToCamera } from "@/navigation/recordingNavigation";
@@ -40,6 +41,7 @@ import {
   type NativeScrollEvent,
   type NativeSyntheticEvent,
 } from 'react-native';
+import { useWebMenuStore } from '@/store/useWebMenuStore';
 // 지도 위 스톱 카드 캐러셀(가로 스크롤) 안에 클립 목록(역시 가로 스크롤)이
 // 중첩되어 있습니다. react-native의 순정 ScrollView는 같은 방향으로 중첩된
 // 스크롤 제스처를 제대로 넘겨주지 못해서(부모가 항상 먼저 가로채감) 안쪽
@@ -313,6 +315,63 @@ function InternalNavigation({
   );
 }
 
+/** Manus 프로토타입의 .route-switch — 웹 전용 상단 가로 세그먼트 토글.
+ * InternalNavigation(네이티브, 하단 플로팅 캡슐)과 기능은 완전히 같고
+ * 모양·위치만 다릅니다. */
+function WebRouteSwitch({
+  selectedMode,
+  onChange,
+}: InternalNavigationProps) {
+  return (
+    <View style={styles.webRouteSwitch}>
+      <Pressable
+        onPress={() => onChange("map")}
+        style={[
+          styles.webRouteSwitchButton,
+          selectedMode === "map" && styles.webRouteSwitchButtonActive,
+        ]}
+      >
+        <Ionicons
+          name="map-outline"
+          size={16}
+          color={selectedMode === "map" ? COLORS.textPrimary : COLORS.textSecondary}
+        />
+        <Text
+          allowFontScaling={false}
+          style={[
+            styles.webRouteSwitchLabel,
+            selectedMode === "map" && styles.webRouteSwitchLabelActive,
+          ]}
+        >
+          지도
+        </Text>
+      </Pressable>
+
+      <Pressable
+        onPress={() => onChange("info")}
+        style={[
+          styles.webRouteSwitchButton,
+          selectedMode === "info" && styles.webRouteSwitchButtonActive,
+        ]}
+      >
+        <Ionicons
+          name="document-text-outline"
+          size={16}
+          color={selectedMode === "info" ? COLORS.textPrimary : COLORS.textSecondary}
+        />
+        <Text
+          allowFontScaling={false}
+          style={[
+            styles.webRouteSwitchLabel,
+            selectedMode === "info" && styles.webRouteSwitchLabelActive,
+          ]}
+        >
+          일정
+        </Text>
+      </Pressable>
+    </View>
+  );
+}
 
 function getTripDisplayName(trip: FolderItem | null): string {
   if (!trip) {
@@ -761,6 +820,7 @@ export default function MyRouteScreen() {
   }, [saved, view]);
 
   const [isShareSheetVisible, setIsShareSheetVisible] = useState(false);
+  const [tripSwitchVisible, setTripSwitchVisible] = useState(false);
 
   const tripName = getTripDisplayName(currentTrip);
   const tripSummary = currentTrip
@@ -896,68 +956,134 @@ export default function MyRouteScreen() {
 
   return (
     <View style={styles.screen}>
-      <View
-        style={[
-          styles.header,
-          {
-            paddingTop: insets.top + 10,
-          },
-        ]}
-      >
-        {/* 탭 루트 화면이라 뒤로가기 개념이 없어서 버튼을 없앴습니다.
-            오른쪽 공유 버튼과의 좌우 균형을 위해 같은 폭의 빈 자리만 남겨둡니다. */}
-        <View style={styles.headerButtonSpacer} />
-
-        {/* 여행 전환 트리거는 홈 화면에만 있습니다 — 여기는 currentTrip을
-            구독해서 이름만 보여줍니다(탭해도 아무 일도 일어나지 않음). */}
-        <View style={styles.headerTitleArea}>
-          <View style={styles.headerTripTitleRow}>
+      {Platform.OS === "web" ? (
+        // 웹 헤더: 홈 화면과 같은 자리(좌상단)에 여행 전환 토글, 우측엔
+        // 메뉴 버튼만 남깁니다 — 공유 버튼과 가운데 제목/부제는 뺐습니다.
+        <View style={styles.webHeader}>
+          <Pressable
+            onPress={() => setTripSwitchVisible(true)}
+            style={styles.webTripToggle}
+            hitSlop={8}
+          >
             <Text
               numberOfLines={1}
               allowFontScaling={false}
-              style={styles.headerTitle}
+              style={styles.webTripToggleText}
             >
               {getTripDisplayName(currentTrip)}
             </Text>
-          </View>
+            <Ionicons name="chevron-down" size={16} color={COLORS.textPrimary} />
+          </Pressable>
 
-          <Text
-            numberOfLines={1}
-            allowFontScaling={false}
-            style={styles.headerSubtitle}
-          >
-            {currentTrip
-              ? `${nights !== null ? `${nights}박 ${nights + 1}일 · ` : ""}장소 ${planData.stops.length}곳`
-              : "여행을 선택해주세요"}
-          </Text>
-        </View>
+          <View style={{ flex: 1 }} />
 
-        {selectedMode === "map" ? (
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="여행 경로 공유하기"
+            accessibilityLabel="메뉴"
             hitSlop={12}
-            onPress={() => setIsShareSheetVisible(true)}
+            onPress={() => useWebMenuStore.getState().open()}
             style={({ pressed }) => [
-              styles.headerButton,
+              styles.webMenuButton,
               pressed && styles.headerButtonPressed,
             ]}
           >
-            <Ionicons
-              name="share-outline"
-              size={23}
-              color={COLORS.textPrimary}
-            />
+            <Ionicons name="menu-outline" size={23} color={COLORS.textPrimary} />
           </Pressable>
-        ) : (
-          // 일정 탭에서는 제목을 정확히 중앙에 두기 위한 빈 공간만 유지합니다.
+        </View>
+      ) : (
+        <View
+          style={[
+            styles.header,
+            {
+              paddingTop: insets.top + 10,
+            },
+          ]}
+        >
+          {/* 탭 루트 화면이라 뒤로가기 개념이 없어서 버튼을 없앴습니다.
+              오른쪽 공유 버튼과의 좌우 균형을 위해 같은 폭의 빈 자리만 남겨둡니다. */}
           <View style={styles.headerButtonSpacer} />
-        )}
-      </View>
+
+          {/* 여행 전환 트리거는 홈 화면에만 있습니다 — 여기는 currentTrip을
+              구독해서 이름만 보여줍니다(탭해도 아무 일도 일어나지 않음). */}
+          <View style={styles.headerTitleArea}>
+            <View style={styles.headerTripTitleRow}>
+              <Text
+                numberOfLines={1}
+                allowFontScaling={false}
+                style={styles.headerTitle}
+              >
+                {getTripDisplayName(currentTrip)}
+              </Text>
+            </View>
+
+            <Text
+              numberOfLines={1}
+              allowFontScaling={false}
+              style={styles.headerSubtitle}
+            >
+              {currentTrip
+                ? `${nights !== null ? `${nights}박 ${nights + 1}일 · ` : ""}장소 ${planData.stops.length}곳`
+                : "여행을 선택해주세요"}
+            </Text>
+          </View>
+
+          <View style={styles.headerRightGroup}>
+            {selectedMode === "map" && (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="여행 경로 공유하기"
+                hitSlop={12}
+                onPress={() => setIsShareSheetVisible(true)}
+                style={({ pressed }) => [
+                  styles.headerButton,
+                  pressed && styles.headerButtonPressed,
+                ]}
+              >
+                <Ionicons
+                  name="share-outline"
+                  size={23}
+                  color={COLORS.textPrimary}
+                />
+              </Pressable>
+            )}
+
+            {selectedMode !== "map" && (
+              // 네이티브 일정 탭에서는 제목을 정확히 중앙에 두기 위한 빈 공간만 유지합니다.
+              <View style={styles.headerButtonSpacer} />
+            )}
+          </View>
+        </View>
+      )}
+
+      {Platform.OS === "web" && (
+        <TripSwitchSheet visible={tripSwitchVisible} onClose={() => setTripSwitchVisible(false)} />
+      )}
+
+      {/* 웹은 하단 플로팅 캡슐 대신, 지도/일정 전환을 헤더 바로 아래
+          가로 세그먼트 바로 보여줍니다(Manus 프로토타입의 .route-switch
+          디자인). 네이티브는 기존 InternalNavigation(하단 플로팅)을 그대로 씁니다. */}
+      {Platform.OS === "web" && (
+        <WebRouteSwitch selectedMode={selectedMode} onChange={setSelectedMode} />
+      )}
 
       <View style={styles.content}>
         {selectedMode === "map" ? (
           <View style={styles.mapScreen}>
+            {Platform.OS === "web" && currentTrip && (
+              <View style={styles.routeSummaryWeb}>
+                <Text allowFontScaling={false} style={styles.routeSummaryWebCaption}>
+                  {tripSummary}
+                </Text>
+                <Text allowFontScaling={false} style={styles.routeSummaryWebHeading}>
+                  오늘의 길{' '}
+                  <Text allowFontScaling={false} style={styles.routeSummaryWebHeadingAccent}>
+                    {planData.stops.length}
+                  </Text>
+                  곳
+                </Text>
+              </View>
+            )}
+
             <View
               style={[
                 styles.mapFrame,
@@ -1021,19 +1147,21 @@ export default function MyRouteScreen() {
         )}
       </View>
 
-      <View
-        style={[
-          styles.internalNavigationWrapper,
-          {
-            bottom: insets.bottom + 86,
-          },
-        ]}
-      >
-        <InternalNavigation
-          selectedMode={selectedMode}
-          onChange={setSelectedMode}
-        />
-      </View>
+      {Platform.OS !== "web" && (
+        <View
+          style={[
+            styles.internalNavigationWrapper,
+            {
+              bottom: insets.bottom + 86,
+            },
+          ]}
+        >
+          <InternalNavigation
+            selectedMode={selectedMode}
+            onChange={setSelectedMode}
+          />
+        </View>
+      )}
 
       <TravelShareSheet
         visible={isShareSheetVisible}
@@ -1080,6 +1208,54 @@ const styles = StyleSheet.create({
     alignItems: "flex-end",
 
     backgroundColor: COLORS.background,
+  },
+
+  // 네이티브 header는 제목/부제를 아래쪽에 정렬하려고 일부러 키를 84로
+  // 크게 잡고 alignItems:flex-end를 씁니다. 웹은 그 텍스트가 없고 여행
+  // 토글 한 줄 + 메뉴 버튼뿐이라, 다른 화면(홈 등)과 높이를 맞추기 위해
+  // 훨씬 짧고 세로 중앙 정렬된 별도 헤더를 씁니다.
+  // 홈 화면 헤더(AppHeader.web.tsx의 .uri-app-header)와 정확히 같은 높이/
+  // 좌우 여백(68px, 18px)입니다.
+  webHeader: {
+    height: 68,
+    paddingHorizontal: 18,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: COLORS.background,
+  },
+
+  // 다른 화면들의 메뉴 버튼은 배경이 없는 아이콘 버튼인데, 이 화면의
+  // 기존 headerButton은 공유 버튼용으로 만들어진 회색 원형 배경 스타일이라
+  // 메뉴 버튼에 그대로 쓰면 여기만 배경색이 도드라져 보였습니다.
+  webMenuButton: {
+    width: 46,
+    height: 46,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  // 홈 화면 AppHeader.web.tsx의 .uri-trip-select와 최대한 똑같이 맞춘
+  // 값입니다(패딩/간격/폰트) — 두 화면의 여행 토글이 똑같아 보여야 해서요.
+  webTripToggle: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingVertical: 10,
+    paddingHorizontal: 6,
+    borderRadius: 8,
+  },
+  webTripToggleText: {
+    maxWidth: 180,
+    fontSize: 18,
+    fontWeight: "700",
+    letterSpacing: -1,
+    color: COLORS.textPrimary,
+  },
+
+  headerRightGroup: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: SPACING.xs,
   },
 
   headerButton: {
@@ -1412,6 +1588,61 @@ const styles = StyleSheet.create({
 
   internalNavigationItemSelected: {
     backgroundColor: COLORS.primarySoft,
+  },
+
+  // ── 웹 전용: 상단 지도/일정 세그먼트 토글 + 지도 요약 텍스트 ──────
+  webRouteSwitch: {
+    flexDirection: "row",
+    marginHorizontal: SPACING.md,
+    marginTop: SPACING.md,
+    marginBottom: SPACING.md,
+    padding: 3,
+    borderRadius: 11,
+    backgroundColor: COLORS.surface,
+  },
+  webRouteSwitchButton: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 5,
+    height: 30,
+    borderRadius: 9,
+  },
+  webRouteSwitchButtonActive: {
+    backgroundColor: COLORS.background,
+    shadowColor: "#000000",
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 2,
+  },
+  webRouteSwitchLabel: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+  },
+  webRouteSwitchLabelActive: {
+    fontWeight: "700",
+    color: COLORS.textPrimary,
+  },
+  routeSummaryWeb: {
+    paddingHorizontal: SPACING.md + 4,
+    paddingTop: SPACING.md,
+    paddingBottom: 6,
+  },
+  routeSummaryWebCaption: {
+    fontSize: 11,
+    color: COLORS.textSecondary,
+  },
+  routeSummaryWebHeading: {
+    marginTop: 5,
+    fontSize: 20,
+    fontWeight: "700",
+    letterSpacing: -0.5,
+    color: COLORS.textPrimary,
+  },
+  routeSummaryWebHeadingAccent: {
+    color: COLORS.primary,
   },
 
   internalNavigationLabel: {

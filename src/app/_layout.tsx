@@ -2,13 +2,25 @@ import { Stack } from 'expo-router';
 import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect, useState } from 'react';
+import { Platform, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { hydrateCurrentTrip } from '@/store/useTripStore';
 import { hydrateProfile } from '@/store/useProfileStore';
 import { hydrateAuth, useAuthStore } from '@/store/useAuthStore';
+import { COLORS } from '@/constants/color';
+import { WebSideMenu } from '@/components/web/WebSideMenu';
 
 SplashScreen.preventAutoHideAsync();
 
+// 이 앱의 웹 버전은 반응형으로 여러 화면 폭에 대응하지 않고, 모바일 폭
+// 하나(390px)로 고정하기로 팀에서 결정했습니다. 데스크톱 브라우저처럼 화면이
+// 더 넓을 때는 가운데에 390px 폭으로만 렌더하고 양옆은 여백(레터박스)으로
+// 채웁니다. 실제 모바일 기기(폭이 390px 이하인 경우가 대부분)에서는 그냥
+// 화면을 꽉 채우는 것과 동일하게 보입니다. 네이티브 앱은 원래도 기기 폭을
+// 그대로 쓰므로 이 래퍼가 필요 없습니다.
+const MOBILE_WEB_FRAME_WIDTH = 390;
+
 export default function RootLayout() {
+  const { height: windowHeight } = useWindowDimensions();
   const authChecked = useAuthStore((state) => state.checked);
   // hydrateAuth()는 SecureStore를 한 번만 읽어서 금방 끝나는데, hydrateProfile/
   // hydrateCurrentTrip은 AsyncStorage를 여러 번 읽어서 상대적으로 느립니다.
@@ -72,7 +84,7 @@ export default function RootLayout() {
     return null;
   }
 
-  return (
+  const stackNavigator = (
     <Stack screenOptions={{ headerShown: false }}>
        <Stack.Screen name="onboarding" />
       <Stack.Screen name="(auth)" />
@@ -87,4 +99,38 @@ export default function RootLayout() {
       />
     </Stack>
   );
+
+  if (Platform.OS !== 'web') {
+    return stackNavigator;
+  }
+
+  return (
+    <View style={[styles.webLetterbox, { minHeight: windowHeight }]}>
+      <View style={[styles.webFrame, { minHeight: windowHeight }]}>
+        {stackNavigator}
+        {/* 어떤 화면(탭이든 스택이든)에 있든 항상 마운트돼 있어야 각 화면
+            헤더의 메뉴 버튼이 열 수 있습니다 — (tabs) 그룹 안에서만 마운트
+            되면 add-place/trip-detail 같은 화면에서 메뉴가 사라집니다. */}
+        <WebSideMenu />
+      </View>
+    </View>
+  );
 }
+
+const styles = StyleSheet.create({
+  webLetterbox: {
+    flex: 1,
+    alignItems: 'center',
+    backgroundColor: COLORS.surface,
+  },
+  webFrame: {
+    flex: 1,
+    width: '100%',
+    maxWidth: MOBILE_WEB_FRAME_WIDTH,
+    backgroundColor: COLORS.background,
+    // overflow: 'hidden'을 쓰면 화면 하나보다 긴 콘텐츠(예: 스크롤형 인트로
+    // 페이지)가 통째로 잘려서 브라우저 스크롤 자체가 안 먹습니다. 프레임
+    // 바깥으로 튀어나가는 요소를 깔끔하게 가리는 것보다 스크롤이 되는 게
+    // 우선이라 hidden을 빼고 자연스러운 문서 스크롤을 허용합니다.
+  },
+});

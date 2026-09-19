@@ -170,11 +170,7 @@ function TripThumb({ trip, selected }: { trip: FolderItem; selected: boolean }) 
       {trip.thumbnail ? (
         <Image source={{ uri: trip.thumbnail }} style={styles.thumbImage} contentFit="cover" />
       ) : (
-        <Image
-          source={require('@/assets/images/HanOk.png')}
-          style={{ width: 22, height: 22 }}
-          contentFit="contain"
-        />
+        <Ionicons name="map-outline" size={22} color={COLORS.textSecondary} />
       )}
     </View>
   );
@@ -248,7 +244,6 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   thumbSelected: {
-    borderColor: COLORS.primary,
     backgroundColor: COLORS.primarySoft,
   },
   thumbImage: {
@@ -281,9 +276,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#F5F5F5',
-    borderWidth: 2,
-    borderColor: COLORS.border,
-    borderStyle: 'dashed',
   },
   addLabel: {
     fontSize: 14,
