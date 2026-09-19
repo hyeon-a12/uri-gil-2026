@@ -55,20 +55,13 @@ const INTRO_STYLES = `
     position: relative; display: inline-block; width: 32px; height: 32px;
     border: 2px solid #222; border-radius: 50% 50% 50% 5px; transform: rotate(-45deg);
   }
-  .uri-logo-mark span { position: absolute; width: 5px; height: 5px; border-radius: 50%; background: #FF7F5C; }
-  .uri-logo-mark span:first-child { left: 7px; top: 7px; }
-  .uri-logo-mark span:nth-child(2) { right: 6px; bottom: 8px; }
-  .uri-logo-mark i {
-    position: absolute; width: 9px; height: 6px; left: 10.5px; top: 12.5px;
-    background: none; border: 1.5px solid transparent; border-top: none;
-    border-bottom-color: #FF7F5C; border-radius: 50%;
-    transform: rotate(45deg); transform-origin: center;
-  }
+  /* 부모(.uri-logo-mark)의 -45deg 회전을 여기서 반대로 상쇄해서, 안의 웃는
+     얼굴은 항상 똑바로 선 채로 보이게 합니다. 눈/입은 div 테두리로 억지로
+     흉내내지 않고 SVG 곡선(path)으로 그려서 자연스러운 스마일 곡선이
+     나오게 했습니다 — viewBox 기준이라 기본(32px)/small(24px) 크기 모두
+     비율이 그대로 유지되고, 전용 오버라이드가 필요 없어집니다. */
+  .uri-logo-face { position: absolute; inset: 0; width: 100%; height: 100%; transform: rotate(45deg); }
   .uri-logo-mark-small { width: 24px; height: 24px; border-width: 1.7px; }
-  .uri-logo-mark-small span { width: 4px; height: 4px; }
-  .uri-logo-mark-small span:first-child { left: 5px; top: 5px; }
-  .uri-logo-mark-small span:nth-child(2) { right: 4px; bottom: 5px; }
-  .uri-logo-mark-small i { width: 6.5px; height: 4.5px; left: 8px; top: 9.5px; }
 
   .uri-intro-route-motif {
     position: fixed; z-index: 1; top: 0; left: 50%; width: 390px; height: 100vh;
@@ -140,9 +133,16 @@ const INTRO_STYLES = `
 function LogoMark({ small = false }: { small?: boolean }) {
   return (
     <div className={`uri-logo-mark${small ? ' uri-logo-mark-small' : ''}`} aria-label="우리길 로고">
-      <span />
-      <span />
-      <i />
+      <svg className="uri-logo-face" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="12" cy="12" r="1.4" fill="#FF7F5C" />
+        <circle cx="20" cy="12" r="1.4" fill="#FF7F5C" />
+        <path
+          d="M10.7 18.7s2 2.7 5.3 2.7 5.3-2.7 5.3-2.7"
+          stroke="#FF7F5C"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+        />
+      </svg>
     </div>
   );
 }

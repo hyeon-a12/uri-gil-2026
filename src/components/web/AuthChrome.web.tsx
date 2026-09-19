@@ -21,15 +21,12 @@ export const AUTH_STYLES = `
     position: relative; display: inline-block; width: 32px; height: 32px;
     border: 2px solid #222; border-radius: 50% 50% 50% 5px; transform: rotate(-45deg);
   }
-  .uri-logo-mark span { position: absolute; width: 5px; height: 5px; border-radius: 50%; background: #FF7F5C; }
-  .uri-logo-mark span:first-child { left: 7px; top: 7px; }
-  .uri-logo-mark span:nth-child(2) { right: 6px; bottom: 8px; }
-  .uri-logo-mark i {
-    position: absolute; width: 9px; height: 6px; left: 10.5px; top: 12.5px;
-    background: none; border: 1.5px solid transparent; border-top: none;
-    border-bottom-color: #FF7F5C; border-radius: 50%;
-    transform: rotate(45deg); transform-origin: center;
-  }
+  /* 부모(.uri-logo-mark)의 -45deg 회전을 여기서 반대로 상쇄해서, 안의 웃는
+     얼굴은 항상 똑바로 선 채로 보이게 합니다. 눈/입은 div 테두리로 억지로
+     흉내내지 않고 SVG 곡선(path)으로 그려서 자연스러운 스마일 곡선이
+     나오게 했습니다 — viewBox 기준이라 auth(42px)/기본(32px)/small(24px)
+     어떤 크기에서도 비율이 그대로 유지됩니다. */
+  .uri-logo-face { position: absolute; inset: 0; width: 100%; height: 100%; transform: rotate(45deg); }
   .uri-icon-button {
     width: 38px; height: 38px; border-radius: 12px; display: grid; place-items: center;
     color: #222; background: none; border: 0; cursor: pointer; transition: background 0.15s cubic-bezier(.23,1,.32,1);
@@ -108,9 +105,16 @@ export const AUTH_STYLES = `
 export function LogoMark({ small = false }: { small?: boolean }) {
   return (
     <div className="uri-logo-mark" aria-label="우리길 로고" style={small ? { width: 24, height: 24, borderWidth: 1.7 } : undefined}>
-      <span />
-      <span />
-      <i />
+      <svg className="uri-logo-face" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="12" cy="12" r="1.4" fill="#FF7F5C" />
+        <circle cx="20" cy="12" r="1.4" fill="#FF7F5C" />
+        <path
+          d="M10.7 18.7s2 2.7 5.3 2.7 5.3-2.7 5.3-2.7"
+          stroke="#FF7F5C"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+        />
+      </svg>
     </div>
   );
 }
