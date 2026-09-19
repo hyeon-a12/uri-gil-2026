@@ -301,6 +301,16 @@ async function renderVideo(exportData: {
       const clip = exportData.clips[i];
       if (!clip.videoUri) continue;
 
+      if (Platform.OS === 'web') {
+        // 웹의 FormData는 브라우저 표준 API라 { uri, name, type } 같은
+        // RN 전용 형태를 이해하지 못하고 그냥 문자열로 바꿔버립니다
+        // ("[object Object]") — clip.videoUri(blob: URL)를 실제 Blob으로
+        // 변환해서 붙여야 진짜 영상 바이트가 전송됩니다.
+        const blob = await fetch(clip.videoUri).then((res) => res.blob());
+        formData.append('videos', blob, `${clip.id}.webm`);
+        continue;
+      }
+
       // [변경] 카메라 녹화 포맷(webm)에 맞춰 확장자와 MIME 타입 수정
       formData.append('videos', {
         uri: clip.videoUri,

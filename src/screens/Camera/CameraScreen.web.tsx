@@ -36,14 +36,17 @@ const COLORS = {
   textSecondary: SHARED_COLORS.textSecondary,
 };
 
-const SHUTTER_BUTTON_WIDTH = 90;
-const SHUTTER_BUTTON_HEIGHT = 70;
-const SHUTTER_RING_STROKE = 3.75;
-const SHUTTER_RING_SIZE = SHUTTER_BUTTON_HEIGHT;
+// 전체화면 미리보기 하단에 뜨는 캡슐 바 안에 원형 촬영 버튼이 들어가는
+// 구조라, 기존의 가로로 긴 90x70 버튼 대신 정사각형(원형) 버튼으로 바꿨습니다.
+const SHUTTER_BUTTON_SIZE = 74;
+const SHUTTER_RING_STROKE = 3;
+const SHUTTER_RING_SIZE = SHUTTER_BUTTON_SIZE;
 const SHUTTER_RING_CENTER = SHUTTER_RING_SIZE / 2;
 const SHUTTER_RING_RADIUS = SHUTTER_RING_CENTER - SHUTTER_RING_STROKE;
-const SHUTTER_RING_OFFSET_X = (SHUTTER_BUTTON_WIDTH - SHUTTER_RING_SIZE) / 2;
 const SHUTTER_RING_CIRCUMFERENCE = 2 * Math.PI * SHUTTER_RING_RADIUS;
+
+// 하단 캡슐 바 좌우에 놓이는 원형 버튼(카메라 전환 / 빈 자리) 크기.
+const SIDE_CIRCLE_SIZE = 48;
 
 // MediaRecorder가 만들 파일 포맷. 브라우저가 지원하는 첫 번째 값을 씁니다
 // (Android Chrome은 webm/vp9, Safari는 mp4만 지원하는 경우가 많습니다).
@@ -201,6 +204,15 @@ export default function CameraScreen() {
     };
   }, [stopStream]);
 
+  // 위치 권한(HomeScreen.web.tsx)처럼, 버튼을 한 번 더 누르게 하지 않고
+  // 화면에 들어오자마자 브라우저의 카메라/마이크 권한 팝업이 바로 뜨게 합니다.
+  useEffect(() => {
+    if (permissionState === 'idle') {
+      void openCamera(facing);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     if (!isRecording) return;
 
@@ -318,21 +330,10 @@ export default function CameraScreen() {
     }, RECORD_DURATION_SECONDS * 1000);
   };
 
-  if (permissionState === 'idle') {
-    return (
-      <InfoScreen
-        iconName="videocam-outline"
-        title="카메라와 마이크가 필요해요"
-        description={
-          '여행 클립을 촬영하려면 카메라·마이크 접근이 필요해요.\n계속하면 브라우저가 권한을 물어봐요 — "허용"을 눌러주세요.'
-        }
-        buttonLabel="카메라 켜기"
-        onPress={() => void openCamera(facing)}
-      />
-    );
-  }
-
-  if (permissionState === 'requesting') {
+  // 화면 진입과 동시에 권한 팝업이 자동으로 뜨기 때문에(위 useEffect),
+  // 'idle'은 그 팝업이 뜨기 전 아주 짧은 순간만 존재합니다 — 버튼이 있는
+  // 별도 화면 대신 'requesting'과 똑같이 로딩 스피너만 보여줍니다.
+  if (permissionState === 'idle' || permissionState === 'requesting') {
     return <InfoScreen loading />;
   }
 
@@ -364,47 +365,45 @@ export default function CameraScreen() {
 
   return (
     <View style={styles.screen}>
-      <View style={[styles.previewArea, { paddingTop: insets.top + 8 }]}>
-        <View style={styles.previewWrapper}>
-          {/* React Native Web 환경(순수 브라우저 DOM)이라 표준 <video> 태그를 그대로 씁니다. */}
-          <video
-            ref={videoRef}
-            autoPlay
-            muted
-            playsInline
-            style={{
-              position: 'absolute',
-              inset: 0,
-              width: '100%',
-              height: '100%',
-              objectFit: 'cover',
-              transform: facing === 'user' ? 'scaleX(-1)' : undefined,
-            }}
-          />
+      {/* 미리보기가 카드 안이 아니라 화면 전체를 꽉 채웁니다 — 기기 화면
+          비율이 달라도 잘리는 부분 없이 항상 꽉 차 보이고(aspectRatio 고정
+          카드처럼 세로 공간이 부족할 때 넘치는 문제가 없습니다), objectFit:
+          'cover'가 알아서 화면 비율에 맞게 잘라 보여줍니다. */}
+      <video
+        ref={videoRef}
+        autoPlay
+        muted
+        playsInline
+        style={{
+          position: 'absolute',
+          inset: 0,
+          width: '100%',
+          height: '100%',
+          objectFit: 'cover',
+          transform: facing === 'user' ? 'scaleX(-1)' : undefined,
+        }}
+      />
 
-          <Pressable hitSlop={16} onPress={handleClose} style={styles.closeButton}>
-            <Ionicons name="close" size={22} color={COLORS.white} />
-          </Pressable>
+      <Pressable
+        hitSlop={16}
+        onPress={handleClose}
+        style={[styles.closeButton, { top: insets.top + 14 }]}
+      >
+        <Ionicons name="close" size={22} color={COLORS.white} />
+      </Pressable>
+
+      {!isRecording && (
+        <View style={[styles.hintWrapper, { bottom: insets.bottom + 20 + SHUTTER_BUTTON_SIZE + 22 }]}>
+          <Text allowFontScaling={false} style={styles.hintText}>
+            {RECORD_DURATION_SECONDS}초 클립을 촬영해요
+          </Text>
         </View>
-      </View>
+      )}
 
-      <View style={styles.zoomRow}>
-        <View style={styles.zoomRowSide} />
-        <Text allowFontScaling={false} style={styles.hintText}>
-          {RECORD_DURATION_SECONDS}초 클립을 촬영해요
-        </Text>
-        <View style={[styles.zoomRowSide, styles.zoomRowSideRight]}>
-          <Pressable hitSlop={12} onPress={toggleFacing} disabled={isRecording}>
-            <Ionicons
-              name="camera-reverse-outline"
-              size={24}
-              color={isRecording ? COLORS.textSecondary : COLORS.black}
-            />
-          </Pressable>
-        </View>
-      </View>
+      <View style={[styles.bottomBar, { marginBottom: insets.bottom + 20 }]}>
+        {/* 왼쪽 자리는 지금은 기능 없이 균형을 맞추는 빈 자리입니다. */}
+        <View style={styles.sideCircle} />
 
-      <View style={[styles.bottomRow, { paddingBottom: insets.bottom || 20 }]}>
         <Pressable
           disabled={!canRecord || isRecording}
           onPress={handleRecordPress}
@@ -417,7 +416,7 @@ export default function CameraScreen() {
           <Svg
             width={SHUTTER_RING_SIZE}
             height={SHUTTER_RING_SIZE}
-            style={{ position: 'absolute', top: 0, left: SHUTTER_RING_OFFSET_X }}
+            style={{ position: 'absolute' }}
           >
             <Circle
               cx={SHUTTER_RING_CENTER}
@@ -445,6 +444,15 @@ export default function CameraScreen() {
           </Svg>
           <View style={isRecording ? styles.shutterInnerRecording : styles.shutterInner} />
         </Pressable>
+
+        <Pressable
+          hitSlop={12}
+          onPress={toggleFacing}
+          disabled={isRecording}
+          style={[styles.sideCircle, isRecording && { opacity: 0.4 }]}
+        >
+          <Ionicons name="camera-reverse-outline" size={22} color={COLORS.white} />
+        </Pressable>
       </View>
     </View>
   );
@@ -453,67 +461,74 @@ export default function CameraScreen() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: COLORS.backgroundIvory,
-  },
-  previewArea: {
-    flex: 1,
-    justifyContent: 'center',
-  },
-  previewWrapper: {
-    aspectRatio: 9 / 16,
-    marginHorizontal: 10,
-    borderRadius: 24,
     backgroundColor: '#000000',
-    position: 'relative',
-    overflow: 'hidden',
   },
   closeButton: {
     position: 'absolute',
-    top: 14,
     left: 14,
-  },
-  zoomRow: {
-    flexDirection: 'row',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 26,
-    paddingBottom: 4,
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.35)',
   },
-  zoomRowSide: {
-    flex: 1,
-  },
-  zoomRowSideRight: {
-    alignItems: 'flex-end',
+  // 하단 캡슐 바 바로 위, 촬영 안내 문구. 영상 위에 바로 얹히는 텍스트라
+  // 배경 사진이 밝아도 읽히도록 옅은 그림자를 넣습니다.
+  hintWrapper: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    alignItems: 'center',
   },
   hintText: {
     fontSize: 13,
-    color: COLORS.textSecondary,
+    color: COLORS.white,
+    textShadowColor: 'rgba(0,0,0,0.5)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
   },
-  bottomRow: {
+  // 화면 전체를 채우는 미리보기 위에 떠 있는 반투명 캡슐 바 — 왼쪽 빈
+  // 자리 / 가운데 촬영 버튼 / 오른쪽 카메라 전환 버튼을 한 줄로 담습니다.
+  bottomBar: {
+    position: 'absolute',
+    bottom: 0,
+    alignSelf: 'center',
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    width: 220,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+  },
+  sideCircle: {
+    width: SIDE_CIRCLE_SIZE,
+    height: SIDE_CIRCLE_SIZE,
+    borderRadius: SIDE_CIRCLE_SIZE / 2,
+    alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 28,
-    paddingTop: 0,
+    backgroundColor: 'rgba(255,255,255,0.18)',
   },
   shutterButton: {
-    width: SHUTTER_BUTTON_WIDTH,
-    height: SHUTTER_BUTTON_HEIGHT,
+    width: SHUTTER_BUTTON_SIZE,
+    height: SHUTTER_BUTTON_SIZE,
     alignItems: 'center',
     justifyContent: 'center',
   },
   shutterInner: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
+    width: 62,
+    height: 62,
+    borderRadius: 31,
     borderWidth: 3.5,
-    borderColor: '#EDEAE2',
+    borderColor: 'rgba(255,255,255,0.5)',
     backgroundColor: COLORS.white,
   },
   shutterInnerRecording: {
-    width: 32.5,
-    height: 32.5,
-    borderRadius: 7.5,
+    width: 28,
+    height: 28,
+    borderRadius: 7,
     backgroundColor: COLORS.accent,
   },
   permissionScreen: {
