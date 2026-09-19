@@ -14,6 +14,8 @@ import RouteIcon from '@/assets/images/tabIcons/route.svg';
 import UserIcon from '@/assets/images/tabIcons/user.svg';
 import ClipIcon from '@/assets/images/tabIcons/clip.svg';
 
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+
 /**
  * Manus 프로토타입의 SideMenu를 그대로 옮긴 웹 전용 햄버거 메뉴 패널입니다.
  *
@@ -63,8 +65,6 @@ export function WebSideMenu() {
     }).start();
   }, [isOpen, slideAnim]);
 
-  if (!isOpen) return null;
-
   const closeMenu = () => useWebMenuStore.getState().close();
 
   const goTo = (path: string) => {
@@ -74,7 +74,14 @@ export function WebSideMenu() {
 
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
-      <Pressable onPress={closeMenu} style={styles.webNavBackdrop} />
+      <AnimatedPressable
+        onPress={closeMenu}
+        pointerEvents={isOpen ? 'auto' : 'none'}
+        style={[
+          styles.webNavBackdrop,
+          { opacity: slideAnim },
+        ]}
+      />
 
       <Animated.View
         style={[

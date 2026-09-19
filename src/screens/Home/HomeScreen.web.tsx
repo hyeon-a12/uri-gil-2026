@@ -38,6 +38,27 @@ const KAKAO_REST_API_KEY = process.env.EXPO_PUBLIC_KAKAO_REST_API_KEY;
 const TOUR_API_ERROR = 'TOUR_API_ERROR' as const;
 const TOUR_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
+// 실제로 쓰기로 정한 8개 카테고리 태그입니다(항상 고정으로 노출, 순서 그대로).
+// 관광공사 두루누비 API 카테고리명은 "체험관광", "역사관광지"처럼 접미사가
+// 붙어서 정확히 일치하지 않을 수 있어, 태그 선택 시 필터링은 정확히 같은
+// 문자열이 아니라 포함 여부(includes)로 매칭합니다.
+const ALLOWED_CATEGORY_KEYWORDS = ['음식점', '카페', '쇼핑', '역사', '자연', '문화', '체험', '주차장'];
+
+// "전체"만 관광공사 두루누비 API(recommendedPlaces)를 쓰고, 나머지 태그는
+// 카카오맵(로컬) API로 주변 장소를 직접 검색합니다. 카카오 카테고리
+// 그룹코드가 있는 것(음식점/카페/주차장/문화시설)은 category_group_code로,
+// 없는 것(쇼핑/역사/자연/체험)은 키워드 검색으로 대체합니다.
+const KAKAO_CATEGORY_QUERY: Record<string, { code?: string; keyword?: string }> = {
+  음식점: { code: 'FD6' },
+  카페: { code: 'CE7' },
+  주차장: { code: 'PK6' },
+  문화: { code: 'CT1' },
+  쇼핑: { keyword: '쇼핑' },
+  역사: { keyword: '역사 관광지' },
+  자연: { keyword: '자연 관광지' },
+  체험: { keyword: '체험 관광' },
+};
+
 interface RecommendedPlace {
   id: string;
   name: string;
@@ -71,6 +92,55 @@ async function fetchSpotPhoto(keyword: string) {
     return Array.isArray(items) && items.length > 0 ? items[0] : items || null;
   } catch {
     return null;
+  }
+}
+
+async function fetchKakaoPlaces(
+  tag: string,
+  lat: number,
+  lng: number,
+): Promise<RecommendedPlace[]> {
+  const query = KAKAO_CATEGORY_QUERY[tag];
+  if (!query || !KAKAO_REST_API_KEY) return [];
+
+  try {
+    const params = new URLSearchParams({
+      x: String(lng),
+      y: String(lat),
+      radius: '20000',
+      sort: 'distance',
+      size: '10',
+    });
+    if (query.code) params.set('category_group_code', query.code);
+    else if (query.keyword) params.set('query', query.keyword);
+
+    const endpoint = query.code
+      ? 'https://dapi.kakao.com/v2/local/search/category.json'
+      : 'https://dapi.kakao.com/v2/local/search/keyword.json';
+
+    const res = await fetch(`${endpoint}?${params.toString()}`, {
+      headers: { Authorization: `KakaoAK ${KAKAO_REST_API_KEY}` },
+    });
+    const data = await res.json();
+    const documents: any[] = data?.documents || [];
+
+    return await Promise.all(
+      documents.map(async (doc, index) => {
+        const photoInfo = await fetchSpotPhoto(doc.place_name);
+        return {
+          id: `${doc.id}_${index}`,
+          name: doc.place_name,
+          imageUrl: photoInfo && photoInfo !== TOUR_API_ERROR ? photoInfo.galWebImageUrl : undefined,
+          distance: doc.distance ? Number(doc.distance) / 1000 : undefined,
+          lat: parseFloat(doc.y),
+          lng: parseFloat(doc.x),
+          category: tag,
+        };
+      }),
+    );
+  } catch (error) {
+    console.warn('[Home:web] 카카오 장소 검색 실패:', error);
+    return [];
   }
 }
 
@@ -163,7 +233,16 @@ const HOME_STYLES = `
   .uri-place-card-body { padding: 9px 9px 11px; }
   .uri-info-badge { display: inline-block; margin-bottom: 5px; padding: 3px 6px; border-radius: 999px; background: #FFF3DF; color: #473f35; font-size: 9px; font-family: 'Pretendard-Bold', sans-serif; font-weight: normal; }
   .uri-place-card h3 { overflow: hidden; margin: 0; font-size: 13px; font-family: 'Pretendard-Bold', sans-serif; font-weight: normal; letter-spacing: -.05em; text-overflow: ellipsis; white-space: nowrap; color: #222; }
-  .uri-place-card p { display: flex; align-items: center; gap: 2px; overflow: hidden; margin: 5px 0 0; color: #767676; font-size: 9px; white-space: nowrap; }
+  .uri-place-card-distance { display: flex; align-items: center; gap: 2px; overflow: hidden; margin: 5px 0 0; color: #767676; font-size: 9px; white-space: nowrap; }
+  .uri-skeleton-card { flex: none; width: 150px; overflow: hidden; border: 1px solid #eee; border-radius: 12px; background: #fff; }
+  .uri-skeleton-image { display: block; width: 100%; height: 116px; flex-shrink: 0; background: #eee; animation: uri-pulse 1.1s ease-in-out infinite; }
+  .uri-skeleton-body { display: flex; flex-direction: column; gap: 7px; padding: 9px 9px 11px; }
+  .uri-skeleton-line { height: 9px; border-radius: 4px; background: #eee; animation: uri-pulse 1.1s ease-in-out infinite; }
+  .uri-skeleton-line.short { width: 55%; }
+  @keyframes uri-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
+  .uri-place-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; width: 100%; min-height: 150px; padding: 20px 0; }
+  .uri-place-empty .uri-empty-symbol { background: #fff; }
+  .uri-place-empty p { margin: 0; color: #767676; font-size: 12px; }
   .uri-moments-section { margin-top: 35px; }
   .uri-more-link { display: flex; align-items: center; gap: 3px; color: #767676; font-size: 11px; background: none; border: 0; cursor: pointer; }
   .uri-clips-row { display: flex; gap: 11px; overflow: auto; padding-bottom: 6px; }
@@ -189,6 +268,8 @@ export default function HomeScreenWeb() {
   const [category, setCategory] = useState<string>('전체');
   const [todayMoments, setTodayMoments] = useState<ClipItem[]>([]);
   const [currentLocation, setCurrentLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [kakaoPlaces, setKakaoPlaces] = useState<RecommendedPlace[]>([]);
+  const [isLoadingKakaoPlaces, setIsLoadingKakaoPlaces] = useState(false);
 
   const loadTodayMoments = useCallback(async () => {
     if (!currentTrip) {
@@ -315,9 +396,28 @@ export default function HomeScreenWeb() {
     };
   }, [currentLocation]);
 
-  const categories = ['전체', ...Array.from(new Set(recommendedPlaces.map((p) => p.category).filter(Boolean)))] as string[];
-  const filteredPlaces =
-    category === '전체' ? recommendedPlaces : recommendedPlaces.filter((p) => p.category === category);
+  // "전체"만 관광공사 두루누비 데이터(recommendedPlaces)를 쓰고, 나머지
+  // 태그를 고르면 그 태그로 카카오맵 API를 새로 호출해서 주변 실제 장소를
+  // 보여줍니다 — 관광지 10곳 안에서만 필터링하면 대부분 빈 목록이었습니다.
+  useEffect(() => {
+    if (category === '전체' || !currentLocation) return;
+    let isMounted = true;
+    setIsLoadingKakaoPlaces(true);
+    (async () => {
+      const places = await fetchKakaoPlaces(category, currentLocation.lat, currentLocation.lng);
+      if (isMounted) {
+        setKakaoPlaces(places);
+        setIsLoadingKakaoPlaces(false);
+      }
+    })();
+    return () => {
+      isMounted = false;
+    };
+  }, [category, currentLocation]);
+
+  // 네이티브 CATEGORY_TAGS처럼 8개 태그를 항상 고정으로 보여줍니다.
+  const categories = ['전체', ...ALLOWED_CATEGORY_KEYWORDS];
+  const filteredPlaces = category === '전체' ? recommendedPlaces : kakaoPlaces;
 
   const bannerImage = todayMoments.find((m) => m.thumbnail)?.thumbnail;
   const totalStopsHint = currentTrip ? '기록을 이어가볼까요?' : '';
@@ -379,26 +479,47 @@ export default function HomeScreenWeb() {
               </button>
             ))}
           </div>
-          <div className="uri-place-grid">
-            {filteredPlaces.map((place) => (
-              <div key={place.id} className="uri-place-card">
-                {place.imageUrl ? (
-                  <RNImage source={{ uri: place.imageUrl }} style={styles.placeCardImage} />
-                ) : (
-                  <View style={styles.placeCardImagePlaceholder} />
-                )}
-                <div className="uri-place-card-body">
-                  {place.category && <span className="uri-info-badge">{place.category}</span>}
-                  <h3>{place.name}</h3>
-                  {place.distance !== undefined && (
-                    <p>
-                      <Feather name="map-pin" size={10} color="#767676" /> {place.distance.toFixed(1)}km
-                    </p>
-                  )}
+          {category !== '전체' && isLoadingKakaoPlaces ? (
+            <div className="uri-place-grid">
+              {[0, 1, 2].map((i) => (
+                <div key={i} className="uri-skeleton-card">
+                  <div className="uri-skeleton-image" style={{ height: 116 }} />
+                  <div className="uri-skeleton-body">
+                    <div className="uri-skeleton-line short" />
+                    <div className="uri-skeleton-line" />
+                  </div>
                 </div>
+              ))}
+            </div>
+          ) : category !== '전체' && filteredPlaces.length === 0 ? (
+            <div className="uri-place-empty">
+              <div className="uri-empty-symbol">
+                <Feather name="map-pin" size={22} color="#6a5845" />
               </div>
-            ))}
-          </div>
+              <p>근처에 {category} 장소가 없어요</p>
+            </div>
+          ) : (
+            <div className="uri-place-grid">
+              {filteredPlaces.map((place) => (
+                <div key={place.id} className="uri-place-card">
+                  {place.imageUrl ? (
+                    <RNImage source={{ uri: place.imageUrl }} style={styles.placeCardImage} />
+                  ) : (
+                    <View style={styles.placeCardImagePlaceholder} />
+                  )}
+                  <div className="uri-place-card-body">
+                    {place.category && <span className="uri-info-badge">{place.category}</span>}
+                    <h3>{place.name}</h3>
+                    {place.distance !== undefined && (
+                      <span className="uri-place-card-distance">
+                        <Feather name="map-pin" size={10} color="#767676" /> {place.distance.toFixed(1)}km
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </section>
 
         <section className="uri-moments-section">

@@ -14,6 +14,14 @@ import { type PropsWithChildren } from 'react';
  * body의 overflow만 auto로 바꿔서, 기존처럼 한 화면 안에 다 들어가는
  * 화면들은 지금까지와 동일하게 보이고(스크롤바가 생길 콘텐츠가 없으므로),
  * 문서 스크롤이 실제로 필요한 화면만 정상적으로 스크롤되게 합니다.
+ *
+ * 가로(overflow-x)는 명시적으로 hidden을 걸어둡니다 — 햄버거 메뉴 패널이
+ * 평소엔 화면 오른쪽 밖으로 translateX 시켜서 안 보이게 숨겨두는데, body에
+ * overflow-x 제한이 없으면 그 transform으로 밀려난 위치까지 문서의 가로
+ * 스크롤 영역에 포함돼서, 모바일에서 화면을 옆으로 스와이프하면 숨겨둔
+ * 메뉴가 그대로 드러나 보였습니다. html/#root에도 같이 걸고, iOS 사파리는
+ * overflow-x:hidden만으로는 스와이프 드래그 자체를 못 막는 경우가 있어서
+ * touch-action: pan-y로 가로 방향 터치 제스처 자체를 막습니다.
  */
 export default function Root({ children }: PropsWithChildren) {
   return (
@@ -29,7 +37,7 @@ export default function Root({ children }: PropsWithChildren) {
           id="expo-reset"
           // eslint-disable-next-line react/no-danger
           dangerouslySetInnerHTML={{
-            __html: `#root,body,html{height:100%}body{overflow-y:auto}#root{display:flex}`,
+            __html: `#root,body,html{height:100%;overflow-x:hidden;touch-action:pan-y}body{overflow-y:auto}#root{display:flex}`,
           }}
         />
       </head>
