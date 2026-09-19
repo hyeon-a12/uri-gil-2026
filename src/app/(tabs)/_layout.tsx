@@ -1,11 +1,12 @@
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { router, Tabs } from 'expo-router';
+import { router, Tabs, usePathname } from 'expo-router';
 import { Platform, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppText as Text } from '@/components/AppText';
 import { useTripStore } from '@/store/useTripStore';
 import { COLORS as SHARED_COLORS } from '@/constants/color';
 import { Alert } from '@/services/webAlert';
+import { useWebSheetStore } from '@/store/useWebSheetStore';
 
 
   import HomeIcon from "@/assets/images/tabIcons/home.svg";
@@ -115,6 +116,18 @@ function CameraTabButton() {
 // 보이면 되는 촬영 버튼뿐입니다.
 function WebCameraFab() {
   const insets = useSafeAreaInsets();
+  const isSheetOpen = useWebSheetStore((state) => state.isOpen);
+  const pathname = usePathname();
+
+  // 장소 상세 시트(PlaceDetailModal)가 열려있는 동안은 이 버튼을 완전히
+  // 숨깁니다. 탭 화면 컨테이너가 자체 stacking context를 만들면 z-index를
+  // 아무리 높여도 이 전역 버튼이 시트 위에 겹쳐 보일 수 있어서, z-index로
+  // 다투는 대신 아예 안 그리는 쪽을 택했습니다.
+  if (isSheetOpen) return null;
+
+  // 홈 화면에서만 보이게 합니다 — 다른 탭 화면(내 경로/클립 관리/마이페이지)에서는 숨깁니다.
+  if (pathname !== '/home') return null;
+
   return (
     <Pressable
       onPress={handleCameraPress}

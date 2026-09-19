@@ -1,13 +1,13 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type ComponentProps } from 'react';
 import { Image as RNImage, StyleSheet, View, useWindowDimensions } from 'react-native';
-import { Feather } from '@expo/vector-icons';
+import { Feather, Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { AppText as Text } from '@/components/AppText';
 import { AppHeader } from '@/components/web/AppHeader.web';
 import { useTripStore } from '@/store/useTripStore';
-import { getRecordingsByFolder } from '@/services/recordingService';
+import { getRecordingsByFolder, getAllRecordings } from '@/services/recordingService';
 import NewTripModal from '@/components/NewTripModal';
 import { useCreateTripModal } from '@/hooks/useCreateTripModal';
 import type { RecordingData } from '@/types/recording';
@@ -18,6 +18,7 @@ import {
   type KakaoPlaceInfo,
   type PlaceDetailView,
 } from '@/components/PlaceDetail/PlaceDetailModal';
+import { useWebSheetStore } from '@/store/useWebSheetStore';
 
 /**
  * HomeScreen.tsx(네이티브, 전체화면 지도+바텀시트+AI추천 오버레이)의
@@ -114,18 +115,27 @@ async function fetchSpotPhoto(keyword: string) {
   }
 }
 
-// 카카오 로컬 API는 사진을 안 주고, 관광공사 사진 API도 음식점/카페 같은
-// 일반 장소는 거의 못 찾습니다 — 실제 사진 대신, 그 위치를 보여주는
-// OpenStreetMap 타일 이미지를 카드 사진 자리에 대신 씁니다(별도 API 키
-// 필요 없는 무료 타일 서버). 표준 슬리피맵 타일 좌표 변환 공식입니다.
-function buildOsmTileUrl(lat: number, lng: number, zoom = 16): string {
-  const n = 2 ** zoom;
-  const x = Math.floor(((lng + 180) / 360) * n);
-  const latRad = (lat * Math.PI) / 180;
-  const y = Math.floor(
-    ((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) * n,
-  );
-  return `https://tile.openstreetmap.org/${zoom}/${x}/${y}.png`;
+// 사진이 없는 카드는 회색 배경에 카테고리에 맞는 아이콘을 대신 보여줍니다.
+// 카카오 검색 결과(음식점/카페/쇼핑 등)는 category가 8개 태그 중 하나와
+// 정확히 같은 문자열이고, 관광공사 "전체" 목록은 category가 "체험관광지"처럼
+// 접미사가 붙은 원문이라 포함 여부(includes)로 매칭합니다.
+const CATEGORY_ICON: Record<string, ComponentProps<typeof Ionicons>['name']> = {
+  음식점: 'restaurant-outline',
+  카페: 'cafe-outline',
+  쇼핑: 'bag-outline',
+  역사: 'time-outline',
+  자연: 'leaf-outline',
+  문화: 'color-palette-outline',
+  체험: 'footsteps-outline',
+  주차장: 'car-outline',
+};
+const DEFAULT_CATEGORY_ICON: ComponentProps<typeof Ionicons>['name'] = 'image-outline';
+
+function getCategoryIcon(category?: string): ComponentProps<typeof Ionicons>['name'] {
+  if (!category) return DEFAULT_CATEGORY_ICON;
+  if (CATEGORY_ICON[category]) return CATEGORY_ICON[category];
+  const matchedKeyword = ALLOWED_CATEGORY_KEYWORDS.find((keyword) => category.includes(keyword));
+  return matchedKeyword ? CATEGORY_ICON[matchedKeyword] : DEFAULT_CATEGORY_ICON;
 }
 
 async function fetchKakaoPlaces(
@@ -160,18 +170,13 @@ async function fetchKakaoPlaces(
     return await Promise.all(
       documents.map(async (doc, index) => {
         const photoInfo = await fetchSpotPhoto(doc.place_name);
-        const placeLat = parseFloat(doc.y);
-        const placeLng = parseFloat(doc.x);
         return {
           id: `${doc.id}_${index}`,
           name: doc.place_name,
-          imageUrl:
-            photoInfo && photoInfo !== TOUR_API_ERROR
-              ? photoInfo.galWebImageUrl
-              : buildOsmTileUrl(placeLat, placeLng),
+          imageUrl: photoInfo && photoInfo !== TOUR_API_ERROR ? photoInfo.galWebImageUrl : undefined,
           distance: doc.distance ? Number(doc.distance) / 1000 : undefined,
-          lat: placeLat,
-          lng: placeLng,
+          lat: parseFloat(doc.y),
+          lng: parseFloat(doc.x),
           category: tag,
         };
       }),
@@ -266,7 +271,8 @@ const HOME_STYLES = `
   .uri-chip.uri-chip-active { border-color: #222; background: #222; color: #fff; }
   .uri-place-grid { display: flex; gap: 12px; overflow-x: auto; margin-top: 15px; padding-bottom: 4px; }
   .uri-place-grid::-webkit-scrollbar { display: none; }
-  .uri-place-card { flex: none; width: 150px; overflow: hidden; border: 1px solid #eee; border-radius: 12px; background: #fff; text-align: left; cursor: pointer; }
+  .uri-place-card { position: relative; flex: none; width: 150px; overflow: hidden; border: 1px solid #eee; border-radius: 12px; background: #fff; text-align: left; cursor: pointer; }
+  .uri-visited-badge { position: absolute; top: 6px; right: 6px; z-index: 1; width: 22px; height: 22px; border-radius: 11px; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.45); }
   .uri-place-card img { display: block; width: 100%; height: 116px; object-fit: cover; background: #F5F5F5; }
   .uri-place-card-body { padding: 9px 9px 11px; }
   .uri-info-badge { display: inline-block; margin-bottom: 5px; padding: 3px 6px; border-radius: 999px; background: #FFF3DF; color: #473f35; font-size: 9px; font-family: 'Pretendard-Bold', sans-serif; font-weight: normal; }
@@ -315,6 +321,16 @@ export default function HomeScreenWeb() {
   const [placeExtraInfo, setPlaceExtraInfo] = useState<KakaoPlaceInfo | null>(null);
   const [isLoadingPlaceInfo, setIsLoadingPlaceInfo] = useState(false);
 
+  // 이 팝업이 열려있는 동안은 전역 촬영 버튼(WebCameraFab)이 그 위에 겹쳐
+  // 보이지 않도록 전역 상태에 알립니다.
+  useEffect(() => {
+    if (viewingPlace) {
+      useWebSheetStore.getState().open();
+    } else {
+      useWebSheetStore.getState().close();
+    }
+  }, [viewingPlace]);
+
   useEffect(() => {
     let isMounted = true;
     (async () => {
@@ -352,6 +368,37 @@ export default function HomeScreenWeb() {
     useCallback(() => {
       void loadTodayMoments();
     }, [loadTodayMoments]),
+  );
+
+  // 추천 장소 카드에 "이미 방문한 곳"(별 배지)을 표시하기 위해, 지금까지
+  // 찍어둔 모든 클립의 좌표를 한 번 불러옵니다. 장소명이 아니라 좌표
+  // 거리(100m 이내)로 비교합니다 — 장소명 표기가 조금 달라도 정확합니다.
+  const [visitedLocations, setVisitedLocations] = useState<{ lat: number; lng: number }[]>([]);
+  const VISITED_RADIUS_KM = 0.1;
+
+  const loadVisitedLocations = useCallback(async () => {
+    try {
+      const recordings = await getAllRecordings();
+      setVisitedLocations(
+        recordings.map((r) => ({ lat: r.location.latitude, lng: r.location.longitude })),
+      );
+    } catch (error) {
+      console.warn('[Home:web] 방문 기록 로딩 실패:', error);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadVisitedLocations();
+    }, [loadVisitedLocations]),
+  );
+
+  const isPlaceVisited = useCallback(
+    (place: { lat: number; lng: number }) =>
+      visitedLocations.some(
+        (loc) => getDistance(loc.lat, loc.lng, place.lat, place.lng) <= VISITED_RADIUS_KM,
+      ),
+    [visitedLocations],
   );
 
   useEffect(() => {
@@ -438,18 +485,13 @@ export default function HomeScreenWeb() {
           sortedSpots.map(async (spot: any, index: number) => {
             const photoInfo = await fetchSpotPhoto(spot.hubTatsNm);
             if (photoInfo === TOUR_API_ERROR) hadPhotoApiError = true;
-            const spotLat = parseFloat(spot.mapY);
-            const spotLng = parseFloat(spot.mapX);
             return {
               id: `${spot.hubTatsNm}_${index}`,
               name: spot.hubTatsNm,
-              imageUrl:
-                photoInfo && photoInfo !== TOUR_API_ERROR
-                  ? photoInfo.galWebImageUrl
-                  : buildOsmTileUrl(spotLat, spotLng),
+              imageUrl: photoInfo && photoInfo !== TOUR_API_ERROR ? photoInfo.galWebImageUrl : undefined,
               distance: spot.distance,
-              lat: spotLat,
-              lng: spotLng,
+              lat: parseFloat(spot.mapY),
+              lng: parseFloat(spot.mapX),
               category: spot.hubCtgryMclsNm || spot.hubCtgryLclsNm || undefined,
             };
           }),
@@ -578,7 +620,14 @@ export default function HomeScreenWeb() {
                   {place.imageUrl ? (
                     <RNImage source={{ uri: place.imageUrl }} style={styles.placeCardImage} />
                   ) : (
-                    <View style={styles.placeCardImagePlaceholder} />
+                    <View style={styles.placeCardImagePlaceholder}>
+                      <Ionicons name={getCategoryIcon(place.category)} size={28} color="#B8B0A6" />
+                    </View>
+                  )}
+                  {isPlaceVisited(place) && (
+                    <div className="uri-visited-badge">
+                      <Ionicons name="star" size={12} color="#FFD166" />
+                    </div>
                   )}
                   <div className="uri-place-card-body">
                     {place.category && <span className="uri-info-badge">{place.category}</span>}
@@ -651,6 +700,8 @@ const styles = StyleSheet.create({
     width: '100%',
     height: 116,
     backgroundColor: '#F5F5F5',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   momentImage: {
     width: '100%',

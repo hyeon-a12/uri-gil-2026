@@ -233,7 +233,7 @@ export default function ClipManageScreen() {
 
     return (
       <TouchableOpacity
-        style={styles.folderCard}
+        style={[styles.folderCard, Platform.OS === 'web' && styles.folderCardWeb]}
         activeOpacity={0.7}
         onPress={() => handleFolderPress(item)}
       >
@@ -637,6 +637,14 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.banner,
     backgroundColor: '#FBFBFA',
     marginBottom: SPACING.md,
+  },
+  // 내 여행 화면의 카드(공용 Card 컴포넌트, borderRadius 20 + 안쪽 ListRow의
+  // paddingVertical 14가 겹쳐서 위아래 여백이 이 카드보다 더 큽니다)와
+  // 높이·모서리를 맞춥니다.
+  folderCardWeb: {
+    paddingVertical: SPACING.md + 14,
+    borderRadius: 20,
+    marginBottom: 10,
   },
   folderCardTopRow: {
     flexDirection: 'row',

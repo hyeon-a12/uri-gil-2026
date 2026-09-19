@@ -42,6 +42,7 @@ import {
   type NativeSyntheticEvent,
 } from 'react-native';
 import { useWebMenuStore } from '@/store/useWebMenuStore';
+import { useWebSheetStore } from '@/store/useWebSheetStore';
 // 지도 위 스톱 카드 캐러셀(가로 스크롤) 안에 클립 목록(역시 가로 스크롤)이
 // 중첩되어 있습니다. react-native의 순정 ScrollView는 같은 방향으로 중첩된
 // 스크롤 제스처를 제대로 넘겨주지 못해서(부모가 항상 먼저 가로채감) 안쪽
@@ -168,9 +169,12 @@ function SelectedStopCard({ stop, onPreviewClip, onPressDetail }: SelectedStopCa
         <Pressable
           hitSlop={10}
           onPress={() => {
-            if (stop.source === "manual") {
-              // 직접 추가한 장소는 실제 API로 검증된 정보가 아니라 상세
-              // 정보를 보여줄 수 없습니다.
+            // 웹은 장소 검색(add-place)으로 추가한 스톱도 실제 카카오 검색
+            // 결과에서 좌표를 받아온 것이라, 다른 장소 카드와 똑같이 정보
+            // 팝업(카카오 로컬 검색으로 주소/카테고리/전화 보충)을 보여줍니다.
+            if (stop.source === "manual" && Platform.OS !== "web") {
+              // 네이티브는 그대로 유지: 직접 추가한 장소는 실제 API로 검증된
+              // 정보가 아니라 상세 정보를 보여줄 수 없습니다.
               Alert.alert(stop.name, "직접 추가한 장소는 상세 정보가 없어요.");
               return;
             }
@@ -697,6 +701,17 @@ export default function MyRouteScreen() {
   const [placeExtraInfo, setPlaceExtraInfo] = useState<KakaoPlaceInfo | null>(null);
   const [isLoadingPlaceInfo, setIsLoadingPlaceInfo] = useState(false);
 
+  // 이 팝업이 열려있는 동안은 전역 촬영 버튼(WebCameraFab)이 그 위에 겹쳐
+  // 보이지 않도록 전역 상태에 알립니다.
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    if (viewingPlace) {
+      useWebSheetStore.getState().open();
+    } else {
+      useWebSheetStore.getState().close();
+    }
+  }, [viewingPlace]);
+
   // 정보 팝업이 열릴 때(viewingPlace가 바뀔 때)만 카카오 로컬 검색으로
   // 주소·카테고리·전화번호를 채웁니다 — 홈 화면의 정보 팝업과 동일한 방식.
   useEffect(() => {
@@ -942,9 +957,8 @@ export default function MyRouteScreen() {
   // 끝나는 시점 = onMomentumScrollEnd) 그 카드가 가리키는 장소로 지도 중심을
   // panTo로 부드럽게 옮깁니다. 좌표가 없는 스톱(직접 추가했는데 위치를 못
   // 구한 경우 등)은 옮길 곳이 없으니 조용히 건너뜁니다.
-  const handleStopCardScrollEnd = useCallback(
-    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-      const offsetX = event.nativeEvent.contentOffset.x;
+  const panToStopAtOffset = useCallback(
+    (offsetX: number) => {
       const index = Math.round(offsetX / STOP_CARD_SNAP_INTERVAL);
       const clampedIndex = Math.max(0, Math.min(index, sortedStops.length - 1));
       const stop = sortedStops[clampedIndex];
@@ -952,6 +966,30 @@ export default function MyRouteScreen() {
       mapRef.current?.panTo(stop.latitude, stop.longitude);
     },
     [sortedStops],
+  );
+
+  const handleStopCardScrollEnd = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      panToStopAtOffset(event.nativeEvent.contentOffset.x);
+    },
+    [panToStopAtOffset],
+  );
+
+  // 웹은 react-native-gesture-handler의 ScrollView가 onMomentumScrollEnd를
+  // 안정적으로 안 쏴줘서(마우스 휠/트랙패드 스크롤엔 네이티브의 "관성 스크롤"
+  // 개념 자체가 없음), onScroll로 매번 위치를 받아뒀다가 일정 시간(150ms)
+  // 동안 스크롤이 더 없으면 그때를 "스크롤이 멈췄다"로 보고 지도를 옮깁니다.
+  const webScrollEndTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleStopCardWebScroll = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const offsetX = event.nativeEvent.contentOffset.x;
+      if (webScrollEndTimer.current) clearTimeout(webScrollEndTimer.current);
+      webScrollEndTimer.current = setTimeout(() => {
+        panToStopAtOffset(offsetX);
+      }, 150);
+    },
+    [panToStopAtOffset],
   );
 
   return (
@@ -1114,6 +1152,8 @@ export default function MyRouteScreen() {
                 snapToAlignment="start"
                 decelerationRate="fast"
                 onMomentumScrollEnd={handleStopCardScrollEnd}
+                onScroll={Platform.OS === 'web' ? handleStopCardWebScroll : undefined}
+                scrollEventThrottle={Platform.OS === 'web' ? 16 : undefined}
               >
                 {sortedStops.map((stop) => (
                   <View key={stop.id} style={styles.stopCardSlide}>

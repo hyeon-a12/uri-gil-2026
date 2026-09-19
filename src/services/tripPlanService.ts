@@ -231,10 +231,26 @@ export function buildPlanData(
   const stops = Array.from(byDay.keys())
     .sort((a, b) => a - b)
     .flatMap((day) => applyStopOrder(byDay.get(day)!, stopOrderOverrides[day]))
-    .map((stop, index) => ({
-      ...stop,
-      order: index + 1,
-    }));
+    .map((stop, index) => {
+      // 같은 장소에서 클립을 여러 개 찍었으면 "처음 찍은 시간 ~ 마지막으로
+      // 찍은 시간"으로 보여줍니다. 1개면(또는 아직 촬영 안 한 확정 스톱이면)
+      // 기존처럼 단일 시간(또는 "직접 추가"/"AI 추천") 그대로 둡니다.
+      let time = stop.time;
+      if (stop.clips.length > 1) {
+        const sortedClips = [...stop.clips].sort((a, b) =>
+          a.recordedAt.localeCompare(b.recordedAt),
+        );
+        const first = sortedClips[0];
+        const last = sortedClips[sortedClips.length - 1];
+        time = `${formatClipTime(first.recordedAt)} ~ ${formatClipTime(last.recordedAt)}`;
+      }
+
+      return {
+        ...stop,
+        order: index + 1,
+        time,
+      };
+    });
 
   const actualDayNumbers = new Set([
     ...stops.map((s) => s.day),
