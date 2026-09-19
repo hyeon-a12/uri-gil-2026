@@ -371,19 +371,29 @@ export default function HomeScreenWeb() {
   );
 
   // 추천 장소 카드에 "이미 방문한 곳"(별 배지)을 표시하기 위해, 지금까지
-  // 찍어둔 모든 클립의 좌표를 한 번 불러옵니다. 장소명이 아니라 좌표
-  // 거리로 비교합니다 — 장소명 표기가 조금 달라도 정확합니다. 반경은 GPS
-  // 오차(수 m~10여 m)는 보정하되, 한옥마을처럼 가게가 밀집된 곳에서 안 간
-  // 옆 가게까지 같이 별표 처리되지 않도록 30m로 좁게 잡습니다(100m는 너무
-  // 넓어서 전혀 다른 장소까지 방문한 것으로 잘못 표시됐음).
-  const [visitedLocations, setVisitedLocations] = useState<{ lat: number; lng: number }[]>([]);
+  // 찍어둔 모든 클립의 좌표 + 촬영 당시 입력한 장소명을 한 번 불러옵니다.
+  // 좌표 거리만으로 판단하면 한옥마을처럼 가게가 다닥다닥 붙은 곳에서는
+  // 30m 반경 안에도 전혀 다른 가게가 들어와 버려서, 장소명이 있는
+  // 클립이면 이름도 같이 대조합니다 — 거리 조건을 통과해도 이름이 다르면
+  // "방문함" 처리하지 않습니다. 다만 장소명을 안 남긴 클립(건너뛰기)도
+  // 있어서, 그런 경우엔 아주 가까운 거리(15m)일 때만 이름 없이도 인정합니다.
+  const [visitedLocations, setVisitedLocations] = useState<
+    { lat: number; lng: number; placeName?: string }[]
+  >([]);
   const VISITED_RADIUS_KM = 0.03;
+  // 장소명이 없는 클립(건너뛰기)에 한해서만 적용하는, 이름 대조 없이도
+  // "확실히 같은 자리"로 볼 수 있는 좁은 반경입니다.
+  const VISITED_RADIUS_NO_NAME_KM = 0.015;
 
   const loadVisitedLocations = useCallback(async () => {
     try {
       const recordings = await getAllRecordings();
       setVisitedLocations(
-        recordings.map((r) => ({ lat: r.location.latitude, lng: r.location.longitude })),
+        recordings.map((r) => ({
+          lat: r.location.latitude,
+          lng: r.location.longitude,
+          placeName: r.location.placeName,
+        })),
       );
     } catch (error) {
       console.warn('[Home:web] 방문 기록 로딩 실패:', error);
@@ -396,11 +406,25 @@ export default function HomeScreenWeb() {
     }, [loadVisitedLocations]),
   );
 
+  // 공백 제거 + 소문자 변환 후 한쪽이 다른 쪽을 포함하면 같은 장소로 봅니다
+  // ("스타벅스" ⊂ "스타벅스 전주고사동점"처럼 표기가 조금 달라도 통과하도록).
+  const isSamePlaceName = (a?: string, b?: string) => {
+    if (!a || !b) return false;
+    const normalize = (value: string) => value.replace(/\s+/g, '').toLowerCase();
+    const na = normalize(a);
+    const nb = normalize(b);
+    if (!na || !nb) return false;
+    return na.includes(nb) || nb.includes(na);
+  };
+
   const isPlaceVisited = useCallback(
-    (place: { lat: number; lng: number }) =>
-      visitedLocations.some(
-        (loc) => getDistance(loc.lat, loc.lng, place.lat, place.lng) <= VISITED_RADIUS_KM,
-      ),
+    (place: { lat: number; lng: number; name: string }) =>
+      visitedLocations.some((loc) => {
+        const distanceKm = getDistance(loc.lat, loc.lng, place.lat, place.lng);
+        if (distanceKm > VISITED_RADIUS_KM) return false;
+        if (loc.placeName) return isSamePlaceName(loc.placeName, place.name);
+        return distanceKm <= VISITED_RADIUS_NO_NAME_KM;
+      }),
     [visitedLocations],
   );
 

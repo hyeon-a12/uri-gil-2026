@@ -1196,6 +1196,7 @@ export default function MyRouteScreen() {
             tripStartDate={tripStartDate}
             onReorderStops={handleReorderStops}
             onStopDeleted={refreshTripData}
+            showDayMap={false}
           />
         )}
       </View>
