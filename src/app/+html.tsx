@@ -29,9 +29,13 @@ export default function Root({ children }: PropsWithChildren) {
       <head>
         <meta charSet="utf-8" />
         <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
+        {/* maximum-scale=1: iOS 사파리는 포커스된 input의 font-size가
+            16px보다 작으면 화면을 자동으로 확대합니다 — 이 값이 없으면
+            입력창을 탭할 때마다, 그리고 확대된 채로 다른 화면으로 넘어갈
+            때마다 화면이 확대된 상태로 보였습니다. */}
         <meta
           name="viewport"
-          content="width=device-width, initial-scale=1, shrink-to-fit=no"
+          content="width=device-width, initial-scale=1, maximum-scale=1, shrink-to-fit=no"
         />
         <style
           id="expo-reset"

@@ -132,23 +132,28 @@ export default function MyPageScreen() {
           </Card>
         </View>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>나의 활동</Text>
+        {/* 웹은 "내 여행"이 햄버거 메뉴에도 있어서 중복이라, 이 섹션 자체를
+            뺍니다(항목이 이거 하나뿐이라 섹션 제목만 남는 걸 막기 위해
+            제목까지 통째로). 네이티브는 햄버거 메뉴가 없어서 그대로 유지. */}
+        {Platform.OS !== 'web' && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>나의 활동</Text>
 
-          <Pressable
-            style={({ pressed }) => [
-              styles.activityCard,
-              pressed && styles.activityCardPressed,
-            ]}
-            onPress={() => router.push('/my-routes')}
-          >
-            <View style={styles.activityIconCircle}>
-              <Feather name="map" size={20} color={colors.accent} />
-            </View>
-            <Text style={styles.activityCardTitle}>내 여행</Text>
-            <Feather name="chevron-right" size={20} color={colors.textTertiary} />
-          </Pressable>
-        </View>
+            <Pressable
+              style={({ pressed }) => [
+                styles.activityCard,
+                pressed && styles.activityCardPressed,
+              ]}
+              onPress={() => router.push('/my-routes')}
+            >
+              <View style={styles.activityIconCircle}>
+                <Feather name="map" size={20} color={colors.accent} />
+              </View>
+              <Text style={styles.activityCardTitle}>내 여행</Text>
+              <Feather name="chevron-right" size={20} color={colors.textTertiary} />
+            </Pressable>
+          </View>
+        )}
 
         <View style={styles.section}>
           <Card style={styles.menuCard}>

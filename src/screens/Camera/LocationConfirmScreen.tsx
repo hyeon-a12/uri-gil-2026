@@ -24,6 +24,7 @@ import KakaoMapView, {
 import { COLORS as APP_COLORS, RADIUS } from "@/constants/color";
 import { saveRecording, updateRecordingServerId } from "@/services/recordingService";
 import { useTripStore } from "@/store/useTripStore";
+import { useWebMenuStore } from "@/store/useWebMenuStore";
 import { getAllFolders } from "@/services/folderService";
 import { apiFetch } from "@/services/api";
 import { formatDistance, usePlaceSearch } from "@/hooks/usePlaceSearch";
@@ -376,6 +377,24 @@ export default function LocationConfirmScreen() {
               </Text>
             </Pressable>
 
+            {/* 다른 웹 화면들은 전부 헤더에 햄버거 메뉴 버튼이 있는데, 이
+                화면은 지도 위에 뜨는 자체 헤더라 빠져있었습니다. */}
+            {Platform.OS === "web" && (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="메뉴"
+                onPress={() => useWebMenuStore.getState().open()}
+                style={({ pressed }) => [
+                  styles.menuButton,
+                  { top: insets.top + 10 },
+                  pressed && styles.backButtonPressed,
+                ]}
+                hitSlop={10}
+              >
+                <Ionicons name="menu-outline" size={20} color={COLORS.textPrimary} />
+              </Pressable>
+            )}
+
             {/* "내 위치로" 버튼 — 시트를 드래그해도 항상 시트 바로 위에 떠 있도록
                 sheetHeight(Animated.Value)에 맞춰 bottom을 같이 움직입니다. */}
             <Animated.View style={[styles.mapControls, { bottom: Animated.add(sheetHeight, 16) }]}>
@@ -400,7 +419,7 @@ export default function LocationConfirmScreen() {
                 <Text
                   allowFontScaling={false}
                   numberOfLines={1}
-                  style={styles.sheetTitle}
+                  style={[styles.sheetTitle, Platform.OS === "web" && styles.sheetTitleWeb]}
                 >
                   어디에서 촬영했나요?
                 </Text>
@@ -644,6 +663,21 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     fontWeight: "700",
   },
+  menuButton: {
+    position: "absolute",
+    right: 16,
+    width: 44,
+    height: 44,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 22,
+    backgroundColor: "#FFFFFF",
+    shadowColor: "#172033",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.14,
+    shadowRadius: 8,
+    elevation: 5,
+  },
   // "내 위치로" 버튼 위치. bottom은 시트 높이(Animated.Value)에 맞춰 인라인으로 준다.
   mapControls: {
     position: "absolute",
@@ -694,6 +728,12 @@ const styles = StyleSheet.create({
     lineHeight: 29,
     fontWeight: "800",
     letterSpacing: -0.5,
+  },
+  // 다른 웹 화면 헤더 제목(AppHeader.web/ScreenHeader)과 굵기/크기를
+  // 맞춥니다 — 원래 값(800, 21px)은 네이티브 전용으로 그대로 둡니다.
+  sheetTitleWeb: {
+    fontSize: 18,
+    fontWeight: "700",
   },
   inlineNextButton: {
     height: 38,

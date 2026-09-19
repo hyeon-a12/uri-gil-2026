@@ -60,6 +60,16 @@ export function getDayLabel(day: number, _tripStartDate: Date | null): string {
   return `DAY ${day}`;
 }
 
+const WEEKDAY_KO = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
+
+/** 웹 일정 화면의 날짜 헤더용: "9월 19일, 금요일" 형태. 시작일을 모르면 빈 문자열. */
+export function formatDayDate(day: number, tripStartDate: Date | null): string {
+  if (!tripStartDate) return '';
+  const date = new Date(tripStartDate);
+  date.setDate(date.getDate() + (day - 1));
+  return `${date.getMonth() + 1}월 ${date.getDate()}일, ${WEEKDAY_KO[date.getDay()]}`;
+}
+
 /** 여행 시작일 기준 며칠째인지 (1부터 시작). 기간을 못 읽으면 항상 1일차로 취급. */
 function dayIndexOf(recordedAt: string, tripStart: Date | null): number {
   if (!tripStart) return 1;

@@ -60,7 +60,11 @@ export const AUTH_STYLES = `
   }
   .uri-auth-form input, .uri-field-stack input {
     width: 100%; height: 50px; padding: 0 14px; border: 1px solid transparent; border-radius: 12px;
-    background: #F5F5F5; color: #222; font-size: 14px;
+    background: #F5F5F5; color: #222;
+    /* iOS 사파리는 포커스한 input의 font-size가 16px보다 작으면 화면을
+       자동으로 확대합니다 — 16px 미만이면 이 화면들(로그인/회원가입)을
+       열 때마다 입력창 탭할 때 갑자기 확대되어 보였습니다. */
+    font-size: 16px;
     transition: border-color 0.16s; box-sizing: border-box; font-family: 'Pretendard-Regular', sans-serif;
   }
   .uri-auth-form input:focus, .uri-field-stack input:focus { border-color: #FF7F5C; outline: 0; }

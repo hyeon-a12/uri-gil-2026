@@ -27,6 +27,9 @@ import { Feather, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
  * 쓸 수 없어 별도 파일(.web.tsx)로 분리했습니다.
  */
 
+// 가입 화면(join.web.tsx)이 쓰는 것과 같은 실제 노션 개인정보처리방침 페이지입니다.
+const PRIVACY_POLICY_URL = 'https://rectangular-random-c6d.notion.site/444eee87fea883bc854a81944d60553c';
+
 const INTRO_STYLES = `
   /*
    * expo-font가 웹에 등록하는 폰트 family 이름은 "Pretendard"가 아니라
@@ -124,6 +127,9 @@ const INTRO_STYLES = `
   .uri-intro-sticky-brand { display: flex; align-items: center; gap: 8px; font-size: 16px; letter-spacing: -0.05em; color: #222; }
   .uri-intro-sticky-brand strong { font-family: 'Pretendard-Bold', sans-serif; font-weight: normal; }
   .uri-sticky-cta { height: 34px; padding: 0 14px; background: #FF7F5C; border: 0; border-radius: 9px; color: #fff; font-size: 12px; font-family: 'Pretendard-Bold', sans-serif; font-weight: normal; cursor: pointer; }
+  .uri-intro-footer { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 0 28px 40px; background: #f5f5f5; }
+  .uri-footer-link { background: none; border: 0; padding: 0; color: #767676; font-size: 11px; text-decoration: underline; cursor: pointer; }
+  .uri-footer-copyright { margin: 0; color: #767676; font-size: 10px; }
 `;
 
 function LogoMark({ small = false }: { small?: boolean }) {
@@ -322,6 +328,16 @@ export default function OnboardingScreenWeb() {
           </button>
         </div>
       </section>
+
+      <footer className="uri-intro-footer">
+        <button
+          onClick={() => window.open(PRIVACY_POLICY_URL, '_blank', 'noopener')}
+          className="uri-footer-link"
+        >
+          개인정보처리방침
+        </button>
+        <p className="uri-footer-copyright">© 2026 Uri-Gil</p>
+      </footer>
     </div>
   );
 }

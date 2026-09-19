@@ -15,7 +15,7 @@ import { HapticPressable } from '@/components/common';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS as SHARED_COLORS, RADIUS, SPACING } from '@/constants/color';
-import { getDayLabel, type PlanStop } from '@/services/tripPlanService';
+import { getDayLabel, formatDayDate, type PlanStop } from '@/services/tripPlanService';
 import { getStopMemos, saveStopMemo } from '@/services/stop-memo-service';
 import { removeTripScheduleStop } from '@/services/trip-schedule-service';
 import { deleteRecordings } from '@/services/recordingService';
@@ -476,6 +476,57 @@ export function RoutePlanView({
           })}
         </ScrollView>
 
+        {Platform.OS === 'web' ? (
+          <View style={styles.dayScheduleWeb}>
+            <View style={styles.dayDateWeb}>
+              <Text allowFontScaling={false} style={styles.dayDateWebLabel}>
+                DAY {selectedDay}
+              </Text>
+              <Text allowFontScaling={false} style={styles.dayDateWebValue}>
+                {formatDayDate(selectedDay, tripStartDate)}
+              </Text>
+            </View>
+
+            {dayStops.map((stop, index) => {
+              const memo = stopMemos[stop.id];
+              const description =
+                memo ||
+                (stop.source === 'ai-recommendation'
+                  ? 'AI 추천으로 추가됨'
+                  : stop.source === 'manual'
+                  ? '직접 추가한 장소'
+                  : `클립 ${stop.clips.length}개`);
+
+              return (
+                <Pressable
+                  key={stop.id}
+                  style={styles.scheduleLineWeb}
+                  onLongPress={() => openReorderMenu(stop, index)}
+                  onPress={enableStopTools ? () => openMemoEditor(stop) : undefined}
+                >
+                  <View style={styles.scheduleDotTrackWeb}>
+                    <View style={styles.scheduleDotWeb} />
+                    {index < dayStops.length - 1 && (
+                      <View style={styles.scheduleLineConnectorWeb} />
+                    )}
+                  </View>
+
+                  <View style={styles.scheduleContentWeb}>
+                    <Text allowFontScaling={false} style={styles.scheduleTimeWeb}>
+                      {stop.time}
+                    </Text>
+                    <Text numberOfLines={1} allowFontScaling={false} style={styles.scheduleNameWeb}>
+                      {stop.name}
+                    </Text>
+                    <Text numberOfLines={2} allowFontScaling={false} style={styles.scheduleDescWeb}>
+                      {description}
+                    </Text>
+                  </View>
+                </Pressable>
+              );
+            })}
+          </View>
+        ) : (
         <View style={styles.planTimeline}>
           {dayStops.map((stop, index) => {
             const memo = stopMemos[stop.id];
@@ -565,28 +616,29 @@ export function RoutePlanView({
               </View>
             );
           })}
-
-          {enableStopTools ? (
-            <View style={styles.planAddRow}>
-              <Pressable
-                onPress={() => {
-                  if (!tripId) return;
-                  router.push({
-                    pathname: '/add-place',
-                    params: { tripId, day: String(selectedDay) },
-                  });
-                }}
-                style={({ pressed }) => [styles.planAddButton, pressed && styles.cardPressed]}
-              >
-                <Ionicons name="add" size={16} color={COLORS.textSecondary} />
-
-                <Text allowFontScaling={false} style={styles.planAddButtonText}>
-                  장소 추가
-                </Text>
-              </Pressable>
-            </View>
-          ) : null}
         </View>
+        )}
+
+        {enableStopTools ? (
+          <View style={styles.planAddRow}>
+            <Pressable
+              onPress={() => {
+                if (!tripId) return;
+                router.push({
+                  pathname: '/add-place',
+                  params: { tripId, day: String(selectedDay) },
+                });
+              }}
+              style={({ pressed }) => [styles.planAddButton, pressed && styles.cardPressed]}
+            >
+              <Ionicons name="add" size={16} color={COLORS.textSecondary} />
+
+              <Text allowFontScaling={false} style={styles.planAddButtonText}>
+                장소 추가
+              </Text>
+            </Pressable>
+          </View>
+        ) : null}
       </ScrollView>
 
       {enableStopTools ? (
@@ -685,6 +737,76 @@ const styles = StyleSheet.create({
 
   dayChipTextSelected: {
     color: '#FFFFFF',
+  },
+
+  // ── 웹 전용 일정 타임라인 (Manus 프로토타입의 .day-schedule/.schedule-line
+  // 그대로 옮긴 디자인) — 네이티브의 카드형 타임라인(planTimeline 아래)과는
+  // 별개로 완전히 새로 그립니다. 세로 연결선 + 작은 원형 점 + 시간/이름/
+  // 설명(메모, 없으면 클립 개수)을 한 줄씩 나열하는 단순한 구조입니다.
+  dayScheduleWeb: {
+    marginTop: 24,
+  },
+  dayDateWeb: {
+    marginBottom: 18,
+  },
+  dayDateWebLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.primary,
+    letterSpacing: 0.5,
+  },
+  dayDateWebValue: {
+    marginTop: 2,
+    fontSize: 17,
+    fontWeight: '700',
+    color: COLORS.textPrimary,
+  },
+  scheduleLineWeb: {
+    flexDirection: 'row',
+    gap: 15,
+    minHeight: 82,
+    paddingLeft: 5,
+  },
+  // 원본의 .schedule-line:before(세로 연결선)를 별도 View로 그립니다 —
+  // 점 아래부터 다음 항목 점까지 이어지도록 이 트랙 안에서 flex:1로 채웁니다.
+  scheduleDotTrackWeb: {
+    alignItems: 'center',
+    width: 9,
+  },
+  scheduleDotWeb: {
+    width: 9,
+    height: 9,
+    marginTop: 7,
+    borderRadius: 4.5,
+    borderWidth: 2,
+    borderColor: COLORS.primary,
+    backgroundColor: '#FFFFFF',
+  },
+  scheduleLineConnectorWeb: {
+    flex: 1,
+    width: 1,
+    marginTop: 2,
+    backgroundColor: '#DEDEDE',
+  },
+  scheduleContentWeb: {
+    flex: 1,
+    paddingBottom: 24,
+  },
+  scheduleTimeWeb: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+  },
+  scheduleNameWeb: {
+    marginTop: 4,
+    fontSize: 16,
+    fontWeight: '700',
+    color: COLORS.textPrimary,
+  },
+  scheduleDescWeb: {
+    marginTop: 3,
+    fontSize: 13,
+    lineHeight: 19,
+    color: COLORS.textSecondary,
   },
 
   planTimeline: {

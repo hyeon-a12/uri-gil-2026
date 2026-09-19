@@ -204,7 +204,7 @@ function buildTodayMoments(recordings: RecordingData[]): ClipItem[] {
 const HOME_STYLES = `
   .uri-home-inner { padding: 1px 18px 90px; font-family: 'Pretendard-Regular', sans-serif; }
   .uri-travel-banner { position: relative; height: 261px; overflow: hidden; border-radius: 16px; background-position: center; background-size: cover; background-color: #FFF3DF; }
-  .uri-banner-scrim { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(0,0,0,.03) 20%, rgba(0,0,0,.83) 100%); }
+  .uri-banner-scrim { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(0,0,0,.02) 20%, rgba(0,0,0,.55) 100%); }
   .uri-banner-content { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: flex-start; padding: 19px 18px 16px; color: #fff; box-sizing: border-box; }
   .uri-banner-kicker { font-size: 11px; opacity: .86; }
   .uri-banner-content h1 { margin: 8px 0 2px; font-size: 28px; letter-spacing: -.075em; font-family: 'Pretendard-Bold', sans-serif; font-weight: normal; }

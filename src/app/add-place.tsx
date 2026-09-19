@@ -20,6 +20,7 @@ import { AppText as Text } from '@/components/AppText';
 import { HapticPressable, MapLocateButton, SectionLabel } from '@/components/common';
 import KakaoMapView, { KakaoMapPin } from '@/components/KakaoMapView';
 import { COLORS as APP_COLORS, RADIUS } from '@/constants/color';
+import { useWebMenuStore } from '@/store/useWebMenuStore';
 import { appendTripScheduleStops } from '@/services/trip-schedule-service';
 import { getAllFolders, parseDateRange } from '@/services/folderService';
 import { getDayLabel } from '@/services/tripPlanService';
@@ -233,6 +234,21 @@ export default function AddPlaceScreen() {
 
             </Pressable>
 
+            {/* 다른 웹 화면들은 전부 헤더에 햄버거 메뉴 버튼이 있는데, 이
+                화면은 지도 위에 뜨는 자체 헤더라 빠져있었습니다 — 뒤로가기
+                버튼과 같은 스타일로 오른쪽에 맞춰 넣습니다. */}
+            {Platform.OS === 'web' && (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="메뉴"
+                onPress={() => useWebMenuStore.getState().open()}
+                style={({ pressed }) => [styles.menuButton, { top: insets.top + 10 }, pressed && styles.backButtonPressed]}
+                hitSlop={10}
+              >
+                <Ionicons name="menu-outline" size={20} color={COLORS.textPrimary} />
+              </Pressable>
+            )}
+
             {/* "내 위치로" 버튼 — 시트를 드래그해도 항상 시트 바로 위에 떠 있도록
                 sheetHeight(Animated.Value)에 맞춰 bottom을 같이 움직입니다. */}
             <Animated.View style={[styles.mapControls, { bottom: Animated.add(sheetHeight, 16) }]}>
@@ -250,7 +266,11 @@ export default function AddPlaceScreen() {
                 <View style={styles.titleIconContainer}>
                   <Ionicons name="location-outline" size={20} color={COLORS.primary} />
                 </View>
-                <Text allowFontScaling={false} numberOfLines={1} style={styles.sheetTitle}>
+                <Text
+                  allowFontScaling={false}
+                  numberOfLines={1}
+                  style={[styles.sheetTitle, Platform.OS === 'web' && styles.sheetTitleWeb]}
+                >
                   {getDayLabel(day, tripStartDate)}에 추가할 장소
                 </Text>
                 <HapticPressable
@@ -442,6 +462,21 @@ const styles = StyleSheet.create({
   },
   backButtonPressed: { opacity: 0.7 },
   backLabel: { color: COLORS.textPrimary, fontSize: 13, lineHeight: 18, fontWeight: '700' },
+  menuButton: {
+    position: 'absolute',
+    right: 16,
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 22,
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#172033',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.14,
+    shadowRadius: 8,
+    elevation: 5,
+  },
   // "내 위치로" 버튼 위치. bottom은 시트 높이(Animated.Value)에 맞춰 인라인으로 준다.
   mapControls: {
     position: 'absolute',
@@ -481,6 +516,12 @@ const styles = StyleSheet.create({
     lineHeight: 26,
     fontWeight: '600',
     letterSpacing: -0.5,
+  },
+  // 다른 웹 화면 헤더 제목(AppHeader.web/ScreenHeader)과 굵기/크기를
+  // 맞춥니다 — 원래 값(600, 19px)은 네이티브 전용으로 그대로 둡니다.
+  sheetTitleWeb: {
+    fontSize: 18,
+    fontWeight: '700',
   },
   inlineNextButton: {
     height: 38,
