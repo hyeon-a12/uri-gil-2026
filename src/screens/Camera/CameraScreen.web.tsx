@@ -183,8 +183,16 @@ export default function CameraScreen() {
       stopStream();
 
       try {
+        // 해상도를 지정 안 하면 브라우저가 낮은 기본값(보통 640x480 근처)을
+        // 골라서 화질이 흐릿하게 나옵니다 — ideal로 요청해서 카메라/브라우저가
+        // 지원하는 한 최대한 높은 해상도를 쓰게 합니다(지원 안 되면 자동으로
+        // 가능한 값으로 낮춰지므로 실패하지 않습니다).
         const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: nextFacing },
+          video: {
+            facingMode: nextFacing,
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
+          },
           audio: true,
         });
         attachStream(stream);
@@ -293,11 +301,15 @@ export default function CameraScreen() {
     }
 
     const mimeType = pickSupportedMimeType();
+    // videoBitsPerSecond를 안 정하면 브라우저가 낮은 기본 비트레이트를 써서
+    // 해상도를 높여도(위 getUserMedia) 압축 때문에 화질이 뭉개집니다.
+    // 8Mbps는 1080p 촬영에 무난한 값입니다.
+    const recorderOptions = mimeType
+      ? { mimeType, videoBitsPerSecond: 8_000_000 }
+      : { videoBitsPerSecond: 8_000_000 };
     let recorder: MediaRecorder;
     try {
-      recorder = mimeType
-        ? new MediaRecorder(streamRef.current, { mimeType })
-        : new MediaRecorder(streamRef.current);
+      recorder = new MediaRecorder(streamRef.current, recorderOptions);
     } catch (error) {
       console.error('[Camera:web] MediaRecorder 생성 실패:', error);
       Alert.alert('촬영을 시작할 수 없습니다', '이 브라우저는 영상 녹화를 지원하지 않아요.');
