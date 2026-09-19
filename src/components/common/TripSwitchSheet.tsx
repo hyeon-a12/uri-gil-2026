@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import {
-  Alert,
   Modal,
   Pressable,
   ScrollView,
@@ -10,7 +9,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { AppText as Text } from '@/components/AppText';
 import { Image } from 'expo-image';
-
+import { Alert } from '@/services/webAlert';
 import { getAllFolders, type FolderItem } from '@/services/folderService';
 import { selectCurrentTrip, useTripStore } from '@/store/useTripStore';
 import NewTripModal from '@/components/NewTripModal';

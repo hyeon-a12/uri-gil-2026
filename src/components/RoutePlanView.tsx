@@ -1,13 +1,14 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  Alert,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   TextInput,
   View,
 } from 'react-native';
+import { showAlert, Alert } from '@/services/webAlert';
 import { router } from 'expo-router';
 import { AppText as Text } from '@/components/AppText';
 import { HapticPressable } from '@/components/common';
@@ -233,16 +234,44 @@ export function RoutePlanView({
         }
         await onStopDeleted?.();
       } catch (error) {
-        console.error('[RoutePlanView] 스톱 삭제 실패:', error);
-        Alert.alert('삭제하지 못했어요', '잠시 후 다시 시도해주세요.');
+      console.error('[RoutePlanView] 스톱 삭제 실패:', error);
+      showAlert('삭제하지 못했어요', '잠시 후 다시 시도해주세요.');
+    }
+  },
+  [tripId, onStopDeleted],
+);
+
+  // 카드를 길게 누르면 뜨는 "위로 이동 / 아래로 이동 / 삭제" 메뉴.
+    // 클립이 있으면 한 번 더 확인 — 같이 지워진다는 걸 명확히 알려줍니다.
+  const confirmDeleteStop = useCallback(
+    (stop: PlanStop) => {
+      if (stop.clips.length > 0) {
+        showAlert(
+          '이 장소를 삭제할까요?',
+          `촬영된 클립 ${stop.clips.length}개도 함께 삭제되고, 복구할 수 없어요.`,
+          [
+            { text: '취소', style: 'cancel' },
+            { text: '삭제', style: 'destructive', onPress: () => void deleteStop(stop) },
+          ],
+        );
+      } else {
+        void deleteStop(stop);
       }
     },
-    [tripId, onStopDeleted],
+    [deleteStop],
   );
 
   // 카드를 길게 누르면 뜨는 "위로 이동 / 아래로 이동 / 삭제" 메뉴.
+  // 웹은 다중 선택 메뉴를 브라우저 기본 팝업으로 표현할 수 없어서, 길게 누르면
+  // 바로 삭제 확인으로 연결합니다. 순서 변경은 커스텀 UI가 준비되기 전까지
+  // 웹 MVP 범위에서 제외합니다.
   const openReorderMenu = useCallback(
     (stop: PlanStop, index: number) => {
+      if (Platform.OS === 'web') {
+        confirmDeleteStop(stop);
+        return;
+      }
+
       const options: {
         text: string;
         onPress?: () => void;
@@ -258,27 +287,13 @@ export function RoutePlanView({
       options.push({
         text: '삭제',
         style: 'destructive',
-        onPress: () => {
-          if (stop.clips.length > 0) {
-            // 클립이 있으면 한 번 더 확인 — 같이 지워진다는 걸 명확히 알려줍니다.
-            Alert.alert(
-              '이 장소를 삭제할까요?',
-              `촬영된 클립 ${stop.clips.length}개도 함께 삭제되고, 복구할 수 없어요.`,
-              [
-                { text: '취소', style: 'cancel' },
-                { text: '삭제', style: 'destructive', onPress: () => void deleteStop(stop) },
-              ],
-            );
-          } else {
-            void deleteStop(stop);
-          }
-        },
+        onPress: () => confirmDeleteStop(stop),
       });
       options.push({ text: '취소', style: 'cancel' });
 
       Alert.alert(stop.name, '순서를 바꾸거나 삭제할 수 있어요.', options);
     },
-    [dayStops.length, moveStop, deleteStop],
+    [dayStops.length, moveStop, confirmDeleteStop],
   );
 
   const activeStop = useMemo(

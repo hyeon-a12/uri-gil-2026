@@ -11,8 +11,8 @@ import {
   StyleProp,
   ViewStyle,
   TextStyle,
-  Alert,
 } from 'react-native';
+import { showAlert } from '@/services/webAlert';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -431,7 +431,7 @@ export default function NewTripModal({
   }
 
   function handleDeletePress() {
-    Alert.alert('여행 삭제', `${form.name || '이 여행'}을(를) 삭제할까요?`, [
+    showAlert('여행 삭제', `${form.name || '이 여행'}을(를) 삭제할까요?`, [
       { text: '취소', style: 'cancel' },
       {
         text: '삭제',

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import * as SecureStore from '@/services/secureStorage';
-import { View, TextInput, Pressable, StyleSheet, Alert } from 'react-native';
+import { View, TextInput, Pressable, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { Feather } from '@expo/vector-icons';
@@ -12,6 +12,7 @@ import { useProfileStore, updateProfile, hydrateProfile } from '@/store/useProfi
 import { useAuthStore } from '@/store/useAuthStore';
 import { apiFetch } from '@/services/api';
 import { clearCurrentTrip } from '@/store/useTripStore';
+import { showAlert } from '@/services/webAlert';
 
 // 로그아웃 버튼은 마이페이지 화면(my-page.tsx)으로 옮겼습니다 — "설정" 안이
 // 아니라 마이페이지에서 바로 보이도록 하기 위함입니다. 회원 탈퇴는 이 화면에
@@ -45,7 +46,7 @@ export default function ProfileEditScreen() {
   const handleSave = async () => {
     const trimmedNickname = nickname.trim();
     if (!trimmedNickname) {
-      Alert.alert('닉네임을 입력해주세요');
+      showAlert('닉네임을 입력해주세요');
       return;
     }
 
@@ -60,7 +61,7 @@ export default function ProfileEditScreen() {
       });
     } catch (error) {
       console.error('[ProfileEditScreen] 닉네임 서버 동기화 실패:', error);
-      Alert.alert(
+      showAlert(
         '저장 실패',
         error instanceof Error ? error.message : '닉네임을 서버에 저장하지 못했어요. 잠시 후 다시 시도해주세요.',
       );
@@ -73,29 +74,31 @@ export default function ProfileEditScreen() {
     router.back();
   };
 
+  const performWithdraw = async () => {
+    try {
+      await apiFetch('/auth/me', { method: 'DELETE' });
+      await SecureStore.deleteItemAsync('access_token');
+      await SecureStore.deleteItemAsync('user_id');
+      await SecureStore.deleteItemAsync('nickname');
+
+      await clearCurrentTrip();
+      await hydrateProfile();
+
+      useAuthStore.getState().setLoggedIn(false);
+      router.replace('/onboarding');
+    } catch (error) {
+      console.error('[handleWithdraw] 탈퇴 실패:', error);
+      showAlert('탈퇴 실패', '잠시 후 다시 시도해주세요.');
+    }
+  };
+
   const handleWithdraw = () => {
-    Alert.alert('회원 탈퇴', '탈퇴하면 저장된 여행 기록이 모두 삭제돼요. 계속할까요?', [
+    showAlert('회원 탈퇴', '탈퇴하면 저장된 여행 기록이 모두 삭제돼요. 계속할까요?', [
       { text: '취소', style: 'cancel' },
       {
         text: '탈퇴',
         style: 'destructive',
-        onPress: async () => {
-          try {
-            await apiFetch('/auth/me', { method: 'DELETE' });
-            await SecureStore.deleteItemAsync('access_token');
-            await SecureStore.deleteItemAsync('user_id');
-            await SecureStore.deleteItemAsync('nickname');
-
-            await clearCurrentTrip();
-            await hydrateProfile();
-
-            useAuthStore.getState().setLoggedIn(false);
-            router.replace('/onboarding');
-          } catch (error) {
-            console.error('[handleWithdraw] 탈퇴 실패:', error);
-            Alert.alert('탈퇴 실패', '잠시 후 다시 시도해주세요.');
-          }
-        },
+        onPress: () => void performWithdraw(),
       },
     ]);
   };

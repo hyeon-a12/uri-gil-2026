@@ -1,7 +1,6 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
 import {
-  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -16,6 +15,7 @@ import { HapticPressable } from '@/components/common';
 import { apiFetch } from '@/services/api';
 import { isValidEmail } from '@/utils/validation';
 import { COLORS } from '@/constants/color';
+import { Alert } from '@/services/webAlert';
 
 // 백엔드(uri_gil_backend/routers/auth.py)는 앱 안에서 인증코드를 확인하는 방식이
 // 아니라, 이메일로 재설정 링크를 보내고 그 링크가 별도 웹페이지

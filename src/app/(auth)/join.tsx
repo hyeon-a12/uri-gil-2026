@@ -1,7 +1,6 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
 import {
-  Alert,
   KeyboardAvoidingView,
   Linking,
   Platform,
@@ -12,6 +11,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { Alert } from '@/services/webAlert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { HapticPressable } from '@/components/common';
 import { extractErrorMessage } from '@/services/api';

@@ -2,7 +2,6 @@ import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Alert,
   Animated,
   Dimensions,
   KeyboardAvoidingView,
@@ -16,7 +15,7 @@ import {
 } from "react-native";
 import * as Location from "expo-location";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-
+import { Alert } from '@/services/webAlert';
 import { AppText as Text } from "@/components/AppText";
 import { HapticPressable, MapLocateButton, SectionLabel } from "@/components/common";
 import KakaoMapView, {

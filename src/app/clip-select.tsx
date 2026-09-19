@@ -1,6 +1,5 @@
 import React, { useMemo, useState, useCallback } from 'react';
 import {
-  Alert,
   Platform,
   Pressable,
   StyleSheet,
@@ -24,6 +23,7 @@ import { useTripStore } from '@/store/useTripStore';
 import { ClipItem } from '@/types/home';
 import { COLORS as SHARED_COLORS, RADIUS, SPACING } from '@/constants/color';
 import { apiFetch } from '@/services/api';
+import { showAlert } from '@/services/webAlert';
 
 const COLORS = {
   background: SHARED_COLORS.background,
@@ -224,23 +224,22 @@ export default function ClipSelectScreen() {
   };
 
   const handleDownloadClip = () => {
-    if (!selectedMenuClip) return;
-    const targetClip = selectedMenuClip;
-    setSelectedMenuClip(null);
+  if (!selectedMenuClip) return;
+  const targetClip = selectedMenuClip;
+  setSelectedMenuClip(null);
 
-    Alert.alert(
-      '다운로드',
-      Platform.OS === 'web'
-        ? `${targetClip.title} 영상을 다운로드할까요?`
-        : `${targetClip.title} 영상을 갤러리에 저장할까요?`,
-      [
-        {text: '취소', style: 'cancel'},
-        {text: '저장', onPress: async () => {
+  showAlert(
+    '다운로드',
+    Platform.OS === 'web'
+      ? `${targetClip.title} 영상을 다운로드할까요?`
+      : `${targetClip.title} 영상을 갤러리에 저장할까요?`,
+    [
+      { text: '취소', style: 'cancel' },
+      {
+        text: '저장',
+        onPress: async () => {
           if (!targetClip.uri) return;
 
-          // 웹은 갤러리 개념이 없어서(expo-media-library 웹 미지원), 브라우저
-          // 기본 다운로드 동작(<a download>)으로 대체합니다 — 별도 권한 절차 없이
-          // 바로 기기의 다운로드 폴더에 저장됩니다.
           if (Platform.OS === 'web') {
             try {
               const link = document.createElement('a');
@@ -251,110 +250,106 @@ export default function ClipSelectScreen() {
               document.body.removeChild(link);
             } catch (error) {
               console.error('[handleDownloadClip:web] 실패:', error);
-              Alert.alert('다운로드 실패', '잠시 후 다시 시도해주세요.');
+              showAlert('다운로드 실패', '잠시 후 다시 시도해주세요.');
             }
             return;
           }
 
           try {
-            const {status} = await MediaLibrary.requestPermissionsAsync(true);
+            const { status } = await MediaLibrary.requestPermissionsAsync(true);
             if (status !== 'granted') {
-              Alert.alert('권한 필요', '갤러리 접근 권한이 필요합니다.');
+              showAlert('권한 필요', '갤러리 접근 권한이 필요합니다.');
               return;
             }
 
             await MediaLibrary.saveToLibraryAsync(targetClip.uri);
-            Alert.alert('저장 완료', '갤러리에 저장되었습니다.');
+            showAlert('저장 완료', '갤러리에 저장되었습니다.');
           } catch (error) {
             console.error('[handleDownloadClip] 실패:', error);
-            Alert.alert('저장 실패', '갤러리에 저장 중 문제가 발생했습니다.');
-            }
-          },
+            showAlert('저장 실패', '갤러리에 저장 중 문제가 발생했습니다.');
+          }
         },
-      ],
-    );
-  };
+      },
+    ],
+  );
+};
 
   const handleDelete = () => {
-    if (!selectedMenuClip) return;
-    const targetClip = selectedMenuClip;
-    setSelectedMenuClip(null);
+  if (!selectedMenuClip) return;
+  const targetClip = selectedMenuClip;
+  setSelectedMenuClip(null);
 
-    Alert.alert(
-      '클립 삭제',
-      `${targetClip.title} 클립을 삭제할까요?`,
-      [
-        {text: '취소', style: 'cancel'},
-        {
-          text: '삭제', style: 'destructive', onPress: async () => {
-            try {
-              await deleteRecording(targetClip.id);
+  showAlert(
+    '클립 삭제',
+    `${targetClip.title} 클립을 삭제할까요?`,
+    [
+      { text: '취소', style: 'cancel' },
+      {
+        text: '삭제',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await deleteRecording(targetClip.id);
 
-              // 서버에도 삭제 반영 시도 (실패해도 로컬 삭제는 이미 끝났으니 무시)
-              if (targetClip.serverId) {
-                try {
-                  await apiFetch(`/clips/${targetClip.serverId}`, {
-                    method: 'DELETE',
-                  });
-                } catch (serverError) {
-                  console.error('[handleDelete] 서버 클립 삭제 실패:', serverError);
-                }
-              } else {
-                console.warn('[handleDelete] serverId가 없어 서버 삭제를 건너뜁니다.');
+            if (targetClip.serverId) {
+              try {
+                await apiFetch(`/clips/${targetClip.serverId}`, {
+                  method: 'DELETE',
+                });
+              } catch (serverError) {
+                console.error('[handleDelete] 서버 클립 삭제 실패:', serverError);
               }
-
-              setClips((prev) => prev.filter((c) => c.id !== targetClip.id));
-              setSelectedIds((prev) => {
-                const next = new Set(prev);
-                next.delete(targetClip.id);
-                return next;
-              });
-            } catch (error) {
-              console.error('[handleDelete] 실패:', error);
-              Alert.alert(
-                '삭제 실패',
-              );
+            } else {
+              console.warn('[handleDelete] serverId가 없어 서버 삭제를 건너뜁니다.');
             }
-          },
+
+            setClips((prev) => prev.filter((c) => c.id !== targetClip.id));
+            setSelectedIds((prev) => {
+              const next = new Set(prev);
+              next.delete(targetClip.id);
+              return next;
+            });
+          } catch (error) {
+            console.error('[handleDelete] 실패:', error);
+            showAlert('삭제 실패');
+          }
         },
-      ],
-    );
-  };
+      },
+    ],
+  );
+};
 
   const handleComplete = () => {
-    if (selectedCount === 0) {
-      Alert.alert(
-        '선택된 클립이 없습니다',
-        '영상에 사용할 클립을 한 개 이상 선택해주세요.',
-      );
-
-      return;
-    }
-
-    Alert.alert(
-      '클립 선택 완료',
-      `${selectedCount}개의 클립으로 영상을 생성할까요?`,
-      [
-        { text: '취소', style: 'cancel' },
-        {
-          text: '생성하기',
-          onPress: () => {
-            const clipIdList = selectedClips
-              .map((clip) => clip.id)
-              .join(',');
-            
-            router.push({
-              pathname: '/video-edit',
-              params: {
-                clipIds: clipIdList,
-                folderId: folderId,
-              },
-            });
-          },
-        },
-      ],
+  if (selectedCount === 0) {
+    showAlert(
+      '선택된 클립이 없습니다',
+      '영상에 사용할 클립을 한 개 이상 선택해주세요.',
     );
-  };
+    return;
+  }
+
+  showAlert(
+    '클립 선택 완료',
+    `${selectedCount}개의 클립으로 영상을 생성할까요?`,
+    [
+      { text: '취소', style: 'cancel' },
+      {
+        text: '생성하기',
+        onPress: () => {
+          const clipIdList = selectedClips.map((clip) => clip.id).join(',');
+
+          router.push({
+            pathname: '/video-edit',
+            params: {
+              clipIds: clipIdList,
+              folderId: folderId,
+            },
+          });
+        },
+      },
+    ],
+  );
+};
 
   return (
     <View style={styles.screen}>

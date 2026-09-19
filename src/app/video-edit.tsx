@@ -10,9 +10,9 @@ import {
   Easing,
   StyleSheet,
   Dimensions,
-  Alert,
   ActivityIndicator,
 } from 'react-native';
+import { Alert } from '@/services/webAlert';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as MediaLibrary from 'expo-media-library/legacy';
 import { Ionicons } from '@expo/vector-icons';

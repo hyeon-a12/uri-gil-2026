@@ -1,6 +1,5 @@
 import React, { useCallback, useState } from 'react';
 import {
-  Alert,
   StyleSheet,
   View,
   TouchableOpacity,
@@ -29,6 +28,7 @@ import { useCreateTripModal } from '@/hooks/useCreateTripModal';
 import { HapticPressable } from '@/components/common';
 import { COLORS as SHARED_COLORS, RADIUS, SPACING } from '@/constants/color';
 import { TextInput } from 'react-native-gesture-handler';
+import { showAlert } from '@/services/webAlert';
 
 const COLORS = {
   background: SHARED_COLORS.background,
@@ -190,35 +190,37 @@ export default function ClipManageScreen() {
   };
 
   const handleDelete = () => {
-    if (!selectedFolderForMenu) return;
-    const folder = selectedFolderForMenu;
-    setSelectedFolderForMenu(null);
+  if (!selectedFolderForMenu) return;
+  const folder = selectedFolderForMenu;
+  setSelectedFolderForMenu(null);
 
-    Alert.alert(
-      '폴더 삭제',
-      `${folder.title} 폴더를 삭제할까요?`,
-      [
-        {text: '취소', style: 'cancel'},
-        {
-          text: '삭제', style: 'destructive', onPress: async () => {
-            try {
-              if (activeFolderId === folder.id) {
-                await clearActiveFolder();
-                useTripStore.getState().clearCurrentTrip();
-                setActiveFolderId(null);
-              }
-
-              await deleteFolderFromStorage(folder.id);
-              setFolders((prev) => prev.filter((c) => c.id != folder.id));
-            } catch (error) {
-              console.error('[handleDelete] 실패:', error);
-              Alert.alert('삭제 실패', '폴더를 삭제하는 중 문제가 발생했습니다.');
+  showAlert(
+    '폴더 삭제',
+    `${folder.title} 폴더를 삭제할까요?`,
+    [
+      { text: '취소', style: 'cancel' },
+      {
+        text: '삭제',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            if (activeFolderId === folder.id) {
+              await clearActiveFolder();
+              useTripStore.getState().clearCurrentTrip();
+              setActiveFolderId(null);
             }
-          },
+
+            await deleteFolderFromStorage(folder.id);
+            setFolders((prev) => prev.filter((c) => c.id != folder.id));
+          } catch (error) {
+            console.error('[handleDelete] 실패:', error);
+            showAlert('삭제 실패', '폴더를 삭제하는 중 문제가 발생했습니다.');
+          }
         },
-      ],
-    );
-  };
+      },
+    ],
+  );
+};
 
   const renderFolderItem = ({ item }: { item: FolderWithCount }) => {
     const status = getFolderStatus(item);

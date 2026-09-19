@@ -29,7 +29,6 @@ import * as MediaLibrary from 'expo-media-library/legacy';
 import { useFocusEffect, useLocalSearchParams } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Alert,
   Modal,
   Pressable,
   ScrollView,
@@ -50,6 +49,7 @@ import {
 import { ScrollView as GestureScrollView } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { captureRef } from 'react-native-view-shot';
+import { Alert } from '@/services/webAlert';
 
 const COLORS = {
   background: SHARED_COLORS.background,

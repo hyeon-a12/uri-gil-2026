@@ -26,7 +26,6 @@ import * as Location from 'expo-location';
 import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  Alert,
   Animated,
   Dimensions,
   Keyboard,
@@ -40,6 +39,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { Alert } from '@/services/webAlert';
 
 const COLORS = {
   accent: SHARED_COLORS.accent, // Point/Accent — 메인 CTA, 강조 액션

@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { Alert, Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { AppText as Text } from '@/components/AppText';
@@ -19,6 +19,7 @@ import { getTripScheduleStops } from '@/services/trip-schedule-service';
 import { getStopOrder, saveStopOrder } from '@/services/stop-order-service';
 import { buildPlanData, type PlanStop } from '@/services/tripPlanService';
 import { useTripStore, clearCurrentTrip as clearActiveTrip } from '@/store/useTripStore';
+import { Alert } from '@/services/webAlert';
 
 function formatDate(date: Date): string {
   const year = date.getFullYear();

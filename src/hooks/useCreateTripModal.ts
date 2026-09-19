@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Alert } from 'react-native';
+import { Alert } from '@/services/webAlert';
 import NewTripModal from '@/components/NewTripModal';
 import { saveFolder, updateFolder, type FolderItem } from '@/services/folderService';
 import { selectCurrentTrip } from '@/store/useTripStore';

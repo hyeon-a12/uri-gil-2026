@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 import { AppText as Text } from '@/components/AppText';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -10,6 +10,7 @@ import { navigateToLocationConfirm } from '@/navigation/recordingNavigation';
 import { saveRecording } from '@/services/recordingService';
 import { useTripStore } from '@/store/useTripStore';
 import { COLORS as SHARED_COLORS } from '@/constants/color';
+import { Alert } from '@/services/webAlert';
 
 /**
  * CameraScreen.tsx의 웹 버전입니다. Metro 플랫폼 확장자 규칙에 따라 웹
@@ -159,11 +160,14 @@ export default function CameraScreen() {
   }, []);
 
   const attachStream = useCallback((stream: MediaStream) => {
-    streamRef.current = stream;
-    if (videoRef.current) {
-      videoRef.current.srcObject = stream;
-    }
+  streamRef.current = stream;
   }, []);
+
+  useEffect(() => {
+    if (permissionState === 'granted' && streamRef.current && videoRef.current) {
+      videoRef.current.srcObject = streamRef.current;
+    }
+  }, [permissionState]);
 
   const openCamera = useCallback(
     async (nextFacing: 'environment' | 'user') => {

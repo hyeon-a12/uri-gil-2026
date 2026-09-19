@@ -10,7 +10,6 @@ import { router } from 'expo-router';
 import { useState } from 'react';
 import { Image } from 'react-native';
 import {
-  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -20,6 +19,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { Alert } from '@/services/webAlert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { PrimaryButton } from '@/components/common';
 

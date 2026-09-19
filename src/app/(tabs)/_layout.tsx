@@ -1,11 +1,12 @@
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { router, Tabs } from 'expo-router';
 import { Image } from 'expo-image';
-import { Alert, Platform, Pressable, StyleSheet, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppText as Text } from '@/components/AppText';
 import { useTripStore } from '@/store/useTripStore';
 import { COLORS as SHARED_COLORS } from '@/constants/color';
+import { Alert } from '@/services/webAlert';
 
 
   import HomeIcon from "@/assets/images/tabIcons/home.svg";

@@ -9,7 +9,6 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Modal,
   Platform,
   Pressable,
@@ -20,7 +19,7 @@ import Svg, { Circle, Rect, Path } from 'react-native-svg';
 import * as Haptics from 'expo-haptics';
 import { AppText as Text } from '@/components/AppText';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-
+import { Alert } from '@/services/webAlert';
 import { navigateToLocationConfirm } from '@/navigation/recordingNavigation';
 import { saveRecording } from '@/services/recordingService';
 import { useTripStore } from '@/store/useTripStore';
