@@ -24,7 +24,12 @@ export const AUTH_STYLES = `
   .uri-logo-mark span { position: absolute; width: 5px; height: 5px; border-radius: 50%; background: #FF7F5C; }
   .uri-logo-mark span:first-child { left: 7px; top: 7px; }
   .uri-logo-mark span:nth-child(2) { right: 6px; bottom: 8px; }
-  .uri-logo-mark i { position: absolute; width: 10px; height: 1.5px; background: #FF7F5C; left: 10px; top: 14px; transform: rotate(43deg); transform-origin: left center; }
+  .uri-logo-mark i {
+    position: absolute; width: 9px; height: 6px; left: 10.5px; top: 12.5px;
+    background: none; border: 1.5px solid transparent; border-top: none;
+    border-bottom-color: #FF7F5C; border-radius: 50%;
+    transform: rotate(45deg); transform-origin: center;
+  }
   .uri-icon-button {
     width: 38px; height: 38px; border-radius: 12px; display: grid; place-items: center;
     color: #222; background: none; border: 0; cursor: pointer; transition: background 0.15s cubic-bezier(.23,1,.32,1);

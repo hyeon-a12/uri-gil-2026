@@ -58,12 +58,17 @@ const INTRO_STYLES = `
   .uri-logo-mark span { position: absolute; width: 5px; height: 5px; border-radius: 50%; background: #FF7F5C; }
   .uri-logo-mark span:first-child { left: 7px; top: 7px; }
   .uri-logo-mark span:nth-child(2) { right: 6px; bottom: 8px; }
-  .uri-logo-mark i { position: absolute; width: 10px; height: 1.5px; background: #FF7F5C; left: 10px; top: 14px; transform: rotate(43deg); transform-origin: left center; }
+  .uri-logo-mark i {
+    position: absolute; width: 9px; height: 6px; left: 10.5px; top: 12.5px;
+    background: none; border: 1.5px solid transparent; border-top: none;
+    border-bottom-color: #FF7F5C; border-radius: 50%;
+    transform: rotate(45deg); transform-origin: center;
+  }
   .uri-logo-mark-small { width: 24px; height: 24px; border-width: 1.7px; }
   .uri-logo-mark-small span { width: 4px; height: 4px; }
   .uri-logo-mark-small span:first-child { left: 5px; top: 5px; }
   .uri-logo-mark-small span:nth-child(2) { right: 4px; bottom: 5px; }
-  .uri-logo-mark-small i { width: 7px; left: 7px; top: 10px; }
+  .uri-logo-mark-small i { width: 6.5px; height: 4.5px; left: 8px; top: 9.5px; }
 
   .uri-intro-route-motif {
     position: fixed; z-index: 1; top: 0; left: 50%; width: 390px; height: 100vh;
