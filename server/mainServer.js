@@ -1,4 +1,5 @@
 const express = require('express');
+const cors = require('cors');
 const multer = require('multer');
 const ffmpeg = require('fluent-ffmpeg');
 const ffmpegInstaller = require('@ffmpeg-installer/ffmpeg');
@@ -14,6 +15,10 @@ const OUTPUT_RETENTION_MS = 10 * 60 * 1000;
 ffmpeg.setFfmpegPath(ffmpegInstaller.path);
 
 const app = express();
+// 웹 버전(브라우저)에서 XMLHttpRequest/fetch로 이 서버를 호출하면 브라우저가
+// CORS 프리플라이트(OPTIONS)에 Access-Control-Allow-Origin이 없으면 실제
+// 요청 자체를 막아버립니다. 네이티브 앱은 이 제약이 없어서 몰랐던 문제.
+app.use(cors());
 const upload = multer({ dest: 'uploads/' });
 
 const OUTPUT_DIR = path.join(__dirname, 'output');
