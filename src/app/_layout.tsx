@@ -106,7 +106,16 @@ export default function RootLayout() {
 
   return (
     <View style={[styles.webLetterbox, { minHeight: windowHeight }]}>
-      <View style={[styles.webFrame, { minHeight: windowHeight }]}>
+      <View
+        style={[
+          styles.webFrame,
+          // 세로 스크롤(overflow-y)은 계속 열어두되, 가로만 잘라냅니다 — 안 그러면
+          // 화면 밖으로 숨겨둔 햄버거 메뉴(WebSideMenu, translateX로 프레임
+          // 오른쪽 바깥에 대기)가, 데스크톱처럼 화면이 넓어서 이 390px 프레임
+          // 양옆에 여백(레터박스)이 생기는 경우 그 여백 자리에 그대로 보였습니다.
+          { minHeight: windowHeight, overflowX: 'hidden' } as any,
+        ]}
+      >
         {stackNavigator}
         {/* 어떤 화면(탭이든 스택이든)에 있든 항상 마운트돼 있어야 각 화면
             헤더의 메뉴 버튼이 열 수 있습니다 — (tabs) 그룹 안에서만 마운트
