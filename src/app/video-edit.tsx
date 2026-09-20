@@ -128,6 +128,8 @@ function getFontFamily(fontId: FontId, bold: boolean): string {
 
 const TEXT_COLOR_OPTIONS = ['#FFFFFF', '#222222', '#FF7F5C', '#FFD54F', '#7EC8E3'];
 
+
+
 // 정렬은 더 이상 사용자가 조절하지 않고 항상 중앙으로 고정합니다.
 const FIXED_TEXT_ALIGN = 'center' as const;
 
@@ -137,6 +139,8 @@ const MAX_TEXT_FONT_SIZE = 60;
 function clampFontSize(size: number): number {
   return Math.min(MAX_TEXT_FONT_SIZE, Math.max(MIN_TEXT_FONT_SIZE, size));
 }
+
+const MIN_SHEET_HEIGHT = 280;
 
 // 3×3 그리드. 화면에 그릴 때도 이 순서 그대로 3개씩 끊어서 3행으로 배치해요.
 type TextPosition =
@@ -1263,7 +1267,7 @@ export default function VideoEditScreen() {
                 // Dimensions 기반 SCREEN_HEIGHT를 쓸 때와 달리 좌표계가 항상 일치합니다.
                 height:
                   previewBottomY !== null
-                    ? screenHeight - previewBottomY - 5
+                    ? Math.max(MIN_SHEET_HEIGHT, screenHeight - previewBottomY - 5 - insets.bottom)
                     : undefined,
                 transform: [{ translateY: sheetTranslateY }],
               },
