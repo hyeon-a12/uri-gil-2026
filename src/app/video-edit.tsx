@@ -140,7 +140,7 @@ function clampFontSize(size: number): number {
   return Math.min(MAX_TEXT_FONT_SIZE, Math.max(MIN_TEXT_FONT_SIZE, size));
 }
 
-const MIN_SHEET_HEIGHT = 280;
+const MIN_SHEET_HEIGHT = 420;
 
 // 3×3 그리드. 화면에 그릴 때도 이 순서 그대로 3개씩 끊어서 3행으로 배치해요.
 type TextPosition =
