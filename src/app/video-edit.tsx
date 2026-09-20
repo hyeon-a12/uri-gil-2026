@@ -353,15 +353,27 @@ async function renderVideo(exportData: {
     if (result.downloadUrl) {
       // [변경] 웹 환경일 경우 a 태그를 활용한 브라우저 다운로드 실행
       if (Platform.OS === 'web') {
-        const link = document.createElement('a');
-        link.href = result.downloadUrl;
-        // [변경] 서버 병합 최종 결과물에 따라 .mp4 확장자 지정
-        link.download = `output_${Date.now()}.mp4`; 
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
+        try {
+          const response = await fetch(result.downloadUrl);
+          const blob = await response.blob();
+          const blobUrl = URL.createObjectURL(blob);
 
-        return { success: true, videoUri: result.downloadUrl };
+          const link = document.createElement('a');
+          link.href = blobUrl;
+          link.download = `output_${Date.now()}.mp4`;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          URL.revokeObjectURL(blobUrl);
+
+          return { success: true, videoUri: result.downloadUrl };
+        } catch (error) {
+          console.error('[renderVideo:web] 다운로드 실패:', error);
+          return {
+            success: false,
+            message: '영상을 다운로드하지 못했어요. 잠시 후 다시 시도해주세요.',
+          };
+        }
       } else {
         // 모바일 환경은 기존 expo-file-system 다운로드 로직 수행
         const localPath = FileSystem.documentDirectory + `output_${Date.now()}.mp4`;
