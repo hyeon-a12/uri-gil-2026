@@ -187,12 +187,22 @@ export default function CameraScreen() {
         // 골라서 화질이 흐릿하게 나옵니다 — ideal로 요청해서 카메라/브라우저가
         // 지원하는 한 최대한 높은 해상도를 쓰게 합니다(지원 안 되면 자동으로
         // 가능한 값으로 낮춰지므로 실패하지 않습니다).
+        // 갤럭시 등 후면 카메라가 여러 개(광각/초광각/망원)인 기기는 facingMode만
+        // 으로는 어떤 렌즈를 쓸지 브라우저가 알아서 고르는데, 종종 초광각
+        // (0.5~0.8배율처럼 더 넓게 찍히는 렌즈)이 기본으로 선택됩니다. zoom을
+        // 1(기본 배율)로 요청하면 여러 렌즈를 하나의 연속된 줌 범위로 묶어
+        // 제어하는 기기에서 표준 렌즈로 시작하게 됩니다. TS의 MediaTrackConstraints
+        // 타입에는 아직 zoom이 없어서 any로 우회합니다 — 지원 안 하는 기기/
+        // 브라우저에서는 그냥 무시되고 기존처럼 동작해서 실패할 일은 없습니다.
+        const videoConstraints: any = {
+          facingMode: nextFacing,
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
+          zoom: { ideal: 1 },
+        };
+
         const stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode: nextFacing,
-            width: { ideal: 1920 },
-            height: { ideal: 1080 },
-          },
+          video: videoConstraints,
           audio: true,
         });
         attachStream(stream);
