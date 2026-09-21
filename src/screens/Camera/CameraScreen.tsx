@@ -34,6 +34,13 @@ const MAX_CLIPS = 15;
 // 지금은 모든 클립이 3초로 통일됩니다.
 const RECORD_DURATION_SECONDS = 3;
 
+// 서버(Supabase Storage) 업로드/대역폭 비용을 줄이기 위한 값 — 3초짜리 미리보기용
+// 클립이라 720p 해상도를 유지하면서 비트레이트만 낮춰도 체감 화질 저하 없이
+// 용량을 크게 줄일 수 있습니다(기존 카메라 기본값 대비 개당 300~500KB 목표).
+// docs.expo.dev/versions/v56.0.0/sdk/camera 기준, videoBitrate는 CameraView prop이고
+// iOS에서는 recordAsync에 codec을 함께 지정해야 적용됩니다.
+const VIDEO_BITRATE_BPS = 1_300_000;
+
 // ── 촬영 스타일 데이터 ───────────────────────────────────────
 // 원래 여행 만들기 모달(NewTripModal) 3단계에서 미리 고르던 값인데, "촬영 버튼을
 // 누르고 카메라 화면에서 정할 수 있도록" 여기로 옮겨왔습니다. 여행 단위가 아니라
@@ -545,6 +552,9 @@ export default function CameraScreen() {
     try {
       const video = await cameraRef.current.recordAsync({
         maxDuration: maxClipSeconds,
+        // iOS는 CameraView의 videoBitrate prop이 recordAsync에 codec을 같이
+        // 넘겨야만 실제로 적용됩니다(안드로이드는 prop만으로 적용됨).
+        ...(Platform.OS === 'ios' ? { codec: 'avc1' as const } : {}),
       });
       if (!video?.uri) {
         throw new Error('촬영된 영상 경로를 확인할 수 없습니다.');
@@ -675,6 +685,7 @@ export default function CameraScreen() {
             mode="video"
             zoom={ZOOM_LEVELS[zoomIndex].value}
             videoQuality="720p"
+            videoBitrate={VIDEO_BITRATE_BPS}
             // ratio 미지정 시 안드로이드 프리뷰 scaleType 기본값이 FILL이라
             // 카메라 원본 비율을 무시하고 늘려서 꽉 채워버립니다(세로로
             // 늘어나 보이는 원인). 녹화 해상도(1280x720 = 16:9)와 맞춰서

@@ -204,10 +204,13 @@ export default function CameraScreen() {
         // 방향에 맞춰 자연스러운 화각으로 프레임을 주기 때문에 이 문제가
         // 없습니다. 클립마다 해상도가 달라지는 문제는 서버(mainServer.js)에서
         // 합치기 전에 정규화하므로 여기서는 방향을 강제하지 않아도 됩니다.
+        // 네이티브 앱(CameraScreen.tsx)의 videoQuality="720p"와 맞춰서 720p로
+        // 요청합니다 — 서버(Supabase Storage) 업로드/대역폭 비용을 줄이기 위해
+        // 해상도와 비트레이트(아래 MediaRecorder 옵션)를 함께 낮췄습니다.
         const videoConstraints: any = {
           facingMode: nextFacing,
-          width: { ideal: 1920 },
-          height: { ideal: 1080 },
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
           zoom: { ideal: 1 },
         };
 
@@ -364,10 +367,13 @@ export default function CameraScreen() {
     const mimeType = pickSupportedMimeType();
     // videoBitsPerSecond를 안 정하면 브라우저가 낮은 기본 비트레이트를 써서
     // 해상도를 높여도(위 getUserMedia) 압축 때문에 화질이 뭉개집니다.
-    // 8Mbps는 1080p 촬영에 무난한 값입니다.
+    // 3초짜리 미리보기용 클립이라 720p 기준 1.3Mbps로도 체감 화질 저하 없이
+    // 서버(Supabase Storage) 업로드 용량/대역폭을 크게 줄일 수 있습니다
+    // (네이티브 CameraScreen.tsx의 VIDEO_BITRATE_BPS와 동일한 값).
+    const VIDEO_BITRATE_BPS = 1_300_000;
     const recorderOptions = mimeType
-      ? { mimeType, videoBitsPerSecond: 8_000_000 }
-      : { videoBitsPerSecond: 8_000_000 };
+      ? { mimeType, videoBitsPerSecond: VIDEO_BITRATE_BPS }
+      : { videoBitsPerSecond: VIDEO_BITRATE_BPS };
     let recorder: MediaRecorder;
     try {
       recorder = new MediaRecorder(streamRef.current, recorderOptions);
