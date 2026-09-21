@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type ComponentProps } from 'react';
 import { Image as RNImage, StyleSheet, View, useWindowDimensions } from 'react-native';
-import { Feather, Ionicons } from '@expo/vector-icons';
+import { Feather, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import { useFocusEffect, useRouter } from 'expo-router';
@@ -80,6 +80,25 @@ const KAKAO_CATEGORY_QUERY: Record<string, { code?: string; keyword?: string }> 
   역사: { keyword: '역사 관광지' },
   자연: { keyword: '자연 관광지' },
   체험: { keyword: '체험 관광' },
+  // 아래 둘은 화면에 칩으로 노출되진 않고(ALLOWED_CATEGORY_KEYWORDS에 없음),
+  // "전체" 탭에서 여행 테마 기반 추천(THEME_TO_KAKAO_TAG)에서만 씁니다.
+  야경: { keyword: '야경 명소' },
+  사진촬영: { keyword: '포토스팟' },
+};
+
+// 새 여행 만들기에서 고르는 8개 테마(NewTripModal.tsx의 THEMES)를 위
+// KAKAO_CATEGORY_QUERY 태그로 매핑합니다. "선택한 테마를 바탕으로 장소
+// 추천을 받을 수 있어요"라는 안내 문구를 실제로 구현하는 부분 — 진행 중인
+// 여행에 테마가 있으면 "전체" 탭에서 두루누비 추천과 섞어서 보여줍니다.
+const THEME_TO_KAKAO_TAG: Record<string, string> = {
+  맛집탐방: '음식점',
+  카페투어: '카페',
+  문화체험: '문화',
+  자연힐링: '자연',
+  쇼핑: '쇼핑',
+  도보여행: '체험',
+  야경: '야경',
+  사진촬영: '사진촬영',
 };
 
 interface RecommendedPlace {
@@ -131,6 +150,12 @@ function getDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
     Math.sin(dLat / 2) * Math.sin(dLat / 2) +
     Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+// "전체" 탭에서 두루누비 추천과 테마 매칭 추천을 합칠 때, 같은 장소가
+// 두 출처 모두에서 나와 중복 카드로 뜨는 걸 막는 용도의 느슨한 이름 비교.
+function normalizePlaceNameForDedupe(name: string): string {
+  return name.replace(/\s+/g, '').toLowerCase();
 }
 
 // localScoreService.rankByLocalScore에 넘길 최소 입력값을 뽑아냅니다.
@@ -308,17 +333,33 @@ function buildTodayMoments(recordings: RecordingData[]): ClipItem[] {
 // Pretendard-Bold 패밀리 + font-weight:normal(가짜 볼드 방지)로 바꿨습니다.
 const HOME_STYLES = `
   .uri-home-inner { padding: 1px 18px 90px; font-family: 'Pretendard-Regular', sans-serif; }
-  .uri-travel-banner { position: relative; height: 261px; overflow: hidden; border-radius: 16px; background-position: center; background-size: cover; background-color: #FFF3DF; }
+  .uri-travel-banner { position: relative; height: 261px; overflow: hidden; border-radius: 16px; background-position: center; background-size: cover; background-color: #FFFCF7; }
+  .uri-banner-motif { position: absolute; inset: 0; }
+  .uri-banner-motif svg { width: 100%; height: 100%; }
+  .uri-banner-route { fill: none; stroke: #FF7F5C; stroke-width: 2; stroke-linecap: round; opacity: .5; }
+  .uri-banner-dot { fill: #FF7F5C; opacity: .65; }
+  .uri-banner-motif-icon { position: absolute; }
+  .uri-banner-motif-mountain { top: 13%; left: 26%; }
+  .uri-banner-motif-cup { bottom: 15%; left: 11%; }
+  .uri-banner-motif-camera { bottom: 21%; right: 11%; }
   .uri-banner-scrim { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(0,0,0,.02) 20%, rgba(0,0,0,.55) 100%); }
+  /* 사진 대신 일러스트가 깔리는(클립 아직 없음) 상태는 배경이 밝아서, 흰
+     글씨용 그림자 대신 어두운 글씨 + 그 밝기에 맞는 진행바 색으로 바꿉니다. */
+  .uri-banner-content-light { color: #222; }
+  .uri-banner-content-light .uri-banner-kicker,
+  .uri-banner-content-light h1,
+  .uri-banner-content-light > p { text-shadow: none; }
+  .uri-banner-content-light .uri-progress-track { background: rgba(0,0,0,.08); }
+  .uri-banner-content-light .uri-progress-track i { background: #FF7F5C; }
   .uri-banner-content { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: flex-start; padding: 19px 18px 16px; color: #fff; box-sizing: border-box; }
-  .uri-banner-kicker { font-size: 11px; opacity: .86; }
-  .uri-banner-content h1 { margin: 8px 0 2px; font-size: 28px; letter-spacing: -.075em; font-family: 'Pretendard-Bold', sans-serif; font-weight: normal; }
-  .uri-banner-content > p { margin: 0; font-size: 12px; opacity: .9; }
+  .uri-banner-kicker { font-size: 11px; opacity: .86; text-shadow: 0 1px 4px rgba(0,0,0,.45); }
+  .uri-banner-content h1 { margin: 8px 0 2px; font-size: 28px; letter-spacing: -.075em; font-family: 'Pretendard-Bold', sans-serif; font-weight: normal; text-shadow: 0 1px 6px rgba(0,0,0,.45); }
+  .uri-banner-content > p { margin: 0; font-size: 12px; opacity: .9; text-shadow: 0 1px 4px rgba(0,0,0,.45); }
   .uri-progress-label { display: flex; justify-content: space-between; width: 100%; margin-top: auto; font-size: 11px; }
   .uri-progress-label b { font-family: 'Pretendard-SemiBold', sans-serif; font-weight: normal; }
   .uri-progress-track { width: 100%; height: 4px; margin: 7px 0 12px; overflow: hidden; border-radius: 10px; background: rgba(255,255,255,.32); }
   .uri-progress-track i { display: block; height: 100%; border-radius: 10px; background: #fff; }
-  .uri-banner-button { display: inline-flex; align-items: center; gap: 6px; min-height: 35px; padding: 0 12px; border-radius: 10px; background: #fff; color: #222; font-size: 11px; font-family: 'Pretendard-Bold', sans-serif; font-weight: normal; border: 0; cursor: pointer; }
+  .uri-banner-button { display: inline-flex; align-items: center; gap: 6px; min-height: 35px; padding: 0 12px; border-radius: 10px; background: #fff; color: #222; font-size: 11px; font-family: 'Pretendard-Bold', sans-serif; font-weight: normal; border: 0; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,.12); }
   .uri-empty-trip { display: flex; align-items: center; gap: 12px; min-height: 118px; padding: 17px; border: 1px solid #eee; border-radius: 16px; background: #F5F5F5; box-sizing: border-box; }
   .uri-empty-symbol { display: grid; place-items: center; flex: none; width: 43px; height: 43px; border-radius: 50%; background: #FFF3DF; color: #6a5845; }
   .uri-empty-trip p { margin: 0 0 4px; font-size: 13px; font-family: 'Pretendard-Bold', sans-serif; font-weight: normal; color: #222; }
@@ -365,6 +406,36 @@ const HOME_STYLES = `
   .uri-empty-moments span { color: #767676; font-size: 10px; }
 `;
 
+// "진행 중인 여행" 카드에서 아직 클립을 하나도 안 찍어서 보여줄 사진이 없을
+// 때, 밋밋한 배경색 대신 보여주는 장식용 일러스트입니다. 온보딩 화면의
+// RouteMotif(경로 곡선 + 여행 아이콘들)와 같은 스타일을 이 카드 크기에
+// 맞춰 옮겼습니다.
+function TripBannerMotif() {
+  return (
+    <div className="uri-banner-motif" aria-hidden="true">
+      <svg viewBox="0 0 350 261" preserveAspectRatio="none">
+        <path
+          className="uri-banner-route"
+          d="M40 55 C88 82 92 132 58 158 C34 176 52 198 92 193 C148 186 178 160 228 170 C268 178 288 190 304 206"
+        />
+        <circle className="uri-banner-dot" cx={40} cy={55} r={4.5} />
+        <circle className="uri-banner-dot" cx={58} cy={158} r={4.5} />
+        <circle className="uri-banner-dot" cx={228} cy={170} r={4.5} />
+        <circle className="uri-banner-dot" cx={304} cy={206} r={4.5} />
+      </svg>
+      <div className="uri-banner-motif-icon uri-banner-motif-mountain">
+        <MaterialCommunityIcons name="image-filter-hdr-outline" size={26} color="#d8d8d8" />
+      </div>
+      <div className="uri-banner-motif-icon uri-banner-motif-cup">
+        <Feather name="coffee" size={18} color="#d8d8d8" />
+      </div>
+      <div className="uri-banner-motif-icon uri-banner-motif-camera">
+        <Feather name="camera" size={18} color="#d8d8d8" />
+      </div>
+    </div>
+  );
+}
+
 export default function HomeScreenWeb() {
   const router = useRouter();
   const currentTrip = useTripStore((state) => state.currentTrip);
@@ -378,6 +449,7 @@ export default function HomeScreenWeb() {
   const [currentLocation, setCurrentLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [kakaoPlaces, setKakaoPlaces] = useState<RecommendedPlace[]>([]);
   const [isLoadingKakaoPlaces, setIsLoadingKakaoPlaces] = useState(false);
+  const [themeMatchedPlaces, setThemeMatchedPlaces] = useState<RecommendedPlace[]>([]);
 
   // 장소 카드를 누르면 뜨는 정보 팝업 — 네이티브 HomeScreen.tsx와 같은
   // PlaceDetailModal을 그대로 재사용합니다.
@@ -702,9 +774,60 @@ export default function HomeScreenWeb() {
     };
   }, [category, currentLocation]);
 
+  // 새 여행 만들기에서 고른 테마 → 카카오 태그로 바꾼 목록입니다. 여러
+  // 테마가 같은 태그로 매핑될 수 있어 중복은 제거합니다. currentTrip?.themes를
+  // 변수로 먼저 뽑아두는 건 React Compiler가 의존성 배열 안의 옵셔널
+  // 체이닝을 본문의 접근과 다른 의존성으로 추론해서 메모이제이션을
+  // 못 지키는 문제를 피하기 위해서입니다.
+  const currentTripThemes = currentTrip?.themes;
+  const themeTags = useMemo(() => {
+    if (!currentTripThemes?.length) return [];
+    const tags = currentTripThemes
+      .map((theme) => THEME_TO_KAKAO_TAG[theme])
+      .filter((tag): tag is string => !!tag);
+    return Array.from(new Set(tags));
+  }, [currentTripThemes]);
+
+  // "선택한 테마를 바탕으로 장소 추천을 받을 수 있어요"(NewTripModal 안내
+  // 문구)를 실제로 구현하는 부분입니다. "전체" 탭에서, 진행 중인 여행에
+  // 테마가 있으면 그 테마에 맞는 카카오 결과를 태그별로 병렬 조회해서
+  // 아래 filteredPlaces에서 두루누비 추천과 섞습니다(대체하지 않음 —
+  // 테마가 좁아도 추천이 텅 비지 않게).
+  useEffect(() => {
+    let isMounted = true;
+    (async () => {
+      if (category !== '전체' || !currentLocation || themeTags.length === 0) {
+        if (isMounted) setThemeMatchedPlaces([]);
+        return;
+      }
+      const results = await Promise.all(
+        themeTags.map((tag) => fetchKakaoPlaces(tag, currentLocation.lat, currentLocation.lng)),
+      );
+      if (isMounted) setThemeMatchedPlaces(results.flat());
+    })();
+    return () => {
+      isMounted = false;
+    };
+  }, [category, currentLocation, themeTags]);
+
   // 네이티브 CATEGORY_TAGS처럼 8개 태그를 항상 고정으로 보여줍니다.
   const categories = ['전체', ...ALLOWED_CATEGORY_KEYWORDS];
-  const filteredPlaces = category === '전체' ? recommendedPlaces : kakaoPlaces;
+
+  const filteredPlaces = useMemo(() => {
+    if (category !== '전체') return kakaoPlaces;
+    if (themeMatchedPlaces.length === 0) return recommendedPlaces;
+    // 두루누비 추천 + 테마 매칭 추천을 합치되, 사실상 같은 이름의 장소는
+    // 두루누비 쪽(이미 사진/카테고리가 보강됨)을 우선하고 중복 제거합니다.
+    const seen = new Set(recommendedPlaces.map((place) => normalizePlaceNameForDedupe(place.name)));
+    const merged = [...recommendedPlaces];
+    for (const place of themeMatchedPlaces) {
+      const key = normalizePlaceNameForDedupe(place.name);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      merged.push(place);
+    }
+    return merged;
+  }, [category, recommendedPlaces, kakaoPlaces, themeMatchedPlaces]);
 
   // 로컬 점수 기준 오름차순(로컬 스팟이 앞, 잘 알려진 곳이 뒤) 정렬 +
   // 배지. 배지는 이 정렬 결과를 기준으로만 붙으므로 화면에 보이는 순서와
@@ -729,8 +852,8 @@ export default function HomeScreenWeb() {
             className="uri-travel-banner"
             style={bannerImage ? { backgroundImage: `url(${bannerImage})` } : undefined}
           >
-            <div className="uri-banner-scrim" />
-            <div className="uri-banner-content">
+            {bannerImage ? <div className="uri-banner-scrim" /> : <TripBannerMotif />}
+            <div className={`uri-banner-content${bannerImage ? '' : ' uri-banner-content-light'}`}>
               <span className="uri-banner-kicker">진행 중인 여행</span>
               <h1>{currentTrip.title}</h1>
               <p>{totalStopsHint}</p>
