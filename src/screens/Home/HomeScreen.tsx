@@ -14,7 +14,7 @@ import {
 } from '@/components/PlaceDetail/PlaceDetailModal';
 import { RADIUS, COLORS as SHARED_COLORS, SPACING } from '@/constants/color';
 import type { FolderItem } from '@/services/folderService';
-import { getRecordingsByFolder } from '@/services/recordingService';
+import { getMergedRecordingsByFolder } from '@/services/spotSyncService';
 import { appendTripScheduleStops } from '@/services/trip-schedule-service';
 import { useTripStore } from '@/store/useTripStore';
 import { ClipItem } from '@/types/home';
@@ -1696,7 +1696,7 @@ export default function TripHomeScreen() {
         }
 
         try {
-          const records = await getRecordingsByFolder(currentTrip.id);
+          const records = await getMergedRecordingsByFolder(currentTrip.id);
           if (isActive) setRecordings(records);
         } catch (error) {
           console.error("[HomeScreen] 클립을 불러오지 못했습니다.", error);

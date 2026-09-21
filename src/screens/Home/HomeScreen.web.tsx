@@ -7,7 +7,8 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { AppText as Text } from '@/components/AppText';
 import { AppHeader } from '@/components/web/AppHeader.web';
 import { useTripStore } from '@/store/useTripStore';
-import { getRecordingsByFolder, getAllRecordings } from '@/services/recordingService';
+import { getAllRecordings } from '@/services/recordingService';
+import { getMergedRecordingsByFolder } from '@/services/spotSyncService';
 import NewTripModal from '@/components/NewTripModal';
 import { useCreateTripModal } from '@/hooks/useCreateTripModal';
 import type { RecordingData } from '@/types/recording';
@@ -502,7 +503,7 @@ export default function HomeScreenWeb() {
       return;
     }
     try {
-      const recordings = await getRecordingsByFolder(currentTrip.id);
+      const recordings = await getMergedRecordingsByFolder(currentTrip.id);
       setTodayMoments(buildTodayMoments(recordings));
     } catch (error) {
       console.warn('[Home:web] 오늘의 클립 로딩 실패:', error);

@@ -1,11 +1,15 @@
-// 다른 기기에서 촬영된 장소를 "영상 없이 이름만이라도" 보여주기 위한 조회 전용 서비스.
+// 다른 기기에서 촬영된 장소/클립을 조회하기 위한 서비스.
 //
 // 클립을 저장할 때(LocationConfirmScreen.tsx) 서버가 RouteSpot을 자동으로 만들어주기
-// 때문에(uri_gil_backend/routers/clips.py), 영상 파일 자체가 아직 기기 간에 동기화되지
-// 않아도 "어떤 장소를 방문했는지"는 이 엔드포인트로 이미 가져올 수 있습니다.
+// 때문에(uri_gil_backend/routers/clips.py), "어떤 장소를 방문했는지"는 이 엔드포인트로
+// 이미 가져올 수 있습니다. 클립 영상 자체도 이제 Supabase Storage에 실제 URL로
+// 업로드되므로(api.ts의 uploadClipVideo), 다른 기기에서 찍은 클립도 이 URL로 그대로
+// 재생할 수 있습니다 — getMergedRecordingsByFolder()가 로컬 기록과 합쳐줍니다.
 
 import { apiFetch } from './api';
+import { getAllFolders } from './folderService';
 import { getRecordingsByFolder } from './recordingService';
+import type { RecordingData } from '@/types/recording';
 
 export interface ServerSpot {
     id: number;
@@ -17,6 +21,16 @@ export interface ServerSpot {
     visited_at: string | null; // ISO datetime
 }
 
+export interface ServerClip {
+    id: number;
+    route_id: number;
+    user_id: number;
+    spot_id: number | null;
+    clip_url: string;
+    clip_order: number | null;
+    recorded_at: string | null; // ISO datetime (타임존 표시 없을 수 있음)
+}
+
 /** 실패해도(오프라인 등) 화면이 죽지 않도록 빈 배열로 대체합니다 — 읽기 전용 보강 데이터라서. */
 export async function fetchServerSpots(routeId: number): Promise<ServerSpot[]> {
     try {
@@ -25,6 +39,79 @@ export async function fetchServerSpots(routeId: number): Promise<ServerSpot[]> {
         console.warn('[spotSyncService.fetchServerSpots] 실패:', err);
         return [];
     }
+}
+
+/** 실패해도(오프라인 등) 화면이 죽지 않도록 빈 배열로 대체합니다 — 읽기 전용 보강 데이터라서. */
+export async function fetchServerClips(routeId: number): Promise<ServerClip[]> {
+    try {
+        return await apiFetch(`/clips/route/${routeId}`);
+    } catch (err) {
+        console.warn('[spotSyncService.fetchServerClips] 실패:', err);
+        return [];
+    }
+}
+
+// 백엔드 DateTime 컬럼이 타임존 정보 없이 저장돼 있어서(models.py, timezone=True 아님),
+// 서버가 돌려주는 시각 문자열엔 "Z"/오프셋 표시가 없습니다. 실제로는 UTC 값인데 표시가
+// 없으면 JS의 new Date()가 기기 로컬 시간으로 잘못 해석해버려서(tripPlanService.ts와
+// 동일한 이슈), 명시적으로 UTC로 보정합니다.
+function toUtcIsoString(value: string): string {
+    return /[Zz]|[+-]\d{2}:?\d{2}$/.test(value) ? value : `${value}Z`;
+}
+
+/**
+ * 로컬 recordings에 없는(다른 기기에서 촬영된) 서버 클립을, 실제 재생 가능한
+ * videoUri(Supabase Storage URL)를 가진 합성 RecordingData로 만들어 로컬 목록에
+ * 합칩니다. 클립 관리/홈/내 루트 화면이 전부 getRecordingsByFolder() 대신 이 함수를
+ * 쓰면, 어느 기기에서 찍었든 같은 클립 목록을 보게 됩니다.
+ *
+ * 썸네일은 서버에 저장하지 않아서 합성 항목은 항상 빈 문자열('')이고, UI는 이미
+ * 빈 썸네일을 "재생 아이콘만" 있는 카드로 처리하고 있어 화면이 깨지지 않습니다.
+ */
+export async function getMergedRecordingsByFolder(
+    folderId: string,
+): Promise<RecordingData[]> {
+    const [localRecordings, folders] = await Promise.all([
+        getRecordingsByFolder(folderId),
+        getAllFolders(),
+    ]);
+
+    const routeId = folders.find((f) => f.id === folderId)?.routeId;
+    if (!routeId) return localRecordings;
+
+    const localServerIds = new Set(
+        localRecordings.map((r) => r.serverId).filter((id): id is number => id != null),
+    );
+
+    const [serverClips, serverSpots] = await Promise.all([
+        fetchServerClips(routeId),
+        fetchServerSpots(routeId),
+    ]);
+
+    const spotById = new Map(serverSpots.map((s) => [s.id, s]));
+
+    const remoteOnly: RecordingData[] = serverClips
+        .filter((clip) => !localServerIds.has(clip.id))
+        .map((clip) => {
+            const spot = clip.spot_id != null ? spotById.get(clip.spot_id) : undefined;
+            return {
+                id: `server_${clip.id}`,
+                serverId: clip.id,
+                recordedAt: toUtcIsoString(clip.recorded_at ?? new Date().toISOString()),
+                videoUri: clip.clip_url,
+                thumbnail: '',
+                folderId,
+                location: {
+                    latitude: spot?.latitude ?? 0,
+                    longitude: spot?.longitude ?? 0,
+                    placeName: spot?.spot_name,
+                },
+            };
+        });
+
+    return [...localRecordings, ...remoteOnly].sort((a, b) =>
+        a.recordedAt.localeCompare(b.recordedAt),
+    );
 }
 
 export interface FolderVisitStats {
@@ -57,7 +144,7 @@ export async function getFolderVisitStats(
 
     const [serverSpots, serverClips] = await Promise.all([
         fetchServerSpots(routeId),
-        apiFetch(`/clips/route/${routeId}`).catch(() => []),
+        fetchServerClips(routeId),
     ]);
 
     const visitedNames = new Set(localNames);
@@ -72,6 +159,6 @@ export async function getFolderVisitStats(
         // 이 기기의 저장이 아직 서버에 반영 안 됐을 수도(오프라인), 서버에는
         // 있는데 이 기기엔 없을 수도(다른 기기에서 촬영) 있어서 둘 중 큰 쪽을
         // 씁니다 — 어느 쪽도 놓치지 않는 안전한 하한선입니다.
-        clipCount: Math.max(recordings.length, Array.isArray(serverClips) ? serverClips.length : 0),
+        clipCount: Math.max(recordings.length, serverClips.length),
     };
 }

@@ -13,9 +13,8 @@ import { MapLocateButton } from '@/components/common';
 import { RADIUS, COLORS as SHARED_COLORS, SPACING } from '@/constants/color';
 import { navigateToCamera } from "@/navigation/recordingNavigation";
 import { parseDateRange, type FolderItem } from "@/services/folderService";
-import { getRecordingsByFolder } from "@/services/recordingService";
 import { getStopOrder, saveStopOrder, type StopOrderMap } from "@/services/stop-order-service";
-import { fetchServerSpots, type ServerSpot } from "@/services/spotSyncService";
+import { fetchServerSpots, getMergedRecordingsByFolder, type ServerSpot } from "@/services/spotSyncService";
 import {
   getTripScheduleStops,
   type TripScheduleStop,
@@ -754,7 +753,7 @@ export default function MyRouteScreen() {
 
     try {
       const [records, scheduleStops, order, spots] = await Promise.all([
-        getRecordingsByFolder(currentTrip.id),
+        getMergedRecordingsByFolder(currentTrip.id),
         getTripScheduleStops(currentTrip.id),
         getStopOrder(currentTrip.id),
         // routeId가 없으면(오프라인 생성 등) 서버에 물어볼 게 없으니 건너뜁니다.

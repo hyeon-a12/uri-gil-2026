@@ -18,7 +18,8 @@ import * as MediaLibrary from 'expo-media-library/legacy';
 
 import { ClipPreviewModal } from '@/components/ClipPreview/ClipPreviewModal'
 import { HapticPressable, ScreenHeader } from '@/components/common';
-import { deleteRecording, getRecordingsByFolder } from '@/services/recordingService';
+import { deleteRecording } from '@/services/recordingService';
+import { getMergedRecordingsByFolder } from '@/services/spotSyncService';
 import { useTripStore } from '@/store/useTripStore';
 import { ClipItem } from '@/types/home';
 import { COLORS as SHARED_COLORS, RADIUS, SPACING } from '@/constants/color';
@@ -84,7 +85,7 @@ export default function ClipSelectScreen() {
     }
 
     try {
-      const records = await getRecordingsByFolder(folderId);
+      const records = await getMergedRecordingsByFolder(folderId);
       const items: ClipItem[] = records.map((r) => ({
         id: r.id,
         serverId: r.serverId,

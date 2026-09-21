@@ -22,7 +22,7 @@ import {
   FolderItem,
   FolderStatus,
 } from '@/services/folderService';
-import { getRecordingsByFolder } from '@/services/recordingService';
+import { getMergedRecordingsByFolder } from '@/services/spotSyncService';
 import { useTripStore } from '@/store/useTripStore';
 import { useWebMenuStore } from '@/store/useWebMenuStore';
 import NewTripModal from '@/components/NewTripModal';
@@ -124,7 +124,7 @@ export default function ClipManageScreen() {
 
       const withCounts: FolderWithCount[] = await Promise.all(
         stored.map(async (f) => {
-          const records = await getRecordingsByFolder(f.id);
+          const records = await getMergedRecordingsByFolder(f.id);
           return {
             ...f,
             clipCount: records.length,
