@@ -578,6 +578,20 @@ export function RoutePlanView({
                       {description}
                     </Text>
                   </View>
+
+                  {/* 길게 누르면 삭제된다는 걸 사용자가 알아채기 어려워서(디스커버러빌리티
+                      문제), 눈에 보이는 점 3개 버튼으로도 같은 메뉴를 열 수 있게 합니다.
+                      바깥 Pressable의 onPress(메모 열기)로 안 번지게 stopPropagation. */}
+                  <Pressable
+                    hitSlop={10}
+                    onPress={(e) => {
+                      e.stopPropagation();
+                      openReorderMenu(stop, index);
+                    }}
+                    style={styles.scheduleMenuButtonWeb}
+                  >
+                    <Ionicons name="ellipsis-vertical" size={16} color={COLORS.textTertiary} />
+                  </Pressable>
                 </Pressable>
               );
             })}
@@ -854,6 +868,13 @@ const styles = StyleSheet.create({
   scheduleContentWeb: {
     flex: 1,
     paddingBottom: 24,
+  },
+  scheduleMenuButtonWeb: {
+    width: 28,
+    height: 28,
+    marginTop: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   scheduleTimeWeb: {
     fontSize: 12,
