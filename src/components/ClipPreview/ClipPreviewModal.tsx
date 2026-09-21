@@ -80,6 +80,13 @@ function SingleClipPreview({ clip, onClose }: { clip: ClipItem; onClose: () => v
   useEffect(() => {
     if (!clip || status !== 'readyToPlay') return;
 
+    // 웹에서는 useVideoPlayer의 setup 콜백(위 p.play())이 <video> DOM이 마운트되기
+    // 전에 실행돼서 최초 재생 명령이 씹히고, 화면이 멈춰있다가 한 번 터치해야만
+    // 재생되는 문제가 있었습니다. 실제로 재생 가능해진(readyToPlay) 이 시점엔
+    // <video>가 이미 마운트돼 있으므로, 여기서 다시 한번 명시적으로 재생을
+    // 걸어줍니다. 네이티브는 이 시점에 이미 재생 중이라 중복 호출해도 무해합니다.
+    player.play();
+
     progressAnim.setValue(0);
     Animated.timing(progressAnim, {
       toValue: 1,
