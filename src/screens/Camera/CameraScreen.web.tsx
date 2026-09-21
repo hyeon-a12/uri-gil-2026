@@ -8,8 +8,10 @@ import { AppText as Text } from '@/components/AppText';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { navigateToLocationConfirm } from '@/navigation/recordingNavigation';
-import { saveRecording } from '@/services/recordingService';
+import { saveRecording, updateRecordingServerId } from '@/services/recordingService';
 import { useTripStore } from '@/store/useTripStore';
+import { getAllFolders } from '@/services/folderService';
+import { apiFetch } from '@/services/api';
 import { COLORS as SHARED_COLORS } from '@/constants/color';
 import { Alert } from '@/services/webAlert';
 
@@ -273,23 +275,55 @@ export default function CameraScreen() {
       const videoUri = URL.createObjectURL(blob);
 
       if (quickAddPlace) {
-        saveRecording({
-          recordedAt: new Date().toISOString(),
-          videoUri,
-          durationMs,
-          folderId: currentTrip!.id,
-          location: {
-            latitude: quickAddPlace.latitude,
-            longitude: quickAddPlace.longitude,
-            placeName: quickAddPlace.name,
-            linkedStopId: quickAddPlace.stopId,
-          },
-        })
-          .then(() => safeBack('/(tabs)/home'))
-          .catch((error) => {
+        (async () => {
+          try {
+            const recordedAt = new Date().toISOString();
+            const record = await saveRecording({
+              recordedAt,
+              videoUri,
+              durationMs,
+              folderId: currentTrip!.id,
+              location: {
+                latitude: quickAddPlace.latitude,
+                longitude: quickAddPlace.longitude,
+                placeName: quickAddPlace.name,
+                linkedStopId: quickAddPlace.stopId,
+              },
+            });
+
+            // 서버에도 클립 메타데이터 저장 시도 (실패해도 로컬 저장은 이미 끝났으니 무시) —
+            // location-confirm 화면(LocationConfirmScreen.tsx)의 저장 로직과 동일한 패턴.
+            try {
+              const folders = await getAllFolders();
+              const folder = folders.find((f) => f.id === currentTrip!.id);
+
+              if (folder?.routeId) {
+                const created = await apiFetch('/clips/', {
+                  method: 'POST',
+                  body: JSON.stringify({
+                    route_id: folder.routeId,
+                    spot_name: quickAddPlace.name,
+                    clip_url: videoUri,
+                    latitude: quickAddPlace.latitude,
+                    longitude: quickAddPlace.longitude,
+                    recorded_at: recordedAt,
+                  }),
+                });
+
+                if (created?.id) {
+                  await updateRecordingServerId(record.id, created.id);
+                }
+              }
+            } catch (serverError) {
+              console.error('[Camera:web] 서버 클립 저장 실패:', serverError);
+            }
+
+            safeBack('/(tabs)/home');
+          } catch (error) {
             console.error('[Camera:web] 빠른 추가 저장 실패:', error);
             Alert.alert('저장에 실패했습니다', '잠시 후 다시 시도해주세요.');
-          });
+          }
+        })();
       } else {
         navigateToLocationConfirm(videoUri, undefined, durationMs);
       }

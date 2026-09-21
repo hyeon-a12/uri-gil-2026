@@ -4,6 +4,22 @@ import { getCurrentUserId } from './authService';
 
 const STORAGE_PREFIX = "trip-schedule:v1:";
 
+// appendTripScheduleStops/removeTripScheduleStop은 "전체 목록을 읽고 → 수정하고 →
+// 통째로 다시 쓰는" 패턴이라, 두 호출이 겹치면(AI 추천 확정 저장과 스톱 삭제가
+// 동시에 일어나는 등) 나중에 끝난 쪽이 먼저 쓴 걸 덮어써서 스톱이 사라질 수
+// 있습니다(folderService.ts/recordingService.ts에 있던 것과 같은 문제). 이
+// 모듈을 드나드는 모든 쓰기를 한 줄로 직렬화해서 막습니다.
+let writeQueue: Promise<unknown> = Promise.resolve();
+
+function withWriteLock<T>(task: () => Promise<T>): Promise<T> {
+  const result = writeQueue.then(task, task);
+  writeQueue = result.then(
+    () => undefined,
+    () => undefined,
+  );
+  return result;
+}
+
 export type TripScheduleStop = {
   id: string;
   tripId: string;
@@ -60,25 +76,27 @@ export async function appendTripScheduleStops(
   const userId = await getCurrentUserId();
   if (!userId) return [];
 
-  const existing = await getTripScheduleStops(tripId);
-  const existingPlaceIds = new Set(existing.map((stop) => stop.placeId));
-  const now = new Date().toISOString();
+  return withWriteLock(async () => {
+    const existing = await getTripScheduleStops(tripId);
+    const existingPlaceIds = new Set(existing.map((stop) => stop.placeId));
+    const now = new Date().toISOString();
 
-  const newStops = stops
-    .filter((stop) => !existingPlaceIds.has(stop.placeId))
-    .map((stop, index) => ({
-      ...stop,
-      id: `schedule-${Date.now()}-${index}-${Math.random()
-        .toString(36)
-        .slice(2, 8)}`,
-      tripId,
-      order: existing.length + index + 1,
-      createdAt: now,
-    }));
+    const newStops = stops
+      .filter((stop) => !existingPlaceIds.has(stop.placeId))
+      .map((stop, index) => ({
+        ...stop,
+        id: `schedule-${Date.now()}-${index}-${Math.random()
+          .toString(36)
+          .slice(2, 8)}`,
+        tripId,
+        order: existing.length + index + 1,
+        createdAt: now,
+      }));
 
-  const saved = [...existing, ...newStops];
-  await AsyncStorage.setItem(storageKey(userId, tripId), JSON.stringify(saved));
-  return saved;
+    const saved = [...existing, ...newStops];
+    await AsyncStorage.setItem(storageKey(userId, tripId), JSON.stringify(saved));
+    return saved;
+  });
 }
 
 export async function removeTripScheduleStop(
@@ -88,11 +106,13 @@ export async function removeTripScheduleStop(
   const userId = await getCurrentUserId();
   if (!userId) return [];
 
-  const existing = await getTripScheduleStops(tripId);
-  const remaining = existing
-    .filter((stop) => stop.id !== stopId)
-    .map((stop, index) => ({ ...stop, order: index + 1 }));
+  return withWriteLock(async () => {
+    const existing = await getTripScheduleStops(tripId);
+    const remaining = existing
+      .filter((stop) => stop.id !== stopId)
+      .map((stop, index) => ({ ...stop, order: index + 1 }));
 
-  await AsyncStorage.setItem(storageKey(userId, tripId), JSON.stringify(remaining));
-  return remaining;
+    await AsyncStorage.setItem(storageKey(userId, tripId), JSON.stringify(remaining));
+    return remaining;
+  });
 }

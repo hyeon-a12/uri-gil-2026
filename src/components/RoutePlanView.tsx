@@ -356,6 +356,17 @@ export function RoutePlanView({
     // 클립이 있으면 한 번 더 확인 — 같이 지워진다는 걸 명확히 알려줍니다.
   const confirmDeleteStop = useCallback(
     (stop: PlanStop) => {
+      if (stop.source === 'remote') {
+        // 이 스톱은 다른 기기의 클립에서 서버로 동기화된 장소 정보뿐이라, 이
+        // 기기엔 지울 로컬 클립도 없고 서버 삭제도 안 걸려 있습니다(clips.length
+        // 가 항상 0). 예전엔 확인창 없이 바로 deleteStop()이 실행돼서 아무 일도
+        // 안 일어나는데 성공한 것처럼 보였습니다 — 대신 이유를 알려줍니다.
+        showAlert(
+          '이 장소는 여기서 지울 수 없어요',
+          '다른 기기에서 촬영된 기록이라, 그 기기에서 클립을 지워야 사라져요.',
+        );
+        return;
+      }
       if (stop.clips.length > 0) {
         showAlert(
           '이 장소를 삭제할까요?',

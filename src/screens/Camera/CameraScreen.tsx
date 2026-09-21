@@ -22,9 +22,10 @@ import { AppText as Text } from '@/components/AppText';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Alert } from '@/services/webAlert';
 import { navigateToLocationConfirm } from '@/navigation/recordingNavigation';
-import { saveRecording } from '@/services/recordingService';
+import { saveRecording, updateRecordingServerId } from '@/services/recordingService';
 import { useTripStore } from '@/store/useTripStore';
-import { type ShootingStyleId } from '@/services/folderService';
+import { getAllFolders, type ShootingStyleId } from '@/services/folderService';
+import { apiFetch } from '@/services/api';
 import CameraChangeIcon from '@/assets/images/camera_change.svg';
 import { COLORS as SHARED_COLORS } from '@/constants/color';
 
@@ -562,8 +563,9 @@ export default function CameraScreen() {
       if (quickAddPlace) {
         // 장소가 이미 정해져 있으므로 location-confirm 화면 없이 바로 저장합니다.
         try {
-          await saveRecording({
-            recordedAt: new Date().toISOString(),
+          const recordedAt = new Date().toISOString();
+          const record = await saveRecording({
+            recordedAt,
             videoUri: video.uri,
             durationMs,
             folderId: currentTrip.id,
@@ -574,6 +576,34 @@ export default function CameraScreen() {
               linkedStopId: quickAddPlace.stopId,
             },
           });
+
+          // 서버에도 클립 메타데이터 저장 시도 (실패해도 로컬 저장은 이미 끝났으니 무시) —
+          // location-confirm 화면(LocationConfirmScreen.tsx)의 저장 로직과 동일한 패턴.
+          try {
+            const folders = await getAllFolders();
+            const folder = folders.find((f) => f.id === currentTrip.id);
+
+            if (folder?.routeId) {
+              const created = await apiFetch('/clips/', {
+                method: 'POST',
+                body: JSON.stringify({
+                  route_id: folder.routeId,
+                  spot_name: quickAddPlace.name,
+                  clip_url: video.uri,
+                  latitude: quickAddPlace.latitude,
+                  longitude: quickAddPlace.longitude,
+                  recorded_at: recordedAt,
+                }),
+              });
+
+              if (created?.id) {
+                await updateRecordingServerId(record.id, created.id);
+              }
+            }
+          } catch (serverError) {
+            console.error('[Camera] 서버 클립 저장 실패:', serverError);
+          }
+
           safeBack('/(tabs)/home');
         } catch (error) {
           console.error('[Camera] 빠른 추가 저장 실패:', error);
