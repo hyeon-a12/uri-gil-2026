@@ -1,6 +1,7 @@
 import { router } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { Feather, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { isMobileUserAgent } from '@/utils/isMobileWebDevice';
 
 /**
  * onboarding.tsx(네이티브, 가로 스와이프 캐러셀)의 웹 버전입니다.
@@ -29,6 +30,13 @@ import { Feather, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 
 // 가입 화면(join.web.tsx)이 쓰는 것과 같은 실제 노션 개인정보처리방침 페이지입니다.
 const PRIVACY_POLICY_URL = 'https://rectangular-random-c6d.notion.site/444eee87fea883bc854a81944d60553c';
+
+// 아래 route-motif/sticky 헤더는 position: fixed라 %값이 (프레임이 아니라)
+// 브라우저 뷰포트 기준으로 계산됩니다. 데스크톱에서는 뷰포트가 프레임(390px)
+// 보다 훨씬 넓어서 예전처럼 390px로 고정해야 하고, 아이폰 프로맥스(430px)
+// 같은 실제 모바일 기기에서는 뷰포트 = 기기 폭 = 프레임 폭이라 100%로 풀어야
+// _layout.tsx의 프레임 폭 처리와 어긋나지 않습니다.
+const FRAME_WIDTH_CSS = isMobileUserAgent ? '100%' : '390px';
 
 const INTRO_STYLES = `
   /*
@@ -64,7 +72,7 @@ const INTRO_STYLES = `
   .uri-logo-mark-small { width: 24px; height: 24px; border-width: 1.7px; }
 
   .uri-intro-route-motif {
-    position: fixed; z-index: 1; top: 0; left: 50%; width: 390px; height: 100vh;
+    position: fixed; z-index: 1; top: 0; left: 50%; width: ${FRAME_WIDTH_CSS}; height: 100vh;
     transform: translateX(-50%); pointer-events: none; overflow: hidden;
   }
   .uri-intro-route-motif svg { width: 100%; height: 100%; }
@@ -116,7 +124,7 @@ const INTRO_STYLES = `
   .uri-closing-content p { margin: 14px 0 36px; color: #767676; font-size: 14px; }
   .uri-intro-sticky {
     position: fixed; z-index: 20; top: 0; left: 50%; display: flex; align-items: center;
-    justify-content: space-between; width: 390px; height: 64px; padding: 0 22px;
+    justify-content: space-between; width: ${FRAME_WIDTH_CSS}; height: 64px; padding: 0 22px;
     background: rgba(255,255,255,.92); border-bottom: 1px solid rgba(221,221,221,.7);
     backdrop-filter: blur(10px); transform: translate(-50%, -100%); opacity: 0;
     transition: transform 0.22s cubic-bezier(.23,1,.32,1), opacity 0.22s cubic-bezier(.23,1,.32,1);

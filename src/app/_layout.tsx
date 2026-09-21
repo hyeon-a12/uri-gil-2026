@@ -2,25 +2,28 @@ import { Stack } from 'expo-router';
 import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect, useState } from 'react';
-import { Platform, StyleSheet, View, useWindowDimensions } from 'react-native';
+import { Platform, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { hydrateCurrentTrip } from '@/store/useTripStore';
 import { hydrateProfile } from '@/store/useProfileStore';
 import { hydrateAuth, useAuthStore } from '@/store/useAuthStore';
 import { COLORS } from '@/constants/color';
 import { WebSideMenu } from '@/components/web/WebSideMenu';
+import { isMobileUserAgent } from '@/utils/isMobileWebDevice';
 
 SplashScreen.preventAutoHideAsync();
 
 // 이 앱의 웹 버전은 반응형으로 여러 화면 폭에 대응하지 않고, 모바일 폭
-// 하나(390px)로 고정하기로 팀에서 결정했습니다. 데스크톱 브라우저처럼 화면이
-// 더 넓을 때는 가운데에 390px 폭으로만 렌더하고 양옆은 여백(레터박스)으로
-// 채웁니다. 실제 모바일 기기(폭이 390px 이하인 경우가 대부분)에서는 그냥
-// 화면을 꽉 채우는 것과 동일하게 보입니다. 네이티브 앱은 원래도 기기 폭을
-// 그대로 쓰므로 이 래퍼가 필요 없습니다.
+// 하나(390px)를 기준으로 삼기로 팀에서 결정했습니다. 데스크톱 브라우저처럼
+// 화면이 더 넓을 때는 가운데에 390px 폭으로만 렌더하고 양옆은 여백(레터
+// 박스)으로 채웁니다. 실제 모바일 기기에서는 이 상한을 아예 적용하지 않고
+// (아래 isMobileUserAgent 참고) 기기 폭을 그대로 채웁니다 — 아이폰
+// 프로맥스(430px)처럼 390px보다 넓은 폰도 있어서, 폭 숫자만으로는 "데스크톱"
+// 을 판별할 수 없기 때문입니다. 네이티브 앱은 원래도 기기 폭을 그대로 쓰므로
+// 이 래퍼가 필요 없습니다.
 const MOBILE_WEB_FRAME_WIDTH = 390;
 
 export default function RootLayout() {
-  const { height: windowHeight } = useWindowDimensions();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const authChecked = useAuthStore((state) => state.checked);
   // hydrateAuth()는 SecureStore를 한 번만 읽어서 금방 끝나는데, hydrateProfile/
   // hydrateCurrentTrip은 AsyncStorage를 여러 번 읽어서 상대적으로 느립니다.
@@ -104,8 +107,19 @@ export default function RootLayout() {
     return stackNavigator;
   }
 
+  // 데스크톱 브라우저처럼 화면 폭이 390px보다 넓어서 양옆에 레터박스
+  // 여백이 생기는 경우, 첫 방문자가 "화면이 깨졌다"고 오해하지 않도록
+  // 이게 의도된 디자인이라는 걸 알려주는 안내 문구를 띄웁니다. 단, 아이폰
+  // 프로맥스처럼 390px보다 넓은 실제 모바일 기기는 제외합니다.
+  const showDesktopNotice = windowWidth > MOBILE_WEB_FRAME_WIDTH && !isMobileUserAgent;
+
   return (
     <View style={[styles.webLetterbox, { minHeight: windowHeight }]}>
+      {showDesktopNotice && (
+        <Text style={styles.desktopNotice}>
+          본 서비스는 모바일 환경에 최적화되어 있습니다. 더 나은 경험을 위해 모바일 기기로 접속하거나 브라우저 창 폭을 줄여주세요.
+        </Text>
+      )}
       <View
         style={[
           styles.webFrame,
@@ -113,7 +127,15 @@ export default function RootLayout() {
           // 화면 밖으로 숨겨둔 햄버거 메뉴(WebSideMenu, translateX로 프레임
           // 오른쪽 바깥에 대기)가, 데스크톱처럼 화면이 넓어서 이 390px 프레임
           // 양옆에 여백(레터박스)이 생기는 경우 그 여백 자리에 그대로 보였습니다.
-          { minHeight: windowHeight, overflowX: 'hidden' } as any,
+          {
+            minHeight: windowHeight,
+            overflowX: 'hidden',
+            // 아이폰 프로맥스(430px) 등 390px보다 넓은 실제 모바일 기기에서는
+            // 390px 상한을 풀어서 기기 폭을 그대로 채웁니다 — 이 상한은
+            // 데스크톱 브라우저에서 390px 미리보기를 보여주려는 목적이지,
+            // 진짜 모바일 화면을 좁히려는 게 아니었습니다.
+            maxWidth: isMobileUserAgent ? undefined : MOBILE_WEB_FRAME_WIDTH,
+          } as any,
         ]}
       >
         {stackNavigator}
@@ -131,6 +153,15 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     backgroundColor: COLORS.surface,
+  },
+  desktopNotice: {
+    color: COLORS.textSecondary,
+    fontSize: 11,
+    lineHeight: 16,
+    textAlign: 'center',
+    maxWidth: 320,
+    paddingTop: 12,
+    paddingHorizontal: 16,
   },
   webFrame: {
     flex: 1,
