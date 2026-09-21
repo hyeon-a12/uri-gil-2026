@@ -86,6 +86,20 @@ def delete_clip(
     if not clip:
         raise HTTPException(status_code=404, detail="클립을 찾을 수 없습니다")
     get_owned_route(clip.route_id, db, current_user)
+
+    spot_id = clip.spot_id
     db.delete(clip)
     db.commit()
+
+    # 이 스팟을 참조하던 마지막 클립이었다면(다른 클립이 더 없으면) 스팟도 같이 정리합니다.
+    # 안 지우면 클립은 없는데 장소(RouteSpot)만 서버에 남아서, 다른 기기가 "이 기기엔
+    # 없는 장소가 있다"고 착각하게 됩니다.
+    if spot_id:
+        remaining = db.query(Clip).filter(Clip.spot_id == spot_id).count()
+        if remaining == 0:
+            spot = db.query(RouteSpot).filter(RouteSpot.id == spot_id).first()
+            if spot:
+                db.delete(spot)
+                db.commit()
+
     return {"message": "클립이 삭제됐습니다"}
