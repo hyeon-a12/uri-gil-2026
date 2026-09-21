@@ -184,12 +184,21 @@ export function buildPlanData(
   for (const spot of remoteSpots) {
     if (!spot.visited_at) continue; // 방문 시각을 모르면 어느 day에 넣을지 알 수 없어 건너뜀
 
-    const day = dayIndexOf(spot.visited_at, tripStart);
+    // 백엔드 datetime 컬럼이 타임존 정보 없이 저장돼 있어서(models.py의 DateTime,
+    // timezone=True 아님), 서버가 돌려주는 visited_at엔 "Z"/오프셋 표시가 없습니다.
+    // 실제로는 UTC 값인데 표시가 없으면 JS의 new Date()가 이걸 기기 로컬 시간으로
+    // 잘못 해석해버려서(수 시간 어긋남), day 계산이 같은 클립인데도 로컬 recordedAt과
+    // 다르게 나와 아래 중복 체크가 실패했었습니다 — 명시적으로 UTC로 보정합니다.
+    const visitedAtUtc = /[Zz]|[+-]\d{2}:?\d{2}$/.test(spot.visited_at)
+      ? spot.visited_at
+      : `${spot.visited_at}Z`;
+
+    const day = dayIndexOf(visitedAtUtc, tripStart);
     const groupKey = `${day}::${spot.spot_name}`;
     if (stopGroups.has(groupKey)) continue; // 이미 이 기기의 클립으로 같은 스톱이 만들어져 있으면 중복 표시 안 함
 
     const stopId = `remote-spot-${spot.id}`;
-    stopCreatedAt.set(stopId, spot.visited_at);
+    stopCreatedAt.set(stopId, visitedAtUtc);
     remoteOnlyStops.push({
       id: stopId,
       order: 0, // 아래에서 전체 순서를 다시 매길 때 덮어씌워집니다.
