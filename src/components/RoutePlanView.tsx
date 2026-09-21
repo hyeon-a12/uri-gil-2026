@@ -385,17 +385,13 @@ export function RoutePlanView({
     [deleteStop],
   );
 
-  // 카드를 길게 누르면 뜨는 "위로 이동 / 아래로 이동 / 삭제" 메뉴.
-  // 웹은 다중 선택 메뉴를 브라우저 기본 팝업으로 표현할 수 없어서, 길게 누르면
-  // 바로 삭제 확인으로 연결합니다. 순서 변경은 커스텀 UI가 준비되기 전까지
-  // 웹 MVP 범위에서 제외합니다.
+  // 카드를 길게 누르면(또는 점 3개 버튼을 누르면) 뜨는 "위로 이동 / 아래로
+  // 이동 / 삭제" 메뉴. 웹은 ActionSheetModal(하단 시트)로, 네이티브는
+  // Alert.alert로 뜹니다 — 둘 다 confirmDialog()가 알아서 골라줍니다. 눌러서
+  // "삭제"를 고르면 confirmDeleteStop()이 한 번 더 확인(브라우저 confirm/
+  // Alert)을 거친 뒤에 실제로 지웁니다.
   const openReorderMenu = useCallback(
     (stop: PlanStop, index: number) => {
-      if (Platform.OS === 'web') {
-        confirmDeleteStop(stop);
-        return;
-      }
-
       const options: {
         text: string;
         onPress?: () => void;
