@@ -122,10 +122,17 @@ function probeResolution(filePath) {
   });
 }
 
+// \uc11c\ubc84(Railway)\ub294 \ubcf4\ud1b5 UTC\ub85c \ub3cc\uc544\uac00\uc11c, date.getHours()\ub97c \uadf8\ub300\ub85c \uc4f0\uba74 \uc11c\ubc84\uc758
+// \ub85c\uceec \uc2dc\uac04\ub300 \uae30\uc900 \uc2dc\uac01\uc774 \ub098\uc640 \uc2e4\uc81c \ud55c\uad6d\uc5d0\uc11c \ucd2c\uc601\ud55c \uc2dc\uac01\uacfc \uc5b4\uae0b\ub0a9\ub2c8\ub2e4(\ucd5c\ub300
+// 9\uc2dc\uac04 \ucc28\uc774). \uc774 \uc571\uc740 \ud55c\uad6d \uc0ac\uc6a9\uc790 \uc804\uc6a9\uc774\ub77c UTC \uc2dc\uac01\uc5d0 KST \uc624\ud504\uc14b(+9\uc2dc\uac04)\uc744
+// \uba85\uc2dc\uc801\uc73c\ub85c \ub354\ud55c \ub4a4 UTC \uac8c\ud130\ub85c \uc77d\uc5b4\uc11c, \uc11c\ubc84\uac00 \uc5b4\ub290 \uc2dc\uac04\ub300\uc5d0\uc11c \ub3cc\ub4e0 \ud56d\uc0c1
+// \ud55c\uad6d \uc2dc\uac01\uc73c\ub85c \ud45c\uc2dc\ub418\uac8c \ud569\ub2c8\ub2e4.
+const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
+
 function formatTime(recordedAt) {
-  const date = new Date(recordedAt);
-  const hours = String(date.getHours()).padStart(2, '0');
-  const minutes = String(date.getMinutes()).padStart(2, '0');
+  const date = new Date(new Date(recordedAt).getTime() + KST_OFFSET_MS);
+  const hours = String(date.getUTCHours()).padStart(2, '0');
+  const minutes = String(date.getUTCMinutes()).padStart(2, '0');
   return `${hours}\uff1a${minutes}`;
 }
 
