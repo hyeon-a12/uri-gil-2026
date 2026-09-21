@@ -149,6 +149,90 @@ export async function deleteFolder(id: string): Promise<void> {
     });
 }
 
+interface ServerRoute {
+    id: number;
+    title: string;
+    region: string | null;
+    theme: string | null;
+    description: string | null;
+    start_date: string | null; // "YYYY-MM-DD" (Pydantic date)
+    end_date: string | null;
+    member_count: number | null;
+    created_at: string;
+}
+
+// 서버 date("YYYY-MM-DD")를 dateRange 저장 형식("YYYY.MM.DD. ~ YYYY.MM.DD.")으로 변환.
+// 둘 중 하나라도 없으면 null(호출하는 쪽에서 기존 dateRange를 그대로 둠).
+function toDateRangeString(start: string | null, end: string | null): string | null {
+    if (!start || !end) return null;
+    const dot = (iso: string) => `${iso.replace(/-/g, '.')}.`;
+    return `${dot(start)} ~ ${dot(end)}`;
+}
+
+/**
+ * 서버에 저장된 내 여행 목록(GET /routes/user/{id})을 불러와 로컬 목록과 합칩니다.
+ * 다른 기기에서 로그인했을 때 그 기기에서 만든 여행이 안 보이는 문제를 해결하기 위한 것으로,
+ * 로그인 직후(login.tsx / login.web.tsx)에 호출합니다.
+ *
+ * - 서버에만 있는 여행(routeId로 매칭 안 됨)은 로컬에 새로 추가
+ * - 로컬에도 이미 있는 여행은 서버 필드(title/region/theme/설명/기간/인원)만 갱신하고,
+ *   서버에 저장 안 되는 로컬 전용 필드(thumbnail, shootingStyle, clipLengthSeconds 등)는 그대로 둠
+ * - routeId가 없는 로컬 여행(오프라인 생성 등 서버 저장 실패분)은 건드리지 않음
+ *
+ * 클립(촬영 영상) 자체는 여기서 다루지 않습니다 — clip_url이 아직 로컬 기기 경로라
+ * 서버에서 받아와도 재생할 수 없는 상태라, 별도 작업(실제 파일 업로드)이 필요합니다.
+ */
+export async function syncFoldersFromServer(): Promise<void> {
+    const userId = await getCurrentUserId();
+    if (!userId) return;
+
+    let serverRoutes: ServerRoute[];
+    try {
+        serverRoutes = await apiFetch(`/routes/user/${userId}`);
+    } catch (err) {
+        console.warn('[FolderService.syncFoldersFromServer] 서버 여행 목록 조회 실패:', err);
+        return;
+    }
+
+    await withWriteLock(async () => {
+        const raw = await AsyncStorage.getItem(foldersKey(userId));
+        const local: StoredFolder[] = raw ? JSON.parse(raw) : [];
+        const byRouteId = new Map(
+            local.filter((f) => f.routeId != null).map((f) => [f.routeId, f] as const),
+        );
+
+        for (const route of serverRoutes) {
+            const dateRange = toDateRangeString(route.start_date, route.end_date);
+            const themes = route.theme ? route.theme.split(',').filter(Boolean) : undefined;
+            const existing = byRouteId.get(route.id);
+
+            if (existing) {
+                existing.title = route.title;
+                existing.region = route.region;
+                existing.memo = route.description ?? existing.memo;
+                existing.partySize = route.member_count ?? existing.partySize;
+                if (themes) existing.themes = themes;
+                if (dateRange) existing.dateRange = dateRange;
+            } else {
+                local.push({
+                    id: `folder-server-${route.id}`,
+                    routeId: route.id,
+                    title: route.title,
+                    dateRange: dateRange ?? '',
+                    thumbnail: '',
+                    region: route.region,
+                    memo: route.description ?? undefined,
+                    partySize: route.member_count ?? undefined,
+                    themes,
+                    createdAt: new Date(route.created_at).getTime(),
+                });
+            }
+        }
+
+        await AsyncStorage.setItem(foldersKey(userId), JSON.stringify(local));
+    });
+}
+
 export async function updateFolder(id: string, updates: Partial<FolderItem>,): Promise<void> {
     const userId = await getCurrentUserId();
     if (!userId) return;

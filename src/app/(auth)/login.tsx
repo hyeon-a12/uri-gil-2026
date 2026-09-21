@@ -2,6 +2,7 @@ import { getProfile } from '@/services/profileService';
 import { updateProfile } from '@/store/useProfileStore';
 import { useAuthStore } from '@/store/useAuthStore';
 import { hydrateCurrentTrip } from '@/store/useTripStore';
+import { syncFoldersFromServer } from '@/services/folderService';
 import { extractErrorMessage } from '@/services/api';
 import { isValidEmail } from '@/utils/validation';
 import { COLORS } from '@/constants/color';
@@ -91,6 +92,14 @@ export default function LoginScreen() {
         ...existingProfile,
         nickname: data.nickname,
       });
+
+      // 다른 기기에서 만든 여행도 보이도록 서버 목록과 합쳐둡니다.
+      // 실패해도(오프라인 등) 로컬 여행 목록은 이미 있으니 로그인 자체는 막지 않습니다.
+      try {
+        await syncFoldersFromServer();
+      } catch (error) {
+        console.error('[Login] 여행 목록 동기화 실패:', error);
+      }
 
       // useTripStore(currentTrip)는 메모리 캐시라 로그아웃해도 자동으로 비워지지
       // 않습니다. 이 계정의 활성 여행으로 다시 채워서, 방금 전 계정의 여행이
