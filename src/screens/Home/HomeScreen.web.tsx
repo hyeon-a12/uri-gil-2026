@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type ComponentProps } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ComponentProps } from 'react';
 import { Image as RNImage, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -19,6 +19,12 @@ import {
   type PlaceDetailView,
 } from '@/components/PlaceDetail/PlaceDetailModal';
 import { useWebSheetStore } from '@/store/useWebSheetStore';
+import {
+  rankByLocalScore,
+  type KakaoPlace as KakaoScoreInput,
+  type TourApiPlace as TourApiScoreInput,
+} from '@/services/localScoreService';
+import { LOCAL_SPOT_FALLBACK_PLACES } from '@/constants/localSpotOverrides';
 
 /**
  * HomeScreen.tsx(네이티브, 전체화면 지도+바텀시트+AI추천 오버레이)의
@@ -74,6 +80,12 @@ interface RecommendedPlace {
   lat: number;
   lng: number;
   category?: string;
+  // 아래 3개는 localScoreService.calculateLocalScore 계산용 신호입니다.
+  // "전체" 탭(두루누비 API)에서 온 장소는 tourApiRank/tourApiTotal이,
+  // 카테고리 탭(카카오 API)에서 온 장소는 categoryGroupCode가 채워집니다.
+  categoryGroupCode?: string;
+  tourApiRank?: number;
+  tourApiTotal?: number;
 }
 
 type TourCacheEntry = { timestamp: number; places: RecommendedPlace[] };
@@ -99,6 +111,45 @@ function getDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
     Math.sin(dLat / 2) * Math.sin(dLat / 2) +
     Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+// 추천 API(관광공사/카카오)가 키 미설정·쿼터초과·네트워크 실패로 전부
+// 막히거나 빈 응답을 줄 때, 화면이 텅 비지 않도록 화이트리스트만으로
+// 최소한의 카드를 채웁니다. 화이트리스트 항목은 이름이 그대로 rankByLocalScore의
+// 화이트리스트 매칭에도 걸려서, 배지도 항상 의도한 대로 나옵니다.
+function buildFallbackPlaces(location?: { lat: number; lng: number } | null): RecommendedPlace[] {
+  return LOCAL_SPOT_FALLBACK_PLACES.map((spot) => ({
+    id: `fallback_${spot.placeName}`,
+    name: spot.placeName,
+    lat: spot.lat,
+    lng: spot.lng,
+    category: spot.category,
+    distance: location ? getDistance(location.lat, location.lng, spot.lat, spot.lng) : undefined,
+  }));
+}
+
+// localScoreService.rankByLocalScore에 넘길 최소 입력값을 뽑아냅니다.
+// "전체" 탭 장소는 두루누비 응답 안 순번(tourApiRank/tourApiTotal)을,
+// 카테고리 탭 장소는 카카오 category_group_code를 씁니다. 동네 밀집도
+// (nearbyPopularCount)는 장소마다 따로 조회하면 호출이 N배로 늘어나서,
+// 현재 위치 기준 한 번만 조회한 값을 모든 장소에 공통으로 적용합니다.
+function toLocalScoreInput(
+  place: RecommendedPlace,
+  nearbyPopularCount: number | undefined,
+): TourApiScoreInput | KakaoScoreInput {
+  if (place.tourApiRank !== undefined && place.tourApiTotal !== undefined) {
+    return {
+      name: place.name,
+      rankIndex: place.tourApiRank,
+      totalCount: place.tourApiTotal,
+      nearbyPopularCount,
+    };
+  }
+  return {
+    name: place.name,
+    categoryGroupCode: place.categoryGroupCode,
+    nearbyPopularCount,
+  };
 }
 
 async function fetchSpotPhoto(keyword: string) {
@@ -178,6 +229,7 @@ async function fetchKakaoPlaces(
           lat: parseFloat(doc.y),
           lng: parseFloat(doc.x),
           category: tag,
+          categoryGroupCode: doc.category_group_code || undefined,
         };
       }),
     );
@@ -275,7 +327,11 @@ const HOME_STYLES = `
   .uri-visited-badge { position: absolute; top: 6px; right: 6px; z-index: 1; width: 22px; height: 22px; border-radius: 11px; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.45); }
   .uri-place-card img { display: block; width: 100%; height: 116px; object-fit: cover; background: #F5F5F5; }
   .uri-place-card-body { padding: 9px 9px 11px; }
-  .uri-info-badge { display: inline-block; margin-bottom: 5px; padding: 3px 6px; border-radius: 999px; background: #FFF3DF; color: #473f35; font-size: 9px; font-family: 'Pretendard-Bold', sans-serif; font-weight: normal; }
+  .uri-badge-row { display: flex; align-items: center; gap: 4px; margin-bottom: 5px; }
+  .uri-info-badge { display: inline-block; padding: 3px 6px; border-radius: 999px; background: #FFF3DF; color: #473f35; font-size: 9px; font-family: 'Pretendard-Bold', sans-serif; font-weight: normal; }
+  .uri-local-badge { display: inline-block; padding: 3px 6px; border-radius: 999px; font-size: 9px; white-space: nowrap; font-family: 'Pretendard-Bold', sans-serif; font-weight: normal; }
+  .uri-local-badge.uri-badge-local { background: #FFF3DF; color: #6a5845; }
+  .uri-local-badge.uri-badge-popular { background: #FF7F5C; color: #fff; }
   .uri-place-card h3 { overflow: hidden; margin: 0; font-size: 13px; font-family: 'Pretendard-Bold', sans-serif; font-weight: normal; letter-spacing: -.05em; text-overflow: ellipsis; white-space: nowrap; color: #222; }
   .uri-place-card-distance { display: flex; align-items: center; gap: 2px; overflow: hidden; margin: 5px 0 0; color: #767676; font-size: 9px; white-space: nowrap; }
   .uri-skeleton-card { flex: none; width: 150px; overflow: hidden; border: 1px solid #eee; border-radius: 12px; background: #fff; }
@@ -444,7 +500,15 @@ export default function HomeScreenWeb() {
   useEffect(() => {
     let isMounted = true;
     (async () => {
-      if (!currentLocation || !KAKAO_REST_API_KEY || !TOUR_API_KEY) return;
+      if (!currentLocation) return;
+
+      // API 키가 아예 설정 안 돼 있으면 이 파이프라인 전체를 못 씁니다 —
+      // 화면을 비워두지 않고 화이트리스트 폴백으로 바로 채웁니다.
+      if (!KAKAO_REST_API_KEY || !TOUR_API_KEY) {
+        setRecommendedPlaces(buildFallbackPlaces(currentLocation));
+        return;
+      }
+
       try {
         const { lat, lng } = currentLocation;
         const kakaoRes = await fetch(
@@ -498,6 +562,7 @@ export default function HomeScreenWeb() {
 
         if (hadApiError) {
           if (cached && isMounted) setRecommendedPlaces(cached.places);
+          else if (isMounted) setRecommendedPlaces(buildFallbackPlaces(currentLocation));
           return;
         }
 
@@ -512,6 +577,19 @@ export default function HomeScreenWeb() {
           sortedSpots.map(async (spot: any, index: number) => {
             const photoInfo = await fetchSpotPhoto(spot.hubTatsNm);
             if (photoInfo === TOUR_API_ERROR) hadPhotoApiError = true;
+
+            // 로컬 점수 계산용 — 두루누비 응답에 이미 hubRank(1위부터의 순위)가
+            // 들어있어서 그걸 그대로 씁니다. (예전엔 여기서 거리순으로 다시
+            // 정렬한 sortedSpots의 배열 인덱스를 썼는데, 그건 "얼마나 가까운가"지
+            // "얼마나 유명한가"가 아니라서 신호가 잘못됐던 버그였습니다.)
+            // totalCount는 거리로 추려낸 10곳이 아니라 이번 달 원본 응답
+            // 전체 개수(items.length, 보통 최대 100)를 써야 순위 비율이 맞습니다.
+            const hubRankNum = Number(spot.hubRank);
+            const tourApiRank =
+              Number.isFinite(hubRankNum) && hubRankNum > 0
+                ? hubRankNum - 1
+                : Math.floor(items.length / 2);
+
             return {
               id: `${spot.hubTatsNm}_${index}`,
               name: spot.hubTatsNm,
@@ -520,13 +598,55 @@ export default function HomeScreenWeb() {
               lat: parseFloat(spot.mapY),
               lng: parseFloat(spot.mapX),
               category: spot.hubCtgryMclsNm || spot.hubCtgryLclsNm || undefined,
+              tourApiRank,
+              tourApiTotal: items.length,
             };
           }),
         );
-        if (isMounted) setRecommendedPlaces(placesWithPhotos);
-        if (!hadPhotoApiError) void writeTourCache(cacheKey, placesWithPhotos);
+
+        // 빈 응답(이 동네에 등록된 데이터가 없음)도 API 에러와 마찬가지로
+        // 화면이 텅 비지 않게 화이트리스트 폴백으로 채웁니다.
+        const finalPlaces = placesWithPhotos.length > 0 ? placesWithPhotos : buildFallbackPlaces(currentLocation);
+        if (isMounted) setRecommendedPlaces(finalPlaces);
+        if (placesWithPhotos.length > 0 && !hadPhotoApiError) void writeTourCache(cacheKey, placesWithPhotos);
       } catch (error) {
         console.warn('[Home:web] 관광지 추천 실패:', error);
+        if (isMounted) setRecommendedPlaces(buildFallbackPlaces(currentLocation));
+      }
+    })();
+    return () => {
+      isMounted = false;
+    };
+  }, [currentLocation]);
+
+  // 로컬 점수 계산용 "동네 밀집도" 신호 — 장소 하나하나마다 주변을
+  // 검색하면 호출이 N배로 늘어나서, 현재 위치 기준으로 한 번만 조회해
+  // 추천 목록 전체에 공통으로 적용합니다(추천 목록은 어차피 같은 동네
+  // 반경 안이라 이 정도 근사로 충분합니다). 결과 개수만 필요해서
+  // size=1로 요청해 응답 용량을 줄입니다.
+  const [areaPopularDensity, setAreaPopularDensity] = useState<number | undefined>(undefined);
+
+  useEffect(() => {
+    if (!currentLocation || !KAKAO_REST_API_KEY) return;
+    let isMounted = true;
+    (async () => {
+      try {
+        const params = new URLSearchParams({
+          query: '맛집 카페',
+          x: String(currentLocation.lng),
+          y: String(currentLocation.lat),
+          radius: '2000',
+          size: '1',
+        });
+        const res = await fetch(
+          `https://dapi.kakao.com/v2/local/search/keyword.json?${params.toString()}`,
+          { headers: { Authorization: `KakaoAK ${KAKAO_REST_API_KEY}` } },
+        );
+        const data = await res.json();
+        const count = data?.meta?.pageable_count;
+        if (isMounted && typeof count === 'number') setAreaPopularDensity(count);
+      } catch (error) {
+        console.warn('[Home:web] 동네 밀집도 조회 실패:', error);
       }
     })();
     return () => {
@@ -556,6 +676,15 @@ export default function HomeScreenWeb() {
   // 네이티브 CATEGORY_TAGS처럼 8개 태그를 항상 고정으로 보여줍니다.
   const categories = ['전체', ...ALLOWED_CATEGORY_KEYWORDS];
   const filteredPlaces = category === '전체' ? recommendedPlaces : kakaoPlaces;
+
+  // 로컬 점수 기준 오름차순(로컬 스팟이 앞, 잘 알려진 곳이 뒤) 정렬 +
+  // 배지. 배지는 이 정렬 결과를 기준으로만 붙으므로 화면에 보이는 순서와
+  // 항상 일치합니다.
+  const rankedPlaces = useMemo(
+    () =>
+      rankByLocalScore(filteredPlaces, (place) => toLocalScoreInput(place, areaPopularDensity)),
+    [filteredPlaces, areaPopularDensity],
+  );
 
   const bannerImage = todayMoments.find((m) => m.thumbnail)?.thumbnail;
   const totalStopsHint = currentTrip ? '기록을 이어가볼까요?' : '';
@@ -638,7 +767,7 @@ export default function HomeScreenWeb() {
             </div>
           ) : (
             <div className="uri-place-grid">
-              {filteredPlaces.map((place) => (
+              {rankedPlaces.map(({ place, badge }) => (
                 <div
                   key={place.id}
                   className="uri-place-card"
@@ -657,7 +786,18 @@ export default function HomeScreenWeb() {
                     </div>
                   )}
                   <div className="uri-place-card-body">
-                    {place.category && <span className="uri-info-badge">{place.category}</span>}
+                    {(place.category || badge) && (
+                      <div className="uri-badge-row">
+                        {place.category && <span className="uri-info-badge">{place.category}</span>}
+                        {badge && (
+                          <span
+                            className={`uri-local-badge ${badge === '로컬스팟' ? 'uri-badge-local' : 'uri-badge-popular'}`}
+                          >
+                            {badge}
+                          </span>
+                        )}
+                      </div>
+                    )}
                     <h3>{place.name}</h3>
                     {place.distance !== undefined && (
                       <span className="uri-place-card-distance">
