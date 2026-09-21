@@ -27,7 +27,7 @@ import { saveRecording, updateRecordingServerId } from "@/services/recordingServ
 import { useTripStore } from "@/store/useTripStore";
 import { useWebMenuStore } from "@/store/useWebMenuStore";
 import { getAllFolders } from "@/services/folderService";
-import { apiFetch } from "@/services/api";
+import { apiFetch, uploadClipVideo } from "@/services/api";
 import { formatDistance, usePlaceSearch } from "@/hooks/usePlaceSearch";
 
 const COLORS = {
@@ -293,12 +293,22 @@ export default function LocationConfirmScreen() {
         const folder = folders.find((f) => f.id === currentTrip.id);
 
         if (folder?.routeId) {
+          // 업로드가 실패해도(서버 스토리지 설정 전, 오프라인 등) 로컬 URI로라도
+          // 메타데이터(스팟/방문기록)는 서버에 저장되도록 폴백합니다 — 업로드
+          // 성공 여부와 무관하게 "어떤 장소를 방문했는지"는 항상 동기화되어야 합니다.
+          let clipUrl = videoUri;
+          try {
+            clipUrl = await uploadClipVideo(videoUri);
+          } catch (uploadError) {
+            console.warn("[LocationConfirm] 영상 업로드 실패, 로컬 경로로 폴백:", uploadError);
+          }
+
           const created = await apiFetch("/clips/", {
             method: "POST",
             body: JSON.stringify({
               route_id: folder.routeId,
               spot_name: placeName,
-              clip_url: videoUri,
+              clip_url: clipUrl,
               latitude: placeToSave.latitude,
               longitude: placeToSave.longitude,
               recorded_at: recordedAt,

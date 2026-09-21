@@ -11,7 +11,7 @@ import { navigateToLocationConfirm } from '@/navigation/recordingNavigation';
 import { saveRecording, updateRecordingServerId } from '@/services/recordingService';
 import { useTripStore } from '@/store/useTripStore';
 import { getAllFolders } from '@/services/folderService';
-import { apiFetch } from '@/services/api';
+import { apiFetch, uploadClipVideo } from '@/services/api';
 import { COLORS as SHARED_COLORS } from '@/constants/color';
 import { Alert } from '@/services/webAlert';
 
@@ -298,12 +298,21 @@ export default function CameraScreen() {
               const folder = folders.find((f) => f.id === currentTrip!.id);
 
               if (folder?.routeId) {
+                // 업로드가 실패해도(서버 스토리지 설정 전, 오프라인 등) 로컬 URI로라도
+                // 메타데이터(스팟/방문기록)는 서버에 저장되도록 폴백합니다.
+                let clipUrl = videoUri;
+                try {
+                  clipUrl = await uploadClipVideo(videoUri);
+                } catch (uploadError) {
+                  console.warn('[Camera:web] 영상 업로드 실패, 로컬 경로로 폴백:', uploadError);
+                }
+
                 const created = await apiFetch('/clips/', {
                   method: 'POST',
                   body: JSON.stringify({
                     route_id: folder.routeId,
                     spot_name: quickAddPlace.name,
-                    clip_url: videoUri,
+                    clip_url: clipUrl,
                     latitude: quickAddPlace.latitude,
                     longitude: quickAddPlace.longitude,
                     recorded_at: recordedAt,

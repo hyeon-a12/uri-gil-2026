@@ -9,7 +9,7 @@ import { AppText as Text } from '@/components/AppText';
 import { Card, ListRow } from '@/components/common';
 import { colors } from '@/constants/menu-theme';
 import { getAllFolders, getFolderStatus } from '@/services/folderService';
-import { getAllRecordings } from '@/services/recordingService';
+import { getFolderVisitStats } from '@/services/spotSyncService';
 import { useProfileStore, hydrateProfile } from '@/store/useProfileStore';
 import { useAuthStore } from '@/store/useAuthStore';
 import { clearCurrentTrip } from '@/store/useTripStore';
@@ -28,24 +28,24 @@ export default function MyPageScreen() {
   useFocusEffect(
     useCallback(() => {
       (async () => {
-        const [folders, recordings] = await Promise.all([
-          getAllFolders(),
-          getAllRecordings(),
-        ]);
+        const folders = await getAllFolders();
 
         const completedRoutes = folders.filter(
           (folder) => getFolderStatus(folder) === 'done',
         ).length;
 
-        const visitedPlaces = new Set(
-          recordings
-            .map((r) => r.location.placeName)
-            .filter((name): name is string => !!name),
-        ).size;
+        // 로컬 recordings만 세면 다른 기기/브라우저에서 찍은 클립이 안 잡혀서
+        // 여행별로 서버 스팟/클립까지 합쳐 계산합니다(spotSyncService 참고).
+        const perFolderStats = await Promise.all(
+          folders.map((folder) => getFolderVisitStats(folder.id, folder.routeId)),
+        );
+
+        const recordedClips = perFolderStats.reduce((sum, s) => sum + s.clipCount, 0);
+        const visitedPlaces = perFolderStats.reduce((sum, s) => sum + s.visitedCount, 0);
 
         setStats({
           completedRoutes,
-          recordedClips: recordings.length,
+          recordedClips,
           visitedPlaces,
         });
       })();

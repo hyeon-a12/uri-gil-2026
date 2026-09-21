@@ -1,13 +1,34 @@
-from fastapi import APIRouter, Depends, HTTPException
+import uuid
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.orm import Session
 from database import get_db
 from models import Clip, RouteSpot, User
 from schemas import ClipCreate, ClipResponse
 from routers.auth import get_current_user
 from routers.spots import get_owned_route
+from storage import upload_clip_file
 from typing import List
 
 router = APIRouter(prefix="/clips", tags=["clips"])
+
+# 클립 영상 파일 자체를 Supabase Storage에 업로드하고 어디서든 접근 가능한
+# URL을 돌려줍니다. 프론트는 촬영 직후 로컬 경로(file://, blob:)를 clip_url로
+# 그대로 저장하는 대신, 먼저 이 엔드포인트로 업로드한 뒤 받은 URL을
+# POST /clips/의 clip_url로 써야 다른 기기/브라우저에서도 클립이 재생됩니다.
+@router.post("/upload")
+async def upload_clip(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+):
+    ext = "mp4"
+    if file.filename and "." in file.filename:
+        ext = file.filename.rsplit(".", 1)[-1]
+
+    filename = f"{current_user.id}/{uuid.uuid4().hex}.{ext}"
+    content = await file.read()
+    url = upload_clip_file(content, filename, file.content_type or "video/mp4")
+
+    return {"url": url}
 
 @router.post("/", response_model=ClipResponse)
 def create_clip(

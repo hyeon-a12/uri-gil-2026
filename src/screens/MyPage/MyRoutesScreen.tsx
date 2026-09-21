@@ -23,7 +23,7 @@ import {
   getFolderStatus,
   type FolderStatus,
 } from '@/services/folderService';
-import { getRecordingsByFolder } from '@/services/recordingService';
+import { getFolderVisitStats } from '@/services/spotSyncService';
 
 const statusLabel: Record<FolderStatus, string> = {
   before: '예정',
@@ -54,13 +54,10 @@ export default function MyRoutesScreen() {
 
       const withCounts = await Promise.all(
         folders.map(async (folder) => {
-          const recordings = await getRecordingsByFolder(folder.id);
-
-          const visitedCount = new Set(
-            recordings
-              .map((recording) => recording.location.placeName)
-              .filter((name): name is string => Boolean(name)),
-          ).size;
+          const { visitedCount, clipCount } = await getFolderVisitStats(
+            folder.id,
+            folder.routeId,
+          );
 
           return {
             id: folder.id,
@@ -68,7 +65,7 @@ export default function MyRoutesScreen() {
             dateRange: folder.dateRange,
             status: getFolderStatus(folder),
             visitedCount,
-            clipCount: recordings.length,
+            clipCount,
           };
         }),
       );
