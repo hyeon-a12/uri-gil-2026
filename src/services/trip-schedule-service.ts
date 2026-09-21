@@ -1,6 +1,8 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { getCurrentUserId } from './authService';
+import { getAllFolders } from './folderService';
+import { apiFetch } from './api';
 
 const STORAGE_PREFIX = "trip-schedule:v1:";
 
@@ -23,6 +25,9 @@ function withWriteLock<T>(task: () => Promise<T>): Promise<T> {
 export type TripScheduleStop = {
   id: string;
   tripId: string;
+  /** 서버(RouteSpot) 쪽 id. 이 기기에서 만들어서 아직 서버 저장이 안 됐거나
+   * 실패했으면 없을 수 있습니다 — 그 경우 삭제해도 서버엔 지울 게 없습니다. */
+  serverId?: number;
   source: "ai-recommendation" | "manual";
   placeId: string;
   title: string;
@@ -39,7 +44,7 @@ export type TripScheduleStop = {
 
 export type NewTripScheduleStop = Omit<
   TripScheduleStop,
-  "id" | "tripId" | "order" | "createdAt"
+  "id" | "tripId" | "order" | "createdAt" | "serverId"
 >;
 
 // 계정별로 일정을 분리하기 위해 user_id를 키에 섞습니다.
@@ -69,6 +74,25 @@ export async function getTripScheduleStops(
  * AI에서 확정한 장소를 일정 마지막에 추가합니다.
  * 이미 같은 placeId가 저장돼 있다면 중복 저장하지 않습니다.
  */
+async function setStopServerId(
+  userId: string,
+  tripId: string,
+  stopId: string,
+  serverId: number,
+): Promise<void> {
+  await withWriteLock(async () => {
+    const raw = await AsyncStorage.getItem(storageKey(userId, tripId));
+    if (!raw) return;
+    try {
+      const stops = JSON.parse(raw) as TripScheduleStop[];
+      const updated = stops.map((s) => (s.id === stopId ? { ...s, serverId } : s));
+      await AsyncStorage.setItem(storageKey(userId, tripId), JSON.stringify(updated));
+    } catch {
+      // 손상된 저장값이면 조용히 넘어갑니다 — 다음 저장 때 정상 구조로 복구됩니다.
+    }
+  });
+}
+
 export async function appendTripScheduleStops(
   tripId: string,
   stops: NewTripScheduleStop[],
@@ -76,7 +100,7 @@ export async function appendTripScheduleStops(
   const userId = await getCurrentUserId();
   if (!userId) return [];
 
-  return withWriteLock(async () => {
+  const { saved, newStops } = await withWriteLock(async () => {
     const existing = await getTripScheduleStops(tripId);
     const existingPlaceIds = new Set(existing.map((stop) => stop.placeId));
     const now = new Date().toISOString();
@@ -95,8 +119,48 @@ export async function appendTripScheduleStops(
 
     const saved = [...existing, ...newStops];
     await AsyncStorage.setItem(storageKey(userId, tripId), JSON.stringify(saved));
-    return saved;
+    return { saved, newStops };
   });
+
+  // 서버에도 장소 저장 시도 (실패해도 로컬 저장은 이미 끝났으니 무시). routeId가
+  // 없으면(오프라인 생성 등) 서버에 보낼 곳이 없으니 건너뜁니다. RouteSpot
+  // 스키마엔 day(며칠째 일정인지)가 없어서, 다른 기기가 이 장소를 받아와도
+  // 어느 날짜에 넣을지는 알 수 없습니다 — 지금은 "이 기기에서 만든 게 서버에서
+  // 안 사라짐" 수준의 백업이고, 다른 기기 화면에 자동으로 나타나진 않습니다.
+  if (newStops.length > 0) {
+    try {
+      const folders = await getAllFolders();
+      const folder = folders.find((f) => f.id === tripId);
+
+      if (folder?.routeId) {
+        for (const stop of newStops) {
+          try {
+            const created = await apiFetch('/spots/', {
+              method: 'POST',
+              body: JSON.stringify({
+                route_id: folder.routeId,
+                spot_name: stop.title,
+                latitude: stop.latitude,
+                longitude: stop.longitude,
+                visit_order: stop.order,
+                visited_at: null,
+              }),
+            });
+
+            if (created?.id) {
+              await setStopServerId(userId, tripId, stop.id, created.id);
+            }
+          } catch (serverError) {
+            console.error('[trip-schedule-service] 서버 장소 저장 실패:', serverError);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('[trip-schedule-service] 여행 정보 조회 실패:', error);
+    }
+  }
+
+  return saved;
 }
 
 export async function removeTripScheduleStop(
@@ -106,13 +170,25 @@ export async function removeTripScheduleStop(
   const userId = await getCurrentUserId();
   if (!userId) return [];
 
-  return withWriteLock(async () => {
+  const { remaining, removedServerId } = await withWriteLock(async () => {
     const existing = await getTripScheduleStops(tripId);
+    const target = existing.find((stop) => stop.id === stopId);
     const remaining = existing
       .filter((stop) => stop.id !== stopId)
       .map((stop, index) => ({ ...stop, order: index + 1 }));
 
     await AsyncStorage.setItem(storageKey(userId, tripId), JSON.stringify(remaining));
-    return remaining;
+    return { remaining, removedServerId: target?.serverId };
   });
+
+  // 서버에도 삭제 반영 시도 (실패해도 로컬 삭제는 이미 끝났으니 무시)
+  if (removedServerId) {
+    try {
+      await apiFetch(`/spots/${removedServerId}`, { method: 'DELETE' });
+    } catch (serverError) {
+      console.error('[trip-schedule-service] 서버 장소 삭제 실패:', serverError);
+    }
+  }
+
+  return remaining;
 }
