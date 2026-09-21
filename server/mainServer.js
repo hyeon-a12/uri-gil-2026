@@ -289,6 +289,16 @@ app.post('/process-video', upload.array('videos', 20), async(req, res) => {
             '-r', '30',
             '-vsync', 'cfr',
             '-avoid_negative_ts', 'make_zero',
+            // libx264는 기본적으로 SPS/PPS(디코더가 해상도/프로파일을 아는 데
+            // 필요한 헤더)를 파일 맨 앞 키프레임에만 한 번 넣습니다. 이후
+            // concat 단계(-c copy)는 여러 개의 별도 인코딩 파일을 단순히
+            // 이어붙이기만 하는데, 안드로이드/iOS의 하드웨어 디코더는 데스크톱
+            // 플레이어와 달리 SPS/PPS가 없는 두 번째 파일부터는 새 파라미터를
+            // 못 읽어서 화면을 첫 클립 마지막 프레임에 멈춰버립니다(오디오는
+            // 프레임마다 독립적이라 정상 재생됨 — 재생시간/소리는 맞는데
+            // 화면만 안 바뀌는 증상의 원인). repeat-headers=1로 모든 키프레임
+            // 앞에 SPS/PPS를 반복 삽입해서 이 문제를 없앱니다.
+            '-x264-params', 'repeat-headers=1',
           ])
           .output(processedPath)
           .on('start', (cmd) => console.log('FFmpeg 시작', cmd))

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -313,7 +313,17 @@ async function renderVideo(exportData: {
         // 클립이면 Supabase Storage의 https URL)를 실제 Blob으로 변환해서
         // 붙여야 진짜 영상 바이트가 전송됩니다. fetch()는 blob:/https: 둘 다
         // 동일하게 처리하므로 이 한 줄로 로컬/원격 클립을 모두 지원합니다.
-        const blob = await fetch(clip.videoUri).then((res) => res.blob());
+        let blob: Blob;
+        try {
+          blob = await fetch(clip.videoUri).then((res) => {
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            return res.blob();
+          });
+        } catch (fetchError) {
+          throw new Error(
+            `${i + 1}번째 클립을 불러오지 못했어요(${fetchError instanceof Error ? fetchError.message : '알 수 없는 오류'}). 다른 기기에서 촬영된 클립이라면 네트워크 상태를 확인해주세요.`,
+          );
+        }
         formData.append('videos', blob, `${clip.id}.webm`);
         continue;
       }
@@ -324,9 +334,18 @@ async function renderVideo(exportData: {
       // 올리기 전에 먼저 기기 캐시로 내려받아 로컬 경로로 바꿔줍니다.
       let localUri = clip.videoUri;
       if (/^https?:\/\//.test(clip.videoUri)) {
-        const downloadPath = `${FileSystem.cacheDirectory}remote_clip_${clip.id}.mp4`;
-        const downloadResult = await FileSystem.downloadAsync(clip.videoUri, downloadPath);
-        localUri = downloadResult.uri;
+        try {
+          const downloadPath = `${FileSystem.cacheDirectory}remote_clip_${clip.id}.mp4`;
+          const downloadResult = await FileSystem.downloadAsync(clip.videoUri, downloadPath);
+          if (downloadResult.status && downloadResult.status >= 400) {
+            throw new Error(`HTTP ${downloadResult.status}`);
+          }
+          localUri = downloadResult.uri;
+        } catch (downloadError) {
+          throw new Error(
+            `${i + 1}번째 클립(다른 기기에서 촬영됨)을 내려받지 못했어요(${downloadError instanceof Error ? downloadError.message : '알 수 없는 오류'}). 네트워크 상태를 확인해주세요.`,
+          );
+        }
       }
 
       // [변경] 카메라 녹화 포맷(webm)에 맞춰 확장자와 MIME 타입 수정
@@ -670,6 +689,14 @@ export default function VideoEditScreen() {
   // player.pause()만 호출해 마지막 프레임에서 자연스럽게 멈추게 합니다.
   const [loadedVideoUri, setLoadedVideoUri] = useState<string | null>(null);
 
+  // replaceAsync()로 교체 요청을 보냈지만 아직 'readyToPlay' 상태가 안 된
+  // 소스의 uri. 로컬 파일은 로딩이 거의 순식간이라 티가 안 났지만, 다른 기기
+  // 클립(원격 URL)은 버퍼링에 시간이 걸려서 — 교체 요청 직후 곧장
+  // loadedVideoUri를 세팅해버리면 화면은 이전 클립의 마지막 프레임에 멈춰있는데
+  // 소리만 먼저 나오는 문제가 있었습니다. 아래 statusChange 리스너가
+  // 'readyToPlay'를 받은 뒤에야 loadedVideoUri를 확정합니다.
+  const pendingVideoUriRef = useRef<string | null>(null);
+
   // 클립 재생이 끝났을 때: 선택 모드면 그냥 멈추고, 전체 재생 모드면 다음 클립으로 넘어갑니다.
   useEffect(() => {
     const subscription = player.addListener('playToEnd', () => {
@@ -684,6 +711,16 @@ export default function VideoEditScreen() {
   }, [player, editingClipId, clips.length]);
 
   useEffect(() => {
+    const subscription = player.addListener('statusChange', ({ status }) => {
+      if (status === 'readyToPlay' && pendingVideoUriRef.current) {
+        setLoadedVideoUri(pendingVideoUriRef.current);
+        pendingVideoUriRef.current = null;
+      }
+    });
+    return () => subscription.remove();
+  }, [player]);
+
+  useEffect(() => {
     if (!playingClip?.videoUri) return;
 
     if (isPlaying) {
@@ -696,8 +733,13 @@ export default function VideoEditScreen() {
       // 또 호출하지 않습니다. 매번 replace하면 일시정지했던 위치가 아니라
       // 항상 처음(0초)부터 다시 시작해버립니다.
       if (loadedVideoUri !== playingClip.videoUri) {
-        player.replace(playingClip.videoUri);
-        setLoadedVideoUri(playingClip.videoUri);
+        pendingVideoUriRef.current = playingClip.videoUri;
+        // replace()는 동기 버전이라 iOS에서 UI 스레드를 오래 막을 수 있고
+        // (공식 문서 권고), 무엇보다 로딩 완료를 기다리지 않아 위 statusChange
+        // 리스너로 실제 준비 시점을 알아내야 합니다 — replaceAsync를 씁니다.
+        player.replaceAsync(playingClip.videoUri).catch((error) => {
+          console.warn('[VideoEditScreen] 영상 교체 실패:', error);
+        });
       }
       player.play();
     } else {

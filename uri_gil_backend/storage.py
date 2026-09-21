@@ -13,13 +13,18 @@ _supabase: Client | None = None
 if SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY:
     _supabase = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
-    # 버킷이 없으면 앱이 뜰 때 자동으로 만듭니다(이미 있으면 에러를 무시).
-    # public=True로 만들어야 업로드된 클립의 URL을 로그인 없이, 다른 기기에서도
-    # 바로 재생할 수 있습니다.
+    # 버킷이 없으면 앱이 뜰 때 자동으로 만듭니다. public=True로 만들어야 업로드된
+    # 클립의 URL을 로그인 없이, 다른 기기에서도 바로 재생/다운로드할 수 있습니다.
+    # 버킷이 이미 존재하면 create_bucket이 에러를 던지는데, 그 버킷이 (수동 생성 등
+    # 다른 경로로) private였을 수 있어서 update_bucket으로 한 번 더 public 여부를
+    # 강제해둡니다 — 안 그러면 업로드는 되는데 재생/다운로드가 권한 오류로 막힙니다.
     try:
         _supabase.storage.create_bucket(CLIPS_BUCKET, options={"public": True})
     except Exception:
-        pass
+        try:
+            _supabase.storage.update_bucket(CLIPS_BUCKET, options={"public": True})
+        except Exception:
+            pass
 
 
 def upload_clip_file(file_bytes: bytes, filename: str, content_type: str) -> str:
