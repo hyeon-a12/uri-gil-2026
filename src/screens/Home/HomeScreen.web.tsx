@@ -67,6 +67,15 @@ const TOUR_STALE_FALLBACK_MAX_DISTANCE_KM = 50;
 // 문자열이 아니라 포함 여부(includes)로 매칭합니다.
 const ALLOWED_CATEGORY_KEYWORDS = ['음식점', '카페', '쇼핑', '역사', '자연', '문화', '체험', '주차장'];
 
+// "전체" 탭에서 두루누비 추천(최대 10개) + 테마 매칭 카카오 추천을 합칠 때
+// 쓰는 총 개수 상한입니다. 테마를 여러 개 고른 여행은 테마 태그 수만큼
+// 카카오 결과가 늘어나서 상한이 없으면 20~30개까지도 쏟아지는데, 그러면
+// 다른 태그(항상 10개)와의 일관성이 깨지고 훑어보기도 부담스러워집니다.
+// 그렇다고 두루누비 10개로만 자르면 테마 매칭 기능 자체가 거의 안 보이게
+// 되므로, 두루누비를 우선하고 남는 자리를 테마 매칭으로 채우는 방식으로
+// 15개까지만 보여줍니다.
+const TOTAL_FEATURED_PLACES_CAP = 15;
+
 // "전체"만 관광공사 두루누비 API(recommendedPlaces)를 쓰고, 나머지 태그는
 // 카카오맵(로컬) API로 주변 장소를 직접 검색합니다. 카카오 카테고리
 // 그룹코드가 있는 것(음식점/카페/주차장/문화시설)은 category_group_code로,
@@ -821,6 +830,7 @@ export default function HomeScreenWeb() {
     const seen = new Set(recommendedPlaces.map((place) => normalizePlaceNameForDedupe(place.name)));
     const merged = [...recommendedPlaces];
     for (const place of themeMatchedPlaces) {
+      if (merged.length >= TOTAL_FEATURED_PLACES_CAP) break;
       const key = normalizePlaceNameForDedupe(place.name);
       if (seen.has(key)) continue;
       seen.add(key);
