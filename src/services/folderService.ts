@@ -178,6 +178,8 @@ function toDateRangeString(start: string | null, end: string | null): string | n
  * - 로컬에도 이미 있는 여행은 서버 필드(title/region/theme/설명/기간/인원)만 갱신하고,
  *   서버에 저장 안 되는 로컬 전용 필드(thumbnail, shootingStyle, clipLengthSeconds 등)는 그대로 둠
  * - routeId가 없는 로컬 여행(오프라인 생성 등 서버 저장 실패분)은 건드리지 않음
+ * - routeId가 있는데 서버 목록엔 없는 로컬 여행(다른 기기에서 삭제됨)은 이 기기에서도 지우고,
+ *   딸린 클립도 같이 정리함
  *
  * 클립(촬영 영상) 자체는 여기서 다루지 않습니다 — clip_url이 아직 로컬 기기 경로라
  * 서버에서 받아와도 재생할 수 없는 상태라, 별도 작업(실제 파일 업로드)이 필요합니다.
@@ -194,9 +196,26 @@ export async function syncFoldersFromServer(): Promise<void> {
         return;
     }
 
+    const serverRouteIds = new Set(serverRoutes.map((r) => r.id));
+
+    // 다른 기기에서 삭제된(서버 목록에 더는 없는) 여행은 이 기기에서도 지웁니다.
+    // 목록 자체를 건드리는 게 아니라서(딸린 클립 정리) withWriteLock 밖에서 먼저 처리합니다 —
+    // deleteFolder()가 서버 route를 지우는 것과 같은 패턴이되, 서버 삭제는 이미 끝났으니 생략합니다.
+    const before = await getAllFolders();
+    const removedFolderIds = before
+        .filter((f) => f.routeId != null && !serverRouteIds.has(f.routeId))
+        .map((f) => f.id);
+    for (const folderId of removedFolderIds) {
+        const recordings = await getRecordingsByFolder(folderId);
+        await deleteRecordings(recordings.map((r) => r.id));
+    }
+
     await withWriteLock(async () => {
         const raw = await AsyncStorage.getItem(foldersKey(userId));
-        const local: StoredFolder[] = raw ? JSON.parse(raw) : [];
+        const stored: StoredFolder[] = raw ? JSON.parse(raw) : [];
+        const local = stored.filter(
+            (f) => f.routeId == null || serverRouteIds.has(f.routeId),
+        );
         const byRouteId = new Map(
             local.filter((f) => f.routeId != null).map((f) => [f.routeId, f] as const),
         );
