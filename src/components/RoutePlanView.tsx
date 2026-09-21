@@ -367,18 +367,20 @@ export function RoutePlanView({
         );
         return;
       }
-      if (stop.clips.length > 0) {
-        showAlert(
-          '이 장소를 삭제할까요?',
-          `촬영된 클립 ${stop.clips.length}개도 함께 삭제되고, 복구할 수 없어요.`,
-          [
-            { text: '취소', style: 'cancel' },
-            { text: '삭제', style: 'destructive', onPress: () => void deleteStop(stop) },
-          ],
-        );
-      } else {
-        void deleteStop(stop);
-      }
+      // 클립이 0개(아직 촬영 안 한 "직접 추가"/"AI 추천" 장소)여도 반드시 확인을
+      // 거칩니다 — 예전엔 이 경우 확인 없이 바로 지워져서, 웹에서 카드를 한 번
+      // 길게 누르기만 해도(별도 메뉴 없이 openReorderMenu가 곧장 이걸 호출함)
+      // 장소가 아무 경고 없이 사라지는 문제가 있었습니다.
+      showAlert(
+        '이 장소를 삭제할까요?',
+        stop.clips.length > 0
+          ? `촬영된 클립 ${stop.clips.length}개도 함께 삭제되고, 복구할 수 없어요.`
+          : '삭제하면 복구할 수 없어요.',
+        [
+          { text: '취소', style: 'cancel' },
+          { text: '삭제', style: 'destructive', onPress: () => void deleteStop(stop) },
+        ],
+      );
     },
     [deleteStop],
   );
