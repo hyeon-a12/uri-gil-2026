@@ -194,10 +194,19 @@ export default function CameraScreen() {
         // 제어하는 기기에서 표준 렌즈로 시작하게 됩니다. TS의 MediaTrackConstraints
         // 타입에는 아직 zoom이 없어서 any로 우회합니다 — 지원 안 하는 기기/
         // 브라우저에서는 그냥 무시되고 기존처럼 동작해서 실패할 일은 없습니다.
+        // 이 앱은 세로 영상 앱인데 예전엔 여기서 가로 모양(1920x1080)을
+        // 요청하고 있었습니다 — 실제 화면 방향과 무관하게 "세로로 찍어달라"고
+        // 명시적으로 요청해야, 촬영할 때마다 해상도/비율이 들쭉날쭉해지는 걸
+        // (그래서 서버에서 합칠 때 화면이 깨지던 문제, 3번 이슈) 근본적으로
+        // 줄일 수 있습니다. 폰 물리 방향을 잠그는 API(screen.orientation.lock)는
+        // 아이폰 사파리는 아예 지원을 안 해서 믿을 수 없고, 이 방식이 모든
+        // 브라우저에서 동작하는 더 확실한 방법입니다. aspectRatio도 같이 줘서
+        // 세로 비율(9:16)을 한 번 더 강조합니다.
         const videoConstraints: any = {
           facingMode: nextFacing,
-          width: { ideal: 1920 },
-          height: { ideal: 1080 },
+          width: { ideal: 1080 },
+          height: { ideal: 1920 },
+          aspectRatio: { ideal: 9 / 16 },
           zoom: { ideal: 1 },
         };
 

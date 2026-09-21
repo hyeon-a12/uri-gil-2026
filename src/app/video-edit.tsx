@@ -324,12 +324,21 @@ async function renderVideo(exportData: {
     }
 
     formData.append('settings', JSON.stringify(exportData.globalSetting));
-    formData.append('clipMetadata', JSON.stringify(exportData.clips.map((c: any) => ({
-      id: c.id,
-      isMuted: c.isMuted,
-      placeName: c.placeName,
-      recordedAt: c.recordedAt,
-    }))));
+    // 위 videos 업로드 루프는 videoUri가 없는 클립을 건너뛰는데(if (!clip.videoUri)
+    // continue), 여기서 그 필터링 없이 exportData.clips 전체를 그대로 넣으면
+    // 서버가 files[i]와 clipMetadata[i]를 그대로 짝짓기 때문에(mainServer.js),
+    // 건너뛴 클립 이후 모든 클립의 메타데이터(특히 isMuted)가 한 칸씩 밀려서
+    // 엉뚱한 클립에 적용됩니다 — 반드시 같은 필터로 걸러야 인덱스가 맞습니다.
+    formData.append('clipMetadata', JSON.stringify(
+      exportData.clips
+        .filter((c: any) => !!c.videoUri)
+        .map((c: any) => ({
+          id: c.id,
+          isMuted: c.isMuted,
+          placeName: c.placeName,
+          recordedAt: c.recordedAt,
+        })),
+    ));
 
     if (exportData.folderId) {
       formData.append('folderId', exportData.folderId);

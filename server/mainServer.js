@@ -103,6 +103,25 @@ function adjustY(yStr, offset) {
   }
 }
 
+// 이후 concat 단계(-c copy, 스트림 복사)는 합치는 모든 클립의 해상도가
+// 완전히 같아야만 정상 동작합니다. 스마트폰/브라우저 카메라는 촬영할 때마다
+// 실제로 협상되는 해상도가 조금씩 다를 수 있어서, 다르면 합친 파일의 재생
+// 시간(길이)은 맞게 나오지만 실제로는 첫 클립만 반복 재생되거나 화면이
+// 확대되어 보이는 등 재생이 깨지는 문제가 있었습니다. 첫 번째 클립의
+// 해상도를 기준으로 삼아 모든 클립을 거기에 맞춥니다.
+function probeResolution(filePath) {
+  return new Promise((resolve, reject) => {
+    ffmpeg.ffprobe(filePath, (err, data) => {
+      if (err) return reject(err);
+      const videoStream = (data.streams || []).find((s) => s.codec_type === 'video');
+      if (!videoStream || !videoStream.width || !videoStream.height) {
+        return reject(new Error('영상 해상도를 확인할 수 없습니다.'));
+      }
+      resolve({ width: videoStream.width, height: videoStream.height });
+    });
+  });
+}
+
 function formatTime(recordedAt) {
   const date = new Date(recordedAt);
   const hours = String(date.getHours()).padStart(2, '0');
@@ -160,6 +179,17 @@ app.post('/process-video', upload.array('videos', 20), async(req, res) => {
   try {
     const processedFiles = [];
 
+    // 기준 해상도(첫 클립 실제 해상도)를 한 번만 구해서 모든 클립에 동일하게
+    // 적용합니다. 확인에 실패해도(드문 코덱 등) 렌더링 자체를 막지는 않고,
+    // 그 경우엔 각 클립 원본 해상도 그대로 진행합니다(예전 동작과 동일).
+    let targetResolution = null;
+    try {
+      targetResolution = await probeResolution(files[0].path);
+      console.log('기준 해상도', targetResolution);
+    } catch (probeError) {
+      console.warn('기준 해상도 확인 실패, 해상도 보정 없이 진행:', probeError.message);
+    }
+
     for (let i=0; i<files.length; i++) {
       const file = files[i];
       const meta = clipMetadata[i] ?? {};
@@ -176,13 +206,29 @@ app.post('/process-video', upload.array('videos', 20), async(req, res) => {
       console.log(`클립 ${i} 처리 시작`, {
         placeName: meta.placeName,
         recordedAt: meta.recordedAt,
-        isMuted: meta.recordedAt,
+        isMuted: meta.isMuted,
         infoType,
         timeStyle,
         placeStyle,
       });
 
       const filters = [];
+
+      // 기준 해상도로 맞춥니다(비율 유지 + 남는 자리는 검은색으로 채움).
+      // 이후 concat이 -c copy(스트림 복사)라서, 클립마다 해상도가 다르면
+      // 여기서 미리 맞춰두지 않는 한 합친 파일의 재생이 깨집니다.
+      if (targetResolution) {
+        const { width: tw, height: th } = targetResolution;
+        filters.push({
+          filter: 'scale',
+          options: `${tw}:${th}:force_original_aspect_ratio=decrease`,
+        });
+        filters.push({
+          filter: 'pad',
+          options: `${tw}:${th}:(ow-iw)/2:(oh-ih)/2:color=black`,
+        });
+      }
+
       if (!infoType) {}
       else if (infoType === 'time') {
         if (meta.recordedAt) {
