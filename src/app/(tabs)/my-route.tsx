@@ -15,6 +15,7 @@ import { navigateToCamera } from "@/navigation/recordingNavigation";
 import { parseDateRange, type FolderItem } from "@/services/folderService";
 import { getRecordingsByFolder } from "@/services/recordingService";
 import { getStopOrder, saveStopOrder, type StopOrderMap } from "@/services/stop-order-service";
+import { fetchServerSpots, type ServerSpot } from "@/services/spotSyncService";
 import {
   getTripScheduleStops,
   type TripScheduleStop,
@@ -696,6 +697,7 @@ export default function MyRouteScreen() {
     TripScheduleStop[]
   >([]);
   const [stopOrder, setStopOrder] = useState<StopOrderMap>({});
+  const [remoteSpots, setRemoteSpots] = useState<ServerSpot[]>([]);
   const [previewClip, setPreviewClip] = useState<ClipItem | null>(null);
   const [viewingPlace, setViewingPlace] = useState<PlaceDetailView | null>(null);
   const [placeExtraInfo, setPlaceExtraInfo] = useState<KakaoPlaceInfo | null>(null);
@@ -746,18 +748,22 @@ export default function MyRouteScreen() {
       setRecordings([]);
       setSavedScheduleStops([]);
       setStopOrder({});
+      setRemoteSpots([]);
       return;
     }
 
     try {
-      const [records, scheduleStops, order] = await Promise.all([
+      const [records, scheduleStops, order, spots] = await Promise.all([
         getRecordingsByFolder(currentTrip.id),
         getTripScheduleStops(currentTrip.id),
         getStopOrder(currentTrip.id),
+        // routeId가 없으면(오프라인 생성 등) 서버에 물어볼 게 없으니 건너뜁니다.
+        currentTrip.routeId ? fetchServerSpots(currentTrip.routeId) : Promise.resolve([]),
       ]);
       setRecordings(records);
       setSavedScheduleStops(scheduleStops);
       setStopOrder(order);
+      setRemoteSpots(spots);
     } catch (error) {
       console.error(
         "[MyRouteScreen] 여행 데이터를 불러오지 못했습니다.",
@@ -766,6 +772,7 @@ export default function MyRouteScreen() {
       setRecordings([]);
       setSavedScheduleStops([]);
       setStopOrder({});
+      setRemoteSpots([]);
     }
     // currentTrip 객체 전체가 아니라 id만 의존성으로 둡니다 — 상위 스토어가
     // 내용은 같지만 참조만 바뀐 currentTrip을 내려줄 때마다 이 함수가
@@ -799,8 +806,8 @@ export default function MyRouteScreen() {
   );
 
   const planData = useMemo(
-    () => buildPlanData(recordings, currentTrip, savedScheduleStops, stopOrder),
-    [recordings, currentTrip, savedScheduleStops, stopOrder],
+    () => buildPlanData(recordings, currentTrip, savedScheduleStops, stopOrder, remoteSpots),
+    [recordings, currentTrip, savedScheduleStops, stopOrder, remoteSpots],
   );
 
   const nights = useMemo(() => {

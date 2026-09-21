@@ -9,6 +9,7 @@ import { parseDateRange, type FolderItem } from '@/services/folderService';
 import type { TripScheduleStop } from '@/services/trip-schedule-service';
 import { applyStopOrder, type StopOrderMap } from '@/services/stop-order-service';
 import type { RecordingData } from '@/types/recording';
+import type { ServerSpot } from '@/services/spotSyncService';
 
 export interface PlanStop {
   id: string;
@@ -17,8 +18,11 @@ export interface PlanStop {
   name: string;
   day: number;
   time: string;
-  /** AI 추천을 확정해서 추가된 스톱인지, 직접 검색해서 추가한 스톱인지, 실제 촬영 기록에서 만들어진 스톱인지 구분합니다. */
-  source?: 'ai-recommendation' | 'manual' | 'recording';
+  /**
+   * AI 추천을 확정해서 추가된 스톱인지, 직접 검색해서 추가한 스톱인지, 실제 촬영 기록에서
+   * 만들어진 스톱인지, 다른 기기에서 촬영해서 영상 없이 장소만 동기화된 스톱인지 구분합니다.
+   */
+  source?: 'ai-recommendation' | 'manual' | 'recording' | 'remote';
   /** 지도에 핀을 찍기 위한 좌표. 좌표를 알 수 없는 스톱은 null. */
   latitude: number | null;
   longitude: number | null;
@@ -100,6 +104,7 @@ export function buildPlanData(
   trip: FolderItem | null,
   savedScheduleStops: TripScheduleStop[] = [],
   stopOrderOverrides: StopOrderMap = {},
+  remoteSpots: ServerSpot[] = [],
 ): { stops: PlanStop[]; travelLogs: PlanTravelLog[]; dayNumbers: number[] } {
   const tripStart = trip ? parseDateRange(trip.dateRange)?.start ?? null : null;
 
@@ -172,6 +177,32 @@ export function buildPlanData(
     });
   }
 
+  // 이 기기에 클립이 없어서 로컬 기록만으론 안 보이는 장소를, 서버에 남아있는
+  // RouteSpot(클립 저장 시 자동 생성됨)으로 메워 넣습니다. 영상은 없지만 "어디를
+  // 방문했는지"는 알 수 있게 하려는 것 — 클립 자체는 아직 기기 간 동기화가 안 되어 있음.
+  const remoteOnlyStops: PlanStop[] = [];
+  for (const spot of remoteSpots) {
+    if (!spot.visited_at) continue; // 방문 시각을 모르면 어느 day에 넣을지 알 수 없어 건너뜀
+
+    const day = dayIndexOf(spot.visited_at, tripStart);
+    const groupKey = `${day}::${spot.spot_name}`;
+    if (stopGroups.has(groupKey)) continue; // 이미 이 기기의 클립으로 같은 스톱이 만들어져 있으면 중복 표시 안 함
+
+    const stopId = `remote-spot-${spot.id}`;
+    stopCreatedAt.set(stopId, spot.visited_at);
+    remoteOnlyStops.push({
+      id: stopId,
+      order: 0, // 아래에서 전체 순서를 다시 매길 때 덮어씌워집니다.
+      name: spot.spot_name,
+      day,
+      time: '다른 기기에서 촬영됨',
+      source: 'remote',
+      latitude: spot.latitude,
+      longitude: spot.longitude,
+      clips: [],
+    });
+  }
+
   const recordedStops = stopOrder.map((key) => stopGroups.get(key)!);
   const aiStops: PlanStop[] = savedScheduleStops.map((stop) => {
     stopCreatedAt.set(stop.id, stop.createdAt);
@@ -215,7 +246,7 @@ export function buildPlanData(
   // 장소를 나중에 "직접 추가"로 또 넣어도 새 스톱이 기존 것 아래로 들어갑니다.
   // 사용자가 드래그로 순서를 바꿔서 저장해뒀다면(stopOrderOverrides) 그 순서를
   // day별로 우선 적용한 뒤 전체 순번을 다시 매깁니다.
-  const combinedStops = [...aiStops, ...unmatchedRecordedStops].sort((a, b) => {
+  const combinedStops = [...aiStops, ...unmatchedRecordedStops, ...remoteOnlyStops].sort((a, b) => {
     const aTime = stopCreatedAt.get(a.id) ?? '';
     const bTime = stopCreatedAt.get(b.id) ?? '';
     return aTime.localeCompare(bTime);

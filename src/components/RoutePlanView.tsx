@@ -529,6 +529,8 @@ export function RoutePlanView({
                   ? 'AI 추천으로 추가됨'
                   : stop.source === 'manual'
                   ? '직접 추가한 장소'
+                  : stop.source === 'remote'
+                  ? '다른 기기에서 촬영됨 · 영상은 그 기기에만 있어요'
                   : `클립 ${stop.clips.length}개`);
 
               return (
@@ -606,6 +608,8 @@ export function RoutePlanView({
                           ? 'AI 추천으로 추가됨'
                           : stop.source === 'manual'
                           ? '직접 추가한 장소'
+                          : stop.source === 'remote'
+                          ? '다른 기기에서 촬영됨 · 영상은 그 기기에만 있어요'
                           : `${stop.time} · 클립 ${stop.clips.length}개`}
                       </Text>
                     </View>

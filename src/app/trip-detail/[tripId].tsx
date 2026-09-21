@@ -17,6 +17,7 @@ import {
 import { getRecordingsByFolder } from '@/services/recordingService';
 import { getTripScheduleStops } from '@/services/trip-schedule-service';
 import { getStopOrder, saveStopOrder } from '@/services/stop-order-service';
+import { fetchServerSpots } from '@/services/spotSyncService';
 import { buildPlanData, type PlanStop } from '@/services/tripPlanService';
 import { useTripStore, clearCurrentTrip as clearActiveTrip } from '@/store/useTripStore';
 import { Alert } from '@/services/webAlert';
@@ -50,12 +51,14 @@ export default function TripDetailScreen() {
       return;
     }
 
-    const [recordings, scheduleStops, order] = await Promise.all([
+    const [recordings, scheduleStops, order, remoteSpots] = await Promise.all([
       getRecordingsByFolder(tripId),
       getTripScheduleStops(tripId),
       getStopOrder(tripId),
+      // routeId가 없으면(오프라인 생성 등) 서버에 물어볼 게 없으니 건너뜁니다.
+      folder.routeId ? fetchServerSpots(folder.routeId) : Promise.resolve([]),
     ]);
-    const plan = buildPlanData(recordings, folder, scheduleStops, order);
+    const plan = buildPlanData(recordings, folder, scheduleStops, order, remoteSpots);
 
     setTrip(folder);
     setStops(plan.stops);
