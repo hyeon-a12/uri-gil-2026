@@ -1,8 +1,3 @@
-import {
-  findLocalSpotOverride,
-  type LocalSpotBadge,
-} from '@/constants/localSpotOverrides';
-
 /**
  * "핵심기능3: 개인 맞춤형 관광지 추천" — 실시간 방문자 수 API가 없어서,
  * 이미 호출 중인 API 응답값만으로 "얼마나 로컬(덜 알려진) 스팟인가"를
@@ -19,7 +14,7 @@ import {
  * 필요는 없고, 아래 필드만 채워서 넘기면 됩니다.
  */
 export interface TourApiPlace {
-  /** 관광지명(hubTatsNm 등) — 화이트리스트 매칭에도 씁니다. */
+  /** 관광지명(hubTatsNm 등). */
   name: string;
   /** 두루누비 응답의 hubRank(1위부터의 순위)를 0-based로 바꾼 값. 실제
    * API 응답을 까보면 이 필드가 그대로 들어있고(가나다순이 아님), 값이
@@ -79,28 +74,24 @@ export function calculateLocalScore(place: TourApiPlace | KakaoPlace): number {
   return score;
 }
 
-export type { LocalSpotBadge };
+// hubRank 같은 신호가 "확실히 방문자 수 기반"이라고 공식 문서로 보장되진
+// 않아서(가나다순이 아니라는 것과 큰 틀의 순위라는 정황만 확인됨), 이미
+// 유명하다고 단정하는 "인기명소" 배지는 화면에 노출하지 않습니다. 점수
+// 자체는 그대로 계산해서 정렬에는 씁니다 — 잘 알려진 곳들이 목록
+// 뒤쪽으로 밀리는 효과는 유지하고, 배지로 단정하는 것만 뺀 겁니다.
+export type LocalBadge = '로컬스팟';
 
 export interface RankedPlace<T> {
   place: T;
   score: number;
-  badge: LocalSpotBadge | null;
+  badge: LocalBadge | null;
 }
 
-// 화이트리스트로 태그가 고정된 장소는 계산을 건너뛰고 극단값 점수를 써서,
-// 배지뿐 아니라 정렬 순서도 항상 의도한 쪽(로컬스팟=앞, 인기명소=뒤)에
-// 오도록 만듭니다.
-const OVERRIDE_SCORE: Record<LocalSpotBadge, number> = {
-  로컬스팟: -1000,
-  인기명소: 1000,
-};
-
 const LOCAL_BADGE_RATIO = 0.4; // 하위 40%
-const POPULAR_BADGE_RATIO = 0.3; // 상위 30%
 
 /**
  * 장소 목록에 로컬 점수를 매기고, 오름차순(로컬 점수 낮은 = 로컬 스팟이
- * 앞, 잘 알려진 곳이 뒤)으로 정렬한 뒤 하위 40% / 상위 30% 구간에 배지를
+ * 앞, 잘 알려진 곳이 뒤)으로 정렬한 뒤 하위 40% 구간에 "로컬스팟" 배지를
  * 붙여서 돌려줍니다. 배지는 이 함수가 실제로 정렬한 결과를 기준으로만
  * 붙기 때문에, 화면에서 정렬과 배지가 어긋날 일이 없습니다.
  *
@@ -111,27 +102,17 @@ export function rankByLocalScore<T>(
   places: T[],
   toSignals: (place: T) => TourApiPlace | KakaoPlace,
 ): RankedPlace<T>[] {
-  const scored = places.map((place) => {
-    const signals = toSignals(place);
-    const override = findLocalSpotOverride(signals.name);
-    return {
-      place,
-      score: override ? OVERRIDE_SCORE[override.tag] : calculateLocalScore(signals),
-      overrideBadge: override?.tag ?? null,
-    };
-  });
+  const scored = places.map((place) => ({
+    place,
+    score: calculateLocalScore(toSignals(place)),
+  }));
 
   const sorted = [...scored].sort((a, b) => a.score - b.score);
-  const n = sorted.length;
-  const localCutoff = Math.ceil(n * LOCAL_BADGE_RATIO);
-  const popularStart = n - Math.ceil(n * POPULAR_BADGE_RATIO);
+  const localCutoff = Math.ceil(sorted.length * LOCAL_BADGE_RATIO);
 
-  return sorted.map((entry, index) => {
-    let badge: LocalSpotBadge | null = entry.overrideBadge;
-    if (!badge) {
-      if (index < localCutoff) badge = '로컬스팟';
-      else if (index >= popularStart) badge = '인기명소';
-    }
-    return { place: entry.place, score: entry.score, badge };
-  });
+  return sorted.map((entry, index) => ({
+    place: entry.place,
+    score: entry.score,
+    badge: index < localCutoff ? '로컬스팟' : null,
+  }));
 }

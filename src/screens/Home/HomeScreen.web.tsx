@@ -24,7 +24,6 @@ import {
   type KakaoPlace as KakaoScoreInput,
   type TourApiPlace as TourApiScoreInput,
 } from '@/services/localScoreService';
-import { LOCAL_SPOT_FALLBACK_PLACES } from '@/constants/localSpotOverrides';
 
 /**
  * HomeScreen.tsx(네이티브, 전체화면 지도+바텀시트+AI추천 오버레이)의
@@ -49,7 +48,18 @@ import { LOCAL_SPOT_FALLBACK_PLACES } from '@/constants/localSpotOverrides';
 const TOUR_API_KEY = process.env.EXPO_PUBLIC_TOUR_API_KEY;
 const KAKAO_REST_API_KEY = process.env.EXPO_PUBLIC_KAKAO_REST_API_KEY;
 const TOUR_API_ERROR = 'TOUR_API_ERROR' as const;
+// 이 시간 안이면 API를 다시 안 부르고 캐시를 그대로 씁니다(빠른 경로).
 const TOUR_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+// API 호출이 실패(쿼터 초과/네트워크 오류 등)했을 때, 완전히 빈 화면
+// 대신 기대는 "최근 성공 결과" 폴백 캐시입니다. 지역별 캐시(위)보다
+// 훨씬 오래(7일) 들고 있어서, 오늘 API가 막혀도 최근에 봤던 추천이라도
+// 보여줍니다 — 너무 오래된(사진 링크 만료 등) 것까지는 안 씁니다.
+const TOUR_STALE_FALLBACK_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const TOUR_LAST_GOOD_CACHE_KEY = 'tour_recommend_cache_v1_last_good';
+// 이 폴백 캐시가 저장될 당시 위치에서 이 거리(km)보다 멀리 떨어져 있으면
+// 안 씁니다 — 안 그러면 예를 들어 어제 전주에서 본 추천이, 오늘 서울에서
+// API가 실패했을 때 "서울 추천"인 것처럼 잘못 나올 수 있습니다.
+const TOUR_STALE_FALLBACK_MAX_DISTANCE_KM = 50;
 
 // 실제로 쓰기로 정한 8개 카테고리 태그입니다(항상 고정으로 노출, 순서 그대로).
 // 관광공사 두루누비 API 카테고리명은 "체험관광", "역사관광지"처럼 접미사가
@@ -88,7 +98,17 @@ interface RecommendedPlace {
   tourApiTotal?: number;
 }
 
-type TourCacheEntry = { timestamp: number; places: RecommendedPlace[] };
+type TourCacheEntry = {
+  timestamp: number;
+  places: RecommendedPlace[];
+  // "최근 성공 결과" 폴백(TOUR_LAST_GOOD_CACHE_KEY)에서만 씁니다 — 이
+  // 캐시가 어느 위치에서 만들어졌는지 알아야, 완전히 다른 지역으로
+  // 이동했을 때 엉뚱한 지역 추천을 폴백으로 잘못 보여주는 걸 막을 수
+  // 있습니다. 지역별 캐시(tour_recommend_cache_v1_${areaCd}_${signguCd})는
+  // 키 자체에 지역이 박혀있어서 이 필드가 필요 없습니다.
+  lat?: number;
+  lng?: number;
+};
 
 // 네이티브 HomeScreen.tsx의 placeDetailFromRecommended와 동일한 매핑입니다
 // (distance는 km 단위라 PlaceDetailView가 기대하는 m 단위로 변환).
@@ -111,21 +131,6 @@ function getDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
     Math.sin(dLat / 2) * Math.sin(dLat / 2) +
     Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-
-// 추천 API(관광공사/카카오)가 키 미설정·쿼터초과·네트워크 실패로 전부
-// 막히거나 빈 응답을 줄 때, 화면이 텅 비지 않도록 화이트리스트만으로
-// 최소한의 카드를 채웁니다. 화이트리스트 항목은 이름이 그대로 rankByLocalScore의
-// 화이트리스트 매칭에도 걸려서, 배지도 항상 의도한 대로 나옵니다.
-function buildFallbackPlaces(location?: { lat: number; lng: number } | null): RecommendedPlace[] {
-  return LOCAL_SPOT_FALLBACK_PLACES.map((spot) => ({
-    id: `fallback_${spot.placeName}`,
-    name: spot.placeName,
-    lat: spot.lat,
-    lng: spot.lng,
-    category: spot.category,
-    distance: location ? getDistance(location.lat, location.lng, spot.lat, spot.lng) : undefined,
-  }));
 }
 
 // localScoreService.rankByLocalScore에 넘길 최소 입력값을 뽑아냅니다.
@@ -248,9 +253,14 @@ async function readTourCache(cacheKey: string): Promise<TourCacheEntry | null> {
   }
 }
 
-async function writeTourCache(cacheKey: string, places: RecommendedPlace[]) {
+async function writeTourCache(
+  cacheKey: string,
+  places: RecommendedPlace[],
+  location?: { lat: number; lng: number },
+) {
   try {
-    await AsyncStorage.setItem(cacheKey, JSON.stringify({ timestamp: Date.now(), places }));
+    const entry: TourCacheEntry = { timestamp: Date.now(), places, ...location };
+    await AsyncStorage.setItem(cacheKey, JSON.stringify(entry));
   } catch {
     // 캐시 저장 실패는 무시
   }
@@ -329,9 +339,7 @@ const HOME_STYLES = `
   .uri-place-card-body { padding: 9px 9px 11px; }
   .uri-badge-row { display: flex; align-items: center; gap: 4px; margin-bottom: 5px; }
   .uri-info-badge { display: inline-block; padding: 3px 6px; border-radius: 999px; background: #FFF3DF; color: #473f35; font-size: 9px; font-family: 'Pretendard-Bold', sans-serif; font-weight: normal; }
-  .uri-local-badge { display: inline-block; padding: 3px 6px; border-radius: 999px; font-size: 9px; white-space: nowrap; font-family: 'Pretendard-Bold', sans-serif; font-weight: normal; }
-  .uri-local-badge.uri-badge-local { background: #FFF3DF; color: #6a5845; }
-  .uri-local-badge.uri-badge-popular { background: #FF7F5C; color: #fff; }
+  .uri-local-badge { display: inline-block; padding: 3px 6px; border-radius: 999px; font-size: 9px; white-space: nowrap; font-family: 'Pretendard-Bold', sans-serif; font-weight: normal; background: #FFF3DF; color: #6a5845; }
   .uri-place-card h3 { overflow: hidden; margin: 0; font-size: 13px; font-family: 'Pretendard-Bold', sans-serif; font-weight: normal; letter-spacing: -.05em; text-overflow: ellipsis; white-space: nowrap; color: #222; }
   .uri-place-card-distance { display: flex; align-items: center; gap: 2px; overflow: hidden; margin: 5px 0 0; color: #767676; font-size: 9px; white-space: nowrap; }
   .uri-skeleton-card { flex: none; width: 150px; overflow: hidden; border: 1px solid #eee; border-radius: 12px; background: #fff; }
@@ -502,10 +510,25 @@ export default function HomeScreenWeb() {
     (async () => {
       if (!currentLocation) return;
 
-      // API 키가 아예 설정 안 돼 있으면 이 파이프라인 전체를 못 씁니다 —
-      // 화면을 비워두지 않고 화이트리스트 폴백으로 바로 채웁니다.
+      // API 호출이 실패(쿼터 초과/네트워크 오류 등)할 때 기댈 "가장 최근
+      // 성공 결과" 폴백입니다. 지역별 캐시와 달리 지역 무관 단일 슬롯이라,
+      // (1) 7일 넘은 건 너무 오래돼(사진 링크 만료 등) 안 쓰고, (2) 그
+      // 캐시가 만들어진 위치가 지금 위치에서 너무 멀면(다른 동네로
+      // 이동한 경우) 엉뚱한 지역 추천이 나올 수 있어서 역시 안 씁니다.
+      // 빈 화면보다 낫다는 정도의 최후 수단입니다.
+      const staleCache = await readTourCache(TOUR_LAST_GOOD_CACHE_KEY);
+      const isStaleCacheUsable =
+        !!staleCache &&
+        Date.now() - staleCache.timestamp < TOUR_STALE_FALLBACK_TTL_MS &&
+        typeof staleCache.lat === 'number' &&
+        typeof staleCache.lng === 'number' &&
+        getDistance(staleCache.lat, staleCache.lng, currentLocation.lat, currentLocation.lng) <=
+          TOUR_STALE_FALLBACK_MAX_DISTANCE_KM;
+      const staleFallback = isStaleCacheUsable ? staleCache!.places : [];
+
+      // API 키가 아예 설정 안 돼 있으면 이 파이프라인 전체를 못 씁니다.
       if (!KAKAO_REST_API_KEY || !TOUR_API_KEY) {
-        setRecommendedPlaces(buildFallbackPlaces(currentLocation));
+        setRecommendedPlaces(staleFallback);
         return;
       }
 
@@ -517,7 +540,10 @@ export default function HomeScreenWeb() {
         );
         const kakaoData = await kakaoRes.json();
         const doc = kakaoData.documents?.find((item: any) => item.region_type === 'B') || kakaoData.documents?.[0];
-        if (!doc) return;
+        if (!doc) {
+          if (isMounted) setRecommendedPlaces(staleFallback);
+          return;
+        }
 
         const areaCd = doc.code.substring(0, 2);
         const signguCd = doc.code.substring(0, 5);
@@ -561,8 +587,7 @@ export default function HomeScreenWeb() {
         }
 
         if (hadApiError) {
-          if (cached && isMounted) setRecommendedPlaces(cached.places);
-          else if (isMounted) setRecommendedPlaces(buildFallbackPlaces(currentLocation));
+          if (isMounted) setRecommendedPlaces(cached ? cached.places : staleFallback);
           return;
         }
 
@@ -604,14 +629,18 @@ export default function HomeScreenWeb() {
           }),
         );
 
-        // 빈 응답(이 동네에 등록된 데이터가 없음)도 API 에러와 마찬가지로
-        // 화면이 텅 비지 않게 화이트리스트 폴백으로 채웁니다.
-        const finalPlaces = placesWithPhotos.length > 0 ? placesWithPhotos : buildFallbackPlaces(currentLocation);
-        if (isMounted) setRecommendedPlaces(finalPlaces);
-        if (placesWithPhotos.length > 0 && !hadPhotoApiError) void writeTourCache(cacheKey, placesWithPhotos);
+        if (isMounted) {
+          setRecommendedPlaces(placesWithPhotos.length > 0 ? placesWithPhotos : staleFallback);
+        }
+        if (placesWithPhotos.length > 0 && !hadPhotoApiError) {
+          void writeTourCache(cacheKey, placesWithPhotos);
+          // "가장 최근 성공 결과" 폴백 슬롯도 같이 갱신해둡니다 — 다음에
+          // 실패했을 때 거리 비교를 할 수 있도록 지금 위치도 같이 저장합니다.
+          void writeTourCache(TOUR_LAST_GOOD_CACHE_KEY, placesWithPhotos, currentLocation);
+        }
       } catch (error) {
         console.warn('[Home:web] 관광지 추천 실패:', error);
-        if (isMounted) setRecommendedPlaces(buildFallbackPlaces(currentLocation));
+        if (isMounted) setRecommendedPlaces(staleFallback);
       }
     })();
     return () => {
@@ -758,12 +787,12 @@ export default function HomeScreenWeb() {
                 </div>
               ))}
             </div>
-          ) : category !== '전체' && filteredPlaces.length === 0 ? (
+          ) : filteredPlaces.length === 0 ? (
             <div className="uri-place-empty">
               <div className="uri-empty-symbol">
                 <Feather name="map-pin" size={22} color="#6a5845" />
               </div>
-              <p>근처에 {category} 장소가 없어요</p>
+              <p>{category === '전체' ? '근처에 추천할 장소가 없어요' : `근처에 ${category} 장소가 없어요`}</p>
             </div>
           ) : (
             <div className="uri-place-grid">
@@ -789,13 +818,7 @@ export default function HomeScreenWeb() {
                     {(place.category || badge) && (
                       <div className="uri-badge-row">
                         {place.category && <span className="uri-info-badge">{place.category}</span>}
-                        {badge && (
-                          <span
-                            className={`uri-local-badge ${badge === '로컬스팟' ? 'uri-badge-local' : 'uri-badge-popular'}`}
-                          >
-                            {badge}
-                          </span>
-                        )}
+                        {badge && <span className="uri-local-badge">{badge}</span>}
                       </div>
                     )}
                     <h3>{place.name}</h3>
