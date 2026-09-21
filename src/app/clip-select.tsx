@@ -51,6 +51,15 @@ const COLORS = {
 
 const FOOTER_HEIGHT = 103;
 
+// getMergedRecordingsByFolder()가 다른 기기에서 촬영된 클립을 만들 때 쓰는 id
+// 접두사와 동일합니다(spotSyncService.ts 참고). video-edit.tsx가 이제 이런
+// 클립도 다운로드해서 영상 합치기에 포함하지만, 체크박스에 작은 구름 아이콘을
+// 얹어 "이 기기에서 찍은 게 아니다"라는 걸 구분해서 보여줍니다.
+const REMOTE_ONLY_CLIP_PREFIX = 'server_';
+function isRemoteOnlyClip(id: string): boolean {
+  return id.startsWith(REMOTE_ONLY_CLIP_PREFIX);
+}
+
 function formatDuration(seconds: number) {
   const minutes = Math.floor(seconds / 60);
   const remainingSeconds = seconds % 60;
@@ -150,6 +159,7 @@ export default function ClipSelectScreen() {
 
   const renderSingleClip = (item: ClipItem) => {
     const isSelected = selectedIds.has(item.id);
+    const isRemoteOnly = isRemoteOnlyClip(item.id);
     return (
       <View style={styles.clipItemContainer}>
         <TouchableOpacity
@@ -160,6 +170,8 @@ export default function ClipSelectScreen() {
           onPress={() => toggleSelect(item.id)}>
           {isSelected ? (
             <Ionicons name="checkmark" size={16} color="#FFFFFF" />
+          ) : isRemoteOnly ? (
+            <Ionicons name="cloud-outline" size={14} color={COLORS.textTertiary} />
           ) : null}
         </TouchableOpacity>
 

@@ -22,7 +22,7 @@ import { useVideoPlayer, VideoView } from 'expo-video';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { HapticPressable } from '@/components/common';
 import { COLORS as SHARED_COLORS } from '@/constants/color';
-import { getRecordingsByFolder } from '@/services/recordingService';
+import { getMergedRecordingsByFolder } from '@/services/spotSyncService';
 import { getAllFolders } from '@/services/folderService';
 import { apiFetch } from '@/services/api';
 import { Platform } from 'react-native';
@@ -309,16 +309,29 @@ async function renderVideo(exportData: {
       if (Platform.OS === 'web') {
         // 웹의 FormData는 브라우저 표준 API라 { uri, name, type } 같은
         // RN 전용 형태를 이해하지 못하고 그냥 문자열로 바꿔버립니다
-        // ("[object Object]") — clip.videoUri(blob: URL)를 실제 Blob으로
-        // 변환해서 붙여야 진짜 영상 바이트가 전송됩니다.
+        // ("[object Object]") — clip.videoUri(blob: URL 또는 다른 기기
+        // 클립이면 Supabase Storage의 https URL)를 실제 Blob으로 변환해서
+        // 붙여야 진짜 영상 바이트가 전송됩니다. fetch()는 blob:/https: 둘 다
+        // 동일하게 처리하므로 이 한 줄로 로컬/원격 클립을 모두 지원합니다.
         const blob = await fetch(clip.videoUri).then((res) => res.blob());
         formData.append('videos', blob, `${clip.id}.webm`);
         continue;
       }
 
+      // 다른 기기에서 촬영된 클립(getMergedRecordingsByFolder가 만든 항목)은
+      // 이 기기에 파일이 없고 Supabase Storage의 https URL만 있습니다. RN의
+      // FormData 파일 파트는 로컬 파일 uri를 기대하므로, 렌더링 서버로
+      // 올리기 전에 먼저 기기 캐시로 내려받아 로컬 경로로 바꿔줍니다.
+      let localUri = clip.videoUri;
+      if (/^https?:\/\//.test(clip.videoUri)) {
+        const downloadPath = `${FileSystem.cacheDirectory}remote_clip_${clip.id}.mp4`;
+        const downloadResult = await FileSystem.downloadAsync(clip.videoUri, downloadPath);
+        localUri = downloadResult.uri;
+      }
+
       // [변경] 카메라 녹화 포맷(webm)에 맞춰 확장자와 MIME 타입 수정
       formData.append('videos', {
-        uri: clip.videoUri,
+        uri: localUri,
         name: `${clip.id}.webm`,
         type: 'video/webm',
       } as any);
@@ -448,7 +461,7 @@ export default function VideoEditScreen() {
       }
 
       try {
-        const allRecords = await getRecordingsByFolder(folderId);
+        const allRecords = await getMergedRecordingsByFolder(folderId);
         const editableClips: EditableClip[] = [];
 
         for (const id of selectedClipIds) {
