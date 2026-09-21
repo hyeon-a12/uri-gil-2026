@@ -1,5 +1,6 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
+import { safeBack } from '@/utils/safeBack';
 import {
   KeyboardAvoidingView,
   Linking,
@@ -172,7 +173,7 @@ export default function JoinScreen() {
           <TouchableOpacity
             style={styles.backButton}
             activeOpacity={0.7}
-            onPress={() => router.back()}
+            onPress={() => safeBack('/login')}
           >
             <Text style={styles.backButtonText}>‹</Text>
           </TouchableOpacity>

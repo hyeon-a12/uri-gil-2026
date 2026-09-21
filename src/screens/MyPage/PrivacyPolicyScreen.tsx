@@ -26,7 +26,7 @@ export default function PrivacyPolicyScreen() {
 
   return (
     <View style={styles.screen}>
-      <ScreenHeader title="위치정보 및 개인정보 처리방침" />
+      <ScreenHeader title="위치정보 및 개인정보 처리방침" fallbackHref="/(tabs)/my-page" />
 
       <ScrollView style={styles.body} contentContainerStyle={styles.content}>
         <SectionLabel text="위치 정보" />

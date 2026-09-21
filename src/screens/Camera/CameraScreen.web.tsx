@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
-import { router, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
+import { safeBack } from '@/utils/safeBack';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
@@ -264,7 +265,7 @@ export default function CameraScreen() {
 
   const handleClose = () => {
     stopStream();
-    router.back();
+    safeBack('/(tabs)/home');
   };
 
   const finishRecording = useCallback(
@@ -284,7 +285,7 @@ export default function CameraScreen() {
             linkedStopId: quickAddPlace.stopId,
           },
         })
-          .then(() => router.back())
+          .then(() => safeBack('/(tabs)/home'))
           .catch((error) => {
             console.error('[Camera:web] 빠른 추가 저장 실패:', error);
             Alert.alert('저장에 실패했습니다', '잠시 후 다시 시도해주세요.');
@@ -373,7 +374,7 @@ export default function CameraScreen() {
         title="이 브라우저에서는 카메라를 쓸 수 없어요"
         description={'최신 Chrome/Safari 브라우저로 다시 시도해주세요.'}
         buttonLabel="이전 화면으로"
-        onPress={() => router.back()}
+        onPress={() => safeBack('/(tabs)/home')}
       />
     );
   }

@@ -356,7 +356,7 @@ export default function ClipSelectScreen() {
 
   return (
     <View style={styles.screen}>
-      <ScreenHeader title="클립 선택" />
+      <ScreenHeader title="클립 선택" fallbackHref="/(tabs)/clip-manage" />
 
       <View style={styles.selectionToolbar}>
         <Pressable

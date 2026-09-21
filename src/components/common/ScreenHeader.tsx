@@ -1,11 +1,11 @@
 import React from 'react';
 import { Platform, Pressable, View, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppText as Text } from '@/components/AppText';
 import { colors } from '@/constants/menu-theme';
 import { useWebMenuStore } from '@/store/useWebMenuStore';
+import { safeBack } from '@/utils/safeBack';
 
 // 마이페이지 메뉴 화면들(내 루트, 나의 정보 관리 ...)이 공통으로 쓰는 뒤로가기 + 제목 헤더입니다.
 // 웹에서는 이 헤더를 쓰는 화면 전부(내 여행, 여행 상세, 나의 정보 관리, 약관
@@ -21,6 +21,7 @@ export function ScreenHeader({
   align = 'center',
   hideBack = false,
   hideMenu = false,
+  fallbackHref = '/(tabs)/home',
 }: {
   title: string;
   right?: React.ReactNode;
@@ -29,6 +30,9 @@ export function ScreenHeader({
   /** 뒤로가기 버튼이 이미 있어서 웹 햄버거 메뉴가 굳이 필요 없는 화면(예: 여행
    * 상세 - 편집 아이콘 자리에 햄버거까지 같이 뜨면 중복)에서 true로 넘깁니다. */
   hideMenu?: boolean;
+  /** 이 세션에 뒤로 갈 이동 기록이 없을 때(예: 모바일 브라우저가 탭을 내렸다가
+   * 같은 주소로 다시 불러온 경우) 대신 이동할 화면. safeBack 참고. */
+  fallbackHref?: Parameters<typeof safeBack>[0];
 }) {
   const insets = useSafeAreaInsets();
   // 홈 화면 헤더(AppHeader.web.tsx의 .uri-app-header)와 정확히 같은 높이/
@@ -46,7 +50,7 @@ export function ScreenHeader({
       {!hideBack && (
         <Pressable
           hitSlop={12}
-          onPress={() => router.back()}
+          onPress={() => safeBack(fallbackHref)}
           style={({ pressed }) => [styles.backButton, pressed && styles.backButtonPressed]}
         >
           <Ionicons name="chevron-back" size={25} color={colors.text} />

@@ -5,6 +5,7 @@ import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import { safeBack } from '@/utils/safeBack';
 import { AppText as Text } from '@/components/AppText';
 import { colors } from '@/constants/menu-theme';
 import { cardShadow, ScreenHeader, PrimaryButton } from '@/components/common';
@@ -71,7 +72,7 @@ export default function ProfileEditScreen() {
 
     await updateProfile({ ...profile, nickname: trimmedNickname, avatarUri });
     setIsSaving(false);
-    router.back();
+    safeBack('/(tabs)/my-page');
   };
 
   const performWithdraw = async () => {
@@ -105,7 +106,7 @@ export default function ProfileEditScreen() {
 
   return (
     <View style={styles.screen}>
-      <ScreenHeader title="나의 정보 관리" />
+      <ScreenHeader title="나의 정보 관리" fallbackHref="/(tabs)/my-page" />
 
       <View style={styles.body}>
         <View>

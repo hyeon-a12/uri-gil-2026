@@ -36,7 +36,7 @@ export default function OpenSourceLicenseScreen() {
 
   return (
     <View style={styles.screen}>
-      <ScreenHeader title="오픈소스 라이선스" />
+      <ScreenHeader title="오픈소스 라이선스" fallbackHref="/privacy-policy" />
 
       <ScrollView style={styles.body} contentContainerStyle={styles.content}>
         <Text style={styles.description}>

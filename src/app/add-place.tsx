@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
-import { router, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
+import { safeBack } from '@/utils/safeBack';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
@@ -202,7 +203,7 @@ export default function AddPlaceScreen() {
         },
       ]);
 
-      router.back();
+      safeBack('/(tabs)/my-route');
     } catch (error) {
       console.error('[AddPlaceScreen] 장소 저장 실패:', error);
       Alert.alert('저장에 실패했습니다', '잠시 후 다시 시도해주세요.');
@@ -226,7 +227,7 @@ export default function AddPlaceScreen() {
             />
 
             <Pressable
-              onPress={() => router.back()}
+              onPress={() => safeBack('/(tabs)/my-route')}
               style={({ pressed }) => [styles.backButton, { top: insets.top + 10 }, pressed && styles.backButtonPressed]}
               hitSlop={10}
             >

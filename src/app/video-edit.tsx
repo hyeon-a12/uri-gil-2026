@@ -17,6 +17,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as MediaLibrary from 'expo-media-library/legacy';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
+import { safeBack } from '@/utils/safeBack';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { HapticPressable } from '@/components/common';
@@ -851,7 +852,7 @@ export default function VideoEditScreen() {
     }
 
     if (!hasUnsavedChanges) {
-      router.back();
+      safeBack('/clip-select');
       return;
     }
     Alert.alert(
@@ -859,7 +860,7 @@ export default function VideoEditScreen() {
       '지금 나가면 텍스트·위치·음소거 설정이 저장되지 않아요. 그래도 나가시겠어요?',
       [
         { text: '계속 편집', style: 'cancel' },
-        { text: '나가기', style: 'destructive', onPress: () => router.back() },
+        { text: '나가기', style: 'destructive', onPress: () => safeBack('/clip-select') },
       ],
     );
   }

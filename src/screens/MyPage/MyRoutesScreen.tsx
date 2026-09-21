@@ -106,6 +106,7 @@ export default function MyRoutesScreen() {
         title="내 여행"
         align={Platform.OS === 'web' ? 'left' : 'center'}
         hideBack={Platform.OS === 'web'}
+        fallbackHref="/(tabs)/my-page"
       />
 
       <View style={styles.body}>

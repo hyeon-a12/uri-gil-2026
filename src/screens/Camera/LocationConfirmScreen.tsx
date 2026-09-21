@@ -18,6 +18,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Alert } from '@/services/webAlert';
 import { AppText as Text } from "@/components/AppText";
 import { HapticPressable, MapLocateButton, SectionLabel } from "@/components/common";
+import { safeBack } from "@/utils/safeBack";
 import KakaoMapView, {
   KakaoMapPin,
 } from "@/components/KakaoMapView";
@@ -359,7 +360,7 @@ export default function LocationConfirmScreen() {
             />
 
             <Pressable
-              onPress={() => router.back()}
+              onPress={() => safeBack('/camera')}
               style={({ pressed }) => [
                 styles.backButton,
                 { top: insets.top + 10 },

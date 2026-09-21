@@ -1,5 +1,5 @@
-import { router } from 'expo-router';
 import { useState } from 'react';
+import { safeBack } from '@/utils/safeBack';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -77,7 +77,7 @@ export default function FindPasswordScreen() {
       setStep('email');
       return;
     }
-    router.back();
+    safeBack('/login');
   };
 
   return (
@@ -140,7 +140,7 @@ export default function FindPasswordScreen() {
               </Text>
 
               <View style={styles.form}>
-                <HapticPressable style={styles.primaryButton} onPress={() => router.back()}>
+                <HapticPressable style={styles.primaryButton} onPress={() => safeBack('/login')}>
                   <Text style={styles.primaryButtonText}>로그인 화면으로</Text>
                 </HapticPressable>
 

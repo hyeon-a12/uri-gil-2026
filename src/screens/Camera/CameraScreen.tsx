@@ -5,7 +5,8 @@ import {
   type CameraType,
 } from 'expo-camera';
 import { Ionicons } from '@expo/vector-icons';
-import { router, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
+import { safeBack } from '@/utils/safeBack';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -511,7 +512,7 @@ export default function CameraScreen() {
 
   const handleClose = () => {
     if (isRecording) cameraRef.current?.stopRecording();
-    router.back();
+    safeBack('/(tabs)/home');
   };
 
   const handleRecordPress = async () => {
@@ -573,7 +574,7 @@ export default function CameraScreen() {
               linkedStopId: quickAddPlace.stopId,
             },
           });
-          router.back();
+          safeBack('/(tabs)/home');
         } catch (error) {
           console.error('[Camera] 빠른 추가 저장 실패:', error);
           Alert.alert('저장에 실패했습니다', '잠시 후 다시 시도해주세요.');
@@ -599,7 +600,7 @@ export default function CameraScreen() {
           '웹 브라우저에서는 앱 카메라 기능이 제한될 수 있어요.\nExpo Go에서 QR 코드를 스캔해 확인해주세요.'
         }
         buttonLabel="이전 화면으로"
-        onPress={() => router.back()}
+        onPress={() => safeBack('/(tabs)/home')}
       />
     );
   }

@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Feather } from '@expo/vector-icons';
 import { extractErrorMessage } from '@/services/api';
 import { isValidEmail } from '@/utils/validation';
+import { safeBack } from '@/utils/safeBack';
 import { AUTH_STYLES, AuthHeader, IconButton } from '@/components/web/AuthChrome.web';
 
 /**
@@ -139,7 +140,7 @@ export default function JoinScreenWeb() {
     <main className="uri-signup-page">
       <style>{AUTH_STYLES}</style>
 
-      <AuthHeader title="회원가입" back={() => router.back()} />
+      <AuthHeader title="회원가입" back={() => safeBack('/login')} />
 
       <div className="uri-signup-body">
         <p className="uri-signup-lead">

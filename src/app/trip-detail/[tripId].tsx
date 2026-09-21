@@ -1,7 +1,7 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
+import { useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { AppText as Text } from '@/components/AppText';
 import { colors } from '@/constants/menu-theme';
 import { ScreenHeader } from '@/components/common';
@@ -21,6 +21,7 @@ import { fetchServerSpots } from '@/services/spotSyncService';
 import { buildPlanData, type PlanStop } from '@/services/tripPlanService';
 import { useTripStore, clearCurrentTrip as clearActiveTrip } from '@/store/useTripStore';
 import { Alert } from '@/services/webAlert';
+import { safeBack } from '@/utils/safeBack';
 
 function formatDate(date: Date): string {
   const year = date.getFullYear();
@@ -147,7 +148,7 @@ export default function TripDetailScreen() {
         await clearActiveTrip();
       }
       await deleteFolder(trip.id);
-      router.back();
+      safeBack('/my-routes');
     } catch (error) {
       console.error('[TripDetailScreen] 여행 삭제 실패:', error);
       Alert.alert('삭제 실패', '여행을 삭제하는 중 문제가 발생했습니다.');
@@ -157,7 +158,7 @@ export default function TripDetailScreen() {
   if (trip === undefined) {
     return (
       <View style={styles.screen}>
-        <ScreenHeader title="여행 상세" hideMenu />
+        <ScreenHeader title="여행 상세" hideMenu fallbackHref="/my-routes" />
       </View>
     );
   }
@@ -165,7 +166,7 @@ export default function TripDetailScreen() {
   if (trip === null) {
     return (
       <View style={styles.screen}>
-        <ScreenHeader title="여행 상세" hideMenu />
+        <ScreenHeader title="여행 상세" hideMenu fallbackHref="/my-routes" />
         <Text style={styles.errorText}>여행 정보를 찾을 수 없어요 (tripId: {tripId})</Text>
       </View>
     );
@@ -176,6 +177,7 @@ export default function TripDetailScreen() {
       <ScreenHeader
         title={trip.title}
         hideMenu
+        fallbackHref="/my-routes"
         right={
           <Pressable
             hitSlop={10}
