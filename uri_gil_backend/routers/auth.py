@@ -138,6 +138,11 @@ def delete_account(
         db.query(RouteSpot).filter(RouteSpot.route_id.in_(route_ids)).delete(synchronize_session=False)
         db.query(Route).filter(Route.id.in_(route_ids)).delete(synchronize_session=False)
 
+    # PasswordResetToken은 users.id를 참조하지만 CASCADE 설정이 없어서, 비밀번호
+    # 재설정을 한 번이라도 요청한 계정은 이걸 먼저 안 지우면 회원 탈퇴가 FK
+    # 제약 위반으로 실패합니다.
+    db.query(PasswordResetToken).filter(PasswordResetToken.user_id == current_user.id).delete(synchronize_session=False)
+
     db.delete(current_user)
     db.commit()
     return {"message": "계정이 삭제되었습니다"}
