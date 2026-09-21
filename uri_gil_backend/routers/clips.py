@@ -73,6 +73,7 @@ def create_clip(
         longitude=clip.longitude,
         recorded_at=clip.recorded_at,
         duration_ms=clip.duration_ms,
+        thumbnail_url=clip.thumbnail_url,
         clip_order=clip.clip_order,
     )
     db.add(new_clip)

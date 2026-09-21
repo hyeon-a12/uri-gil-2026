@@ -25,7 +25,7 @@ import { navigateToLocationConfirm } from '@/navigation/recordingNavigation';
 import { saveRecording, updateRecordingServerId } from '@/services/recordingService';
 import { useTripStore } from '@/store/useTripStore';
 import { getAllFolders, type ShootingStyleId } from '@/services/folderService';
-import { apiFetch, uploadClipVideo } from '@/services/api';
+import { apiFetch, uploadClipThumbnail, uploadClipVideo } from '@/services/api';
 import CameraChangeIcon from '@/assets/images/camera_change.svg';
 import { COLORS as SHARED_COLORS } from '@/constants/color';
 
@@ -603,6 +603,15 @@ export default function CameraScreen() {
                 console.warn('[Camera] 영상 업로드 실패, 로컬 경로로 폴백:', uploadError);
               }
 
+              let thumbnailUrl: string | undefined;
+              if (record.thumbnail) {
+                try {
+                  thumbnailUrl = await uploadClipThumbnail(record.thumbnail);
+                } catch (thumbnailError) {
+                  console.warn('[Camera] 썸네일 업로드 실패:', thumbnailError);
+                }
+              }
+
               const created = await apiFetch('/clips/', {
                 method: 'POST',
                 body: JSON.stringify({
@@ -613,6 +622,7 @@ export default function CameraScreen() {
                   longitude: quickAddPlace.longitude,
                   recorded_at: recordedAt,
                   duration_ms: durationMs,
+                  thumbnail_url: thumbnailUrl,
                 }),
               });
 

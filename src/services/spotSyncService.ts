@@ -30,6 +30,7 @@ export interface ServerClip {
     clip_order: number | null;
     recorded_at: string | null; // ISO datetime (타임존 표시 없을 수 있음)
     duration_ms: number | null;
+    thumbnail_url: string | null;
 }
 
 /** 실패해도(오프라인 등) 화면이 죽지 않도록 빈 배열로 대체합니다 — 읽기 전용 보강 데이터라서. */
@@ -66,8 +67,9 @@ function toUtcIsoString(value: string): string {
  * 합칩니다. 클립 관리/홈/내 루트 화면이 전부 getRecordingsByFolder() 대신 이 함수를
  * 쓰면, 어느 기기에서 찍었든 같은 클립 목록을 보게 됩니다.
  *
- * 썸네일은 서버에 저장하지 않아서 합성 항목은 항상 빈 문자열('')이고, UI는 이미
- * 빈 썸네일을 "재생 아이콘만" 있는 카드로 처리하고 있어 화면이 깨지지 않습니다.
+ * 서버가 thumbnail_url을 안 갖고 있는(구버전 클립) 경우엔 빈 문자열로 두고,
+ * UI는 이미 빈 썸네일을 "재생 아이콘만" 있는 카드로 처리하고 있어 화면이
+ * 깨지지 않습니다.
  */
 export async function getMergedRecordingsByFolder(
     folderId: string,
@@ -100,7 +102,7 @@ export async function getMergedRecordingsByFolder(
                 serverId: clip.id,
                 recordedAt: toUtcIsoString(clip.recorded_at ?? new Date().toISOString()),
                 videoUri: clip.clip_url,
-                thumbnail: '',
+                thumbnail: clip.thumbnail_url ?? '',
                 durationMs: clip.duration_ms ?? undefined,
                 folderId,
                 location: {

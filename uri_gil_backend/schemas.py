@@ -69,6 +69,7 @@ class ClipCreate(BaseModel):
     recorded_at: Optional[datetime] = None
     clip_order: Optional[int] = None
     duration_ms: Optional[int] = None
+    thumbnail_url: Optional[str] = None
 
 class ClipResponse(BaseModel):
     id: int
@@ -79,6 +80,7 @@ class ClipResponse(BaseModel):
     clip_order: Optional[int]
     recorded_at: Optional[datetime]
     duration_ms: Optional[int] = None
+    thumbnail_url: Optional[str] = None
 
     class Config:
         from_attributes = True

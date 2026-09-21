@@ -27,7 +27,7 @@ import { saveRecording, updateRecordingServerId } from "@/services/recordingServ
 import { useTripStore } from "@/store/useTripStore";
 import { useWebMenuStore } from "@/store/useWebMenuStore";
 import { getAllFolders } from "@/services/folderService";
-import { apiFetch, uploadClipVideo } from "@/services/api";
+import { apiFetch, uploadClipThumbnail, uploadClipVideo } from "@/services/api";
 import { formatDistance, usePlaceSearch } from "@/hooks/usePlaceSearch";
 
 const COLORS = {
@@ -303,6 +303,18 @@ export default function LocationConfirmScreen() {
             console.warn("[LocationConfirm] 영상 업로드 실패, 로컬 경로로 폴백:", uploadError);
           }
 
+          // 썸네일은 로컬 전용 리소스(네이티브는 jpg 파일, 웹은 data URL)라
+          // 업로드 못 해도(실패/생성 자체가 안 됐을 때) 클립 저장 자체는 막지
+          // 않고 thumbnail_url 없이 진행합니다.
+          let thumbnailUrl: string | undefined;
+          if (record.thumbnail) {
+            try {
+              thumbnailUrl = await uploadClipThumbnail(record.thumbnail);
+            } catch (thumbnailError) {
+              console.warn("[LocationConfirm] 썸네일 업로드 실패:", thumbnailError);
+            }
+          }
+
           const created = await apiFetch("/clips/", {
             method: "POST",
             body: JSON.stringify({
@@ -313,6 +325,7 @@ export default function LocationConfirmScreen() {
               longitude: placeToSave.longitude,
               recorded_at: recordedAt,
               duration_ms: durationMs,
+              thumbnail_url: thumbnailUrl,
             }),
           });
 

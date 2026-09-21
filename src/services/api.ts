@@ -79,25 +79,28 @@ function uploadFormData(
 }
 
 /**
- * 촬영 직후의 로컬 영상 파일(RN이면 file://..., 웹이면 blob:...)을 서버(Supabase
- * Storage)에 업로드하고, 다른 기기/브라우저에서도 접근 가능한 실제 URL을
- * 돌려줍니다. 로컬 경로를 그대로 clip_url로 저장하면 그 경로는 촬영한 기기에만
- * 존재해서 다른 기기에서는 재생할 수 없습니다 — 반드시 이 함수가 돌려주는 URL을
- * clip_url로 저장해야 합니다.
+ * 로컬 파일(RN이면 file://..., 웹이면 blob:.../data:...)을 /clips/upload로
+ * 올리고 서버(Supabase Storage)의 실제 URL을 돌려줍니다. 이 엔드포인트는
+ * 파일 종류를 가리지 않아서(영상/이미지 공용) 촬영 클립 영상과 썸네일 둘 다
+ * 이 함수를 거칩니다.
  */
-export async function uploadClipVideo(videoUri: string): Promise<string> {
+async function uploadClipFile(
+  uri: string,
+  filename: string,
+  webMimeType: string,
+): Promise<string> {
   const formData = new FormData();
 
   if (Platform.OS === 'web') {
     // 웹의 FormData는 { uri, name, type } 같은 RN 전용 형태를 이해하지 못해서,
-    // blob: URL을 실제 Blob으로 변환해 붙여야 진짜 영상 바이트가 전송됩니다.
-    const blob = await fetch(videoUri).then((res) => res.blob());
-    formData.append('file', blob, `clip_${Date.now()}.webm`);
+    // blob:/data: URL을 실제 Blob으로 변환해 붙여야 진짜 바이트가 전송됩니다.
+    const blob = await fetch(uri).then((res) => res.blob());
+    formData.append('file', blob, filename);
   } else {
     formData.append('file', {
-      uri: videoUri,
-      name: `clip_${Date.now()}.mp4`,
-      type: 'video/mp4',
+      uri,
+      name: filename,
+      type: webMimeType,
     } as any);
   }
 
@@ -108,9 +111,30 @@ export async function uploadClipVideo(videoUri: string): Promise<string> {
     const data = await Promise.resolve(response.text)
       .then((text) => JSON.parse(text))
       .catch(() => null);
-    throw new Error(extractErrorMessage(data, '영상 업로드에 실패했습니다.'));
+    throw new Error(extractErrorMessage(data, '파일 업로드에 실패했습니다.'));
   }
 
   const data = JSON.parse(response.text);
   return data.url as string;
+}
+
+/**
+ * 촬영 직후의 로컬 영상 파일을 서버(Supabase Storage)에 업로드하고, 다른
+ * 기기/브라우저에서도 접근 가능한 실제 URL을 돌려줍니다. 로컬 경로를 그대로
+ * clip_url로 저장하면 그 경로는 촬영한 기기에만 존재해서 다른 기기에서는
+ * 재생할 수 없습니다 — 반드시 이 함수가 돌려주는 URL을 clip_url로 저장해야 합니다.
+ */
+export async function uploadClipVideo(videoUri: string): Promise<string> {
+  return Platform.OS === 'web'
+    ? uploadClipFile(videoUri, `clip_${Date.now()}.webm`, 'video/webm')
+    : uploadClipFile(videoUri, `clip_${Date.now()}.mp4`, 'video/mp4');
+}
+
+/**
+ * 로컬에서만 생성되던 썸네일(네이티브는 jpg 파일 경로, 웹은 canvas로 만든
+ * data:image/jpeg URL)을 서버에 업로드합니다. 클립 영상과 마찬가지로, 이
+ * URL을 thumbnail_url로 저장해야 다른 기기에서도 미리보기 이미지가 보입니다.
+ */
+export async function uploadClipThumbnail(thumbnailUri: string): Promise<string> {
+  return uploadClipFile(thumbnailUri, `thumb_${Date.now()}.jpg`, 'image/jpeg');
 }

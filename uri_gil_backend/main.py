@@ -12,6 +12,7 @@ Base.metadata.create_all(bind=engine)
 # 실행돼도(재배포마다) 안전합니다.
 with engine.begin() as conn:
     conn.execute(text("ALTER TABLE clips ADD COLUMN IF NOT EXISTS duration_ms INTEGER"))
+    conn.execute(text("ALTER TABLE clips ADD COLUMN IF NOT EXISTS thumbnail_url VARCHAR"))
 
 app = FastAPI(title="우리길 API")
 

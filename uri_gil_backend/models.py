@@ -61,6 +61,7 @@ class Clip(Base):
     recorded_at = Column(DateTime)
     clip_order = Column(Integer)
     duration_ms = Column(Integer, nullable=True)
+    thumbnail_url = Column(String, nullable=True)
 
 class Video(Base):
     __tablename__ = "videos"
