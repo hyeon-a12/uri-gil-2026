@@ -612,6 +612,7 @@ export default function CameraScreen() {
                   latitude: quickAddPlace.latitude,
                   longitude: quickAddPlace.longitude,
                   recorded_at: recordedAt,
+                  duration_ms: durationMs,
                 }),
               });
 

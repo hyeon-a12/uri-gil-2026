@@ -29,6 +29,7 @@ export interface ServerClip {
     clip_url: string;
     clip_order: number | null;
     recorded_at: string | null; // ISO datetime (타임존 표시 없을 수 있음)
+    duration_ms: number | null;
 }
 
 /** 실패해도(오프라인 등) 화면이 죽지 않도록 빈 배열로 대체합니다 — 읽기 전용 보강 데이터라서. */
@@ -100,6 +101,7 @@ export async function getMergedRecordingsByFolder(
                 recordedAt: toUtcIsoString(clip.recorded_at ?? new Date().toISOString()),
                 videoUri: clip.clip_url,
                 thumbnail: '',
+                durationMs: clip.duration_ms ?? undefined,
                 folderId,
                 location: {
                     latitude: spot?.latitude ?? 0,

@@ -312,6 +312,7 @@ export default function LocationConfirmScreen() {
               latitude: placeToSave.latitude,
               longitude: placeToSave.longitude,
               recorded_at: recordedAt,
+              duration_ms: durationMs,
             }),
           });
 

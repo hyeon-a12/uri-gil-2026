@@ -68,6 +68,7 @@ class ClipCreate(BaseModel):
     longitude: Optional[float] = None
     recorded_at: Optional[datetime] = None
     clip_order: Optional[int] = None
+    duration_ms: Optional[int] = None
 
 class ClipResponse(BaseModel):
     id: int
@@ -77,6 +78,7 @@ class ClipResponse(BaseModel):
     clip_url: str
     clip_order: Optional[int]
     recorded_at: Optional[datetime]
+    duration_ms: Optional[int] = None
 
     class Config:
         from_attributes = True

@@ -60,6 +60,7 @@ class Clip(Base):
     longitude = Column(Float)
     recorded_at = Column(DateTime)
     clip_order = Column(Integer)
+    duration_ms = Column(Integer, nullable=True)
 
 class Video(Base):
     __tablename__ = "videos"
