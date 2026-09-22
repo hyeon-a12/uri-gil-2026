@@ -26,6 +26,7 @@ import * as Location from 'expo-location';
 import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Animated,
   Dimensions,
   Keyboard,
@@ -643,6 +644,7 @@ function RecommendedPlaceCard({ place, onPress }: { place: RecommendedPlace, onP
  */
 type PullUpSheetProps = {
   moments: ClipItem[];
+  isMomentsLoading: boolean;
   selectedCategory: Exclude<SearchCategory, "AI"> | null;
   categoryResults: SearchResultItem[];
   isSearchingCategory: boolean;
@@ -671,6 +673,7 @@ const CATEGORY_TAGS: {
 
 function PullUpSheet({
   moments,
+  isMomentsLoading,
   selectedCategory,
   categoryResults,
   isSearchingCategory,
@@ -975,7 +978,13 @@ function PullUpSheet({
             <Text style={styles.sectionTitle}>오늘의 순간들</Text>
           </View>
 
-          {moments.length > 0 ? (
+          {isMomentsLoading ? (
+            <ActivityIndicator
+              size="small"
+              color={COLORS.accent}
+              style={styles.emptyMomentsTextCentered}
+            />
+          ) : moments.length > 0 ? (
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
@@ -1670,6 +1679,10 @@ export default function TripHomeScreen() {
   const [currentLocation, setCurrentLocation] =
     useState<KakaoMapCurrentLocation | null>(null);
   const [recordings, setRecordings] = useState<RecordingData[]>([]);
+  // getMergedRecordingsByFolder는 서버에도 요청을 보내서(다른 기기 클립 병합)
+  // 로컬 전용이던 예전보다 로딩이 느려질 수 있어, 로딩 중과 "진짜 오늘 클립
+  // 없음"을 구분해야 합니다.
+  const [isRecordingsLoading, setIsRecordingsLoading] = useState(true);
   const [isSearching, setIsSearching] = useState(false);
   const [selectedCategory, setSelectedCategory] =
     useState<Exclude<SearchCategory, "AI"> | null>(null);
@@ -1691,16 +1704,22 @@ export default function TripHomeScreen() {
 
       (async () => {
         if (!currentTrip) {
-          if (isActive) setRecordings([]);
+          if (isActive) {
+            setRecordings([]);
+            setIsRecordingsLoading(false);
+          }
           return;
         }
 
+        if (isActive) setIsRecordingsLoading(true);
         try {
           const records = await getMergedRecordingsByFolder(currentTrip.id);
           if (isActive) setRecordings(records);
         } catch (error) {
           console.error("[HomeScreen] 클립을 불러오지 못했습니다.", error);
           if (isActive) setRecordings([]);
+        } finally {
+          if (isActive) setIsRecordingsLoading(false);
         }
       })();
 
@@ -2213,6 +2232,7 @@ export default function TripHomeScreen() {
 
       <PullUpSheet
         moments={todayMoments}
+        isMomentsLoading={isRecordingsLoading}
         selectedCategory={selectedCategory}
         categoryResults={categoryResults}
         isSearchingCategory={isSearching}

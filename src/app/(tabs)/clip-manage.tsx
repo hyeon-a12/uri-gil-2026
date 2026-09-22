@@ -1,5 +1,6 @@
 import React, { useCallback, useState } from 'react';
 import {
+  ActivityIndicator,
   Platform,
   StyleSheet,
   View,
@@ -114,10 +115,15 @@ export default function ClipManageScreen() {
   
   type FolderWithCount = FolderItem & { clipCount: number; previewThumbnails: string[] };
   const [folders, setFolders] = useState<FolderWithCount[]>([]);
+  // getMergedRecordingsByFolder는 여행마다 서버에도 요청을 보내서(다른 기기
+  // 클립 병합) 로컬 전용이던 예전보다 로딩이 느려질 수 있어, 로딩 중과 "진짜
+  // 여행 없음"을 구분해야 합니다.
+  const [isLoadingFolders, setIsLoadingFolders] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | FolderStatus>('all');
 
   const loadFolders = async () => {
+    setIsLoadingFolders(true);
     try {
       const stored = await getAllFolders();
       const activeId = await getActiveFolder();
@@ -133,12 +139,14 @@ export default function ClipManageScreen() {
           };
         }),
       );
-      
+
       setFolders(withCounts);
       setActiveFolderId(activeId);
     } catch (error) {
       console.error('[loadFolders] 실패:', error);
       setFolders([]);
+    } finally {
+      setIsLoadingFolders(false);
     }
   };
 
@@ -385,15 +393,21 @@ export default function ClipManageScreen() {
         />
       </ScrollView>
 
-      <FlatList
-        style={styles.list}
-        data={filteredFolders}
-        keyExtractor={(item) => item.id}
-        renderItem={renderFolderItem}
-        contentContainerStyle={styles.listContent}
-        ItemSeparatorComponent={() => <View style={styles.separator} />}
-        showsVerticalScrollIndicator={false}
-      />
+      {isLoadingFolders ? (
+        <View style={[styles.list, styles.loadingContainer]}>
+          <ActivityIndicator size="small" color={COLORS.primary} />
+        </View>
+      ) : (
+        <FlatList
+          style={styles.list}
+          data={filteredFolders}
+          keyExtractor={(item) => item.id}
+          renderItem={renderFolderItem}
+          contentContainerStyle={styles.listContent}
+          ItemSeparatorComponent={() => <View style={styles.separator} />}
+          showsVerticalScrollIndicator={false}
+        />
+      )}
 
       <Modal
         visible={!!selectedFolderForMenu}
@@ -579,6 +593,10 @@ const styles = StyleSheet.create({
   // List
   list: {
     flex: 1,
+  },
+  loadingContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   listContent: {
     paddingHorizontal: SPACING.screenH,

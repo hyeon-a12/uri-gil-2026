@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ComponentProps } from 'react';
-import { Image as RNImage, StyleSheet, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, Image as RNImage, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { Feather, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
@@ -456,6 +456,9 @@ export default function HomeScreenWeb() {
   const [recommendedPlaces, setRecommendedPlaces] = useState<RecommendedPlace[]>([]);
   const [category, setCategory] = useState<string>('전체');
   const [todayMoments, setTodayMoments] = useState<ClipItem[]>([]);
+  // getMergedRecordingsByFolder는 서버에도 요청을 보내서 로컬 전용이던 예전보다
+  // 로딩이 느려질 수 있어, 로딩 중과 "진짜 오늘 클립 없음"을 구분해야 합니다.
+  const [isLoadingTodayMoments, setIsLoadingTodayMoments] = useState(true);
   const [currentLocation, setCurrentLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [kakaoPlaces, setKakaoPlaces] = useState<RecommendedPlace[]>([]);
   const [isLoadingKakaoPlaces, setIsLoadingKakaoPlaces] = useState(false);
@@ -500,13 +503,17 @@ export default function HomeScreenWeb() {
   const loadTodayMoments = useCallback(async () => {
     if (!currentTrip) {
       setTodayMoments([]);
+      setIsLoadingTodayMoments(false);
       return;
     }
+    setIsLoadingTodayMoments(true);
     try {
       const recordings = await getMergedRecordingsByFolder(currentTrip.id);
       setTodayMoments(buildTodayMoments(recordings));
     } catch (error) {
       console.warn('[Home:web] 오늘의 클립 로딩 실패:', error);
+    } finally {
+      setIsLoadingTodayMoments(false);
     }
   }, [currentTrip]);
 
@@ -975,7 +982,11 @@ export default function HomeScreenWeb() {
               전체보기 <Feather name="chevron-right" size={14} color="#767676" />
             </button>
           </div>
-          {todayMoments.length === 0 ? (
+          {isLoadingTodayMoments ? (
+            <div className="uri-empty-moments">
+              <ActivityIndicator size="small" color="#FF7F5C" />
+            </div>
+          ) : todayMoments.length === 0 ? (
             <div className="uri-empty-moments">
               <p>오늘 촬영한 클립이 없어요</p>
               <span>지나는 순간을 짧게 남겨보세요</span>

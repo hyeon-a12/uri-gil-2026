@@ -106,8 +106,14 @@ export async function getMergedRecordingsByFolder(
                 durationMs: clip.duration_ms ?? undefined,
                 folderId,
                 location: {
-                    latitude: spot?.latitude ?? 0,
-                    longitude: spot?.longitude ?? 0,
+                    // 좌표를 모르는 스팟(GPS 실패 등)을 0으로 채우면 진짜 (0,0)
+                    // 좌표와 구분이 안 돼서 지도에 엉뚱한 위치(적도 부근)에 핀이
+                    // 찍힙니다. RecordingData.location.latitude/longitude 타입이
+                    // 항상 number라 null을 못 넣으니, "좌표 없음"을 나타내는
+                    // 용도로만 NaN을 씁니다 — 소비하는 쪽(RoutePlanView.tsx의
+                    // dayMapPins 등)에서 Number.isFinite()로 걸러내야 합니다.
+                    latitude: spot?.latitude ?? Number.NaN,
+                    longitude: spot?.longitude ?? Number.NaN,
                     placeName: spot?.spot_name,
                 },
             };

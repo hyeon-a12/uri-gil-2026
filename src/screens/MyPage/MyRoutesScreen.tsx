@@ -1,5 +1,6 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
   FlatList,
   Platform,
   StyleSheet,
@@ -47,8 +48,13 @@ export default function MyRoutesScreen() {
 
   const [tab, setTab] = useState<FilterTab>('all');
   const [trips, setTrips] = useState<Trip[]>([]);
+  // getFolderVisitStats가 서버에도 요청을 보내서(다른 기기 클립/스팟 합산)
+  // 로컬 전용이던 예전보다 로딩이 느려질 수 있어, 로딩 중과 "진짜 여행 없음"을
+  // 구분해야 합니다.
+  const [isLoadingTrips, setIsLoadingTrips] = useState(true);
 
   const loadTrips = useCallback(async () => {
+    setIsLoadingTrips(true);
     try {
       const folders = await getAllFolders();
 
@@ -73,6 +79,8 @@ export default function MyRoutesScreen() {
       setTrips(withCounts);
     } catch (error) {
       console.error('여행 목록을 불러오지 못했습니다.', error);
+    } finally {
+      setIsLoadingTrips(false);
     }
   }, []);
 
@@ -154,19 +162,25 @@ export default function MyRoutesScreen() {
             </Card>
           )}
           ListEmptyComponent={
-            <View style={styles.emptyState}>
-              <Feather
-                name="map"
-                size={28}
-                color={colors.textSub}
-              />
-              <Text style={styles.emptyTitle}>
-                아직 여행이 없어요
-              </Text>
-              <Text style={styles.emptyDescription}>
-                새 여행을 만들어 첫 기록을 시작해보세요.
-              </Text>
-            </View>
+            isLoadingTrips ? (
+              <View style={styles.emptyState}>
+                <ActivityIndicator size="small" color={colors.accent} />
+              </View>
+            ) : (
+              <View style={styles.emptyState}>
+                <Feather
+                  name="map"
+                  size={28}
+                  color={colors.textSub}
+                />
+                <Text style={styles.emptyTitle}>
+                  아직 여행이 없어요
+                </Text>
+                <Text style={styles.emptyDescription}>
+                  새 여행을 만들어 첫 기록을 시작해보세요.
+                </Text>
+              </View>
+            )
           }
         />
       </View>

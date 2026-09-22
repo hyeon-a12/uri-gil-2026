@@ -30,6 +30,7 @@ import * as MediaLibrary from 'expo-media-library/legacy';
 import { useFocusEffect, useLocalSearchParams } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Platform,
   Modal,
   Pressable,
@@ -179,7 +180,12 @@ function SelectedStopCard({ stop, onPreviewClip, onPressDetail }: SelectedStopCa
               return;
             }
 
-            if (stop.latitude === null || stop.longitude === null) {
+            if (
+              stop.latitude === null ||
+              stop.longitude === null ||
+              !Number.isFinite(stop.latitude) ||
+              !Number.isFinite(stop.longitude)
+            ) {
               Alert.alert(stop.name, "위치 정보가 없어 상세 정보를 볼 수 없어요.");
               return;
             }
@@ -221,7 +227,12 @@ function SelectedStopCard({ stop, onPreviewClip, onPressDetail }: SelectedStopCa
 
         <Pressable
           onPress={() => {
-            if (stop.latitude === null || stop.longitude === null) {
+            if (
+              stop.latitude === null ||
+              stop.longitude === null ||
+              !Number.isFinite(stop.latitude) ||
+              !Number.isFinite(stop.longitude)
+            ) {
               // 좌표를 모르는 스톱은 바로 저장할 장소를 특정할 수 없어
               // 기존처럼 카메라 → 장소 확인 화면 흐름으로 보냅니다.
               navigateToCamera();
@@ -697,6 +708,10 @@ export default function MyRouteScreen() {
   >([]);
   const [stopOrder, setStopOrder] = useState<StopOrderMap>({});
   const [remoteSpots, setRemoteSpots] = useState<ServerSpot[]>([]);
+  // getMergedRecordingsByFolder 등이 서버에도 요청을 보내서(다른 기기 클립/
+  // 스팟 병합) 로컬 전용이던 예전보다 로딩이 느려질 수 있어, 로딩 중과
+  // "진짜 여행 데이터 없음"을 구분해야 합니다.
+  const [isLoadingTripData, setIsLoadingTripData] = useState(true);
   const [previewClip, setPreviewClip] = useState<ClipItem | null>(null);
   const [viewingPlace, setViewingPlace] = useState<PlaceDetailView | null>(null);
   const [placeExtraInfo, setPlaceExtraInfo] = useState<KakaoPlaceInfo | null>(null);
@@ -748,6 +763,7 @@ export default function MyRouteScreen() {
       setSavedScheduleStops([]);
       setStopOrder({});
       setRemoteSpots([]);
+      setIsLoadingTripData(false);
       return;
     }
 
@@ -772,6 +788,11 @@ export default function MyRouteScreen() {
       setSavedScheduleStops([]);
       setStopOrder({});
       setRemoteSpots([]);
+    } finally {
+      // 처음 한 번만 스피너를 보여주고 이후 새로고침(재방문, 스톱 삭제 등)엔
+      // 다시 켜지 않습니다 — 이미 화면에 데이터가 있는데 새로고침 때마다
+      // 스피너가 깜빡이면 오히려 산만합니다.
+      setIsLoadingTripData(false);
     }
     // currentTrip 객체 전체가 아니라 id만 의존성으로 둡니다 — 상위 스토어가
     // 내용은 같지만 참조만 바뀐 currentTrip을 내려줄 때마다 이 함수가
@@ -943,9 +964,15 @@ export default function MyRouteScreen() {
     () =>
       sortedStops
         .filter(
+          // 다른 기기 클립인데 좌표를 모르면 spotSyncService.ts가 NaN을 채워둡니다
+          // (0으로 채우면 진짜 (0,0) 좌표와 구분이 안 돼서 엉뚱한 위치에 핀이
+          // 찍힘) — Number.isFinite로 NaN/Infinity를 걸러내야 이 핀들이
+          // 지도에서 빠집니다.
           (stop): stop is PlanStop & { latitude: number; longitude: number } =>
             typeof stop.latitude === "number" &&
-            typeof stop.longitude === "number",
+            typeof stop.longitude === "number" &&
+            Number.isFinite(stop.latitude) &&
+            Number.isFinite(stop.longitude),
         )
         .map((stop) => ({
           id: stop.id,
@@ -968,7 +995,15 @@ export default function MyRouteScreen() {
       const index = Math.round(offsetX / STOP_CARD_SNAP_INTERVAL);
       const clampedIndex = Math.max(0, Math.min(index, sortedStops.length - 1));
       const stop = sortedStops[clampedIndex];
-      if (!stop || stop.latitude === null || stop.longitude === null) return;
+      if (
+        !stop ||
+        stop.latitude === null ||
+        stop.longitude === null ||
+        !Number.isFinite(stop.latitude) ||
+        !Number.isFinite(stop.longitude)
+      ) {
+        return;
+      }
       mapRef.current?.panTo(stop.latitude, stop.longitude);
     },
     [sortedStops],
@@ -1111,7 +1146,11 @@ export default function MyRouteScreen() {
       )}
 
       <View style={styles.content}>
-        {selectedMode === "map" ? (
+        {isLoadingTripData ? (
+          <View style={styles.tripDataLoadingContainer}>
+            <ActivityIndicator size="small" color={COLORS.primary} />
+          </View>
+        ) : selectedMode === "map" ? (
           // 지도 + 카드가 뷰포트보다 커지면(웹에서 특히 잘 생김) 잘리지 않게
           // 화면 전체를 세로 스크롤 가능하게 합니다. 카드는 더 이상
           // position:absolute로 화면 밖까지 띄우는 대신, 일반 흐름 안에서
@@ -1381,6 +1420,12 @@ const styles = StyleSheet.create({
 
   content: {
     flex: 1,
+  },
+
+  tripDataLoadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 
   mapScreen: {

@@ -287,8 +287,15 @@ export function RoutePlanView({
     () =>
       dayStops
         .filter(
+          // 다른 기기 클립인데 좌표를 모르면 spotSyncService.ts가 NaN을 채워둡니다
+          // (0으로 채우면 진짜 (0,0) 좌표와 구분이 안 돼서 엉뚱한 위치에 핀이
+          // 찍힘) — Number.isFinite로 NaN/Infinity를 걸러내야 이 핀들이
+          // 지도에서 빠집니다.
           (stop): stop is PlanStop & { latitude: number; longitude: number } =>
-            typeof stop.latitude === 'number' && typeof stop.longitude === 'number',
+            typeof stop.latitude === 'number' &&
+            typeof stop.longitude === 'number' &&
+            Number.isFinite(stop.latitude) &&
+            Number.isFinite(stop.longitude),
         )
         .map((stop) => ({
           id: stop.id,

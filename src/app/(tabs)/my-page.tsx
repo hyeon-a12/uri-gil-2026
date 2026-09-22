@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { StyleSheet, View, ScrollView, Pressable, Platform } from 'react-native';
+import { ActivityIndicator, StyleSheet, View, ScrollView, Pressable, Platform } from 'react-native';
 import { Image } from 'expo-image';
 import * as SecureStore from '@/services/secureStorage';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -24,10 +24,16 @@ export default function MyPageScreen() {
     recordedClips: 0,
     visitedPlaces: 0,
   });
+  // getFolderVisitStats가 서버에도 요청을 보내서(다른 기기 클립/스팟 합산)
+  // 로컬 전용이던 예전보다 로딩이 느려질 수 있어, 로딩 중엔 0이 아니라
+  // 스피너를 보여줍니다(안 그러면 "완료한 루트 0개" 등이 잠깐 보였다가 실제
+  // 숫자로 바뀌어서 헷갈립니다).
+  const [isLoadingStats, setIsLoadingStats] = useState(true);
 
   useFocusEffect(
     useCallback(() => {
       (async () => {
+        setIsLoadingStats(true);
         const folders = await getAllFolders();
 
         const completedRoutes = folders.filter(
@@ -48,6 +54,7 @@ export default function MyPageScreen() {
           recordedClips,
           visitedPlaces,
         });
+        setIsLoadingStats(false);
       })();
     }, []),
   );
@@ -118,16 +125,20 @@ export default function MyPageScreen() {
             </View>
 
             <View style={styles.orderStatusContainer}>
-              {[
-                { label: '완료한 루트', value: stats.completedRoutes },
-                { label: '촬영한 클립', value: stats.recordedClips },
-                { label: '방문한 장소', value: stats.visitedPlaces },
-              ].map((status) => (
-                <View key={status.label} style={styles.orderStatusItem}>
-                  <Text style={styles.orderStatusNumber}>{status.value}</Text>
-                  <Text style={styles.orderStatusLabel}>{status.label}</Text>
-                </View>
-              ))}
+              {isLoadingStats ? (
+                <ActivityIndicator size="small" color={colors.accent} style={styles.orderStatusLoading} />
+              ) : (
+                [
+                  { label: '완료한 루트', value: stats.completedRoutes },
+                  { label: '촬영한 클립', value: stats.recordedClips },
+                  { label: '방문한 장소', value: stats.visitedPlaces },
+                ].map((status) => (
+                  <View key={status.label} style={styles.orderStatusItem}>
+                    <Text style={styles.orderStatusNumber}>{status.value}</Text>
+                    <Text style={styles.orderStatusLabel}>{status.label}</Text>
+                  </View>
+                ))
+              )}
             </View>
           </Card>
         </View>
@@ -263,6 +274,12 @@ const styles = StyleSheet.create({
   orderStatusItem: {
     alignItems: 'center',
     flex: 1,
+  },
+  orderStatusLoading: {
+    flex: 1,
+    // 로딩 중에도 아래 숫자 3개 행과 세로 높이가 비슷하게 유지되도록
+    // (fontSize 19 + marginBottom 9 + fontSize 11 만큼) 여백을 맞춥니다.
+    paddingVertical: 15,
   },
   // 이 화면에서 사용자가 제일 궁금해할 숫자라, sectionTitle(16)보다도 크고
   // accent 컬러로 확실히 튀게 강조합니다.

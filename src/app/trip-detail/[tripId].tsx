@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { AppText as Text } from '@/components/AppText';
@@ -155,9 +155,16 @@ export default function TripDetailScreen() {
   };
 
   if (trip === undefined) {
+    // 여행 정보(로컬)는 거의 즉시 나오지만, 그 안에서 이어지는 클립/스팟
+    // 조회(getMergedRecordingsByFolder 등)는 서버 요청까지 갔다 와서 시간이
+    // 걸립니다 — loadTrip()이 끝날 때까지 trip이 undefined로 남아있는 동안
+    // 빈 화면 대신 스피너를 보여줍니다.
     return (
       <View style={styles.screen}>
         <ScreenHeader title="여행 상세" hideMenu fallbackHref="/my-routes" />
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="small" color={colors.accent} />
+        </View>
       </View>
     );
   }
@@ -215,4 +222,5 @@ export default function TripDetailScreen() {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   errorText: { padding: 16, fontSize: 13, color: colors.textSub },
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
 });

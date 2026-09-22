@@ -1,5 +1,6 @@
 import React, { useMemo, useState, useCallback } from 'react';
 import {
+  ActivityIndicator,
   Platform,
   Pressable,
   StyleSheet,
@@ -82,6 +83,11 @@ export default function ClipSelectScreen() {
   const folderTitle = paramFolderTitle ?? currentTrip?.title;
 
   const [clips, setClips] = useState<ClipItem[]>([]);
+  // getMergedRecordingsByFolder는 로컬 저장소뿐 아니라 서버에도 요청을 보내서
+  // (다른 기기 클립 병합), 예전(로컬 전용)보다 로딩에 시간이 걸립니다. 이 값이
+  // 없으면 로딩 중에도 "아직 촬영한 클립이 없어요"가 잠깐 보였다가 실제
+  // 클립으로 바뀌어서, 있는데 없다고 착각하게 만듭니다.
+  const [isLoadingClips, setIsLoadingClips] = useState(true);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [selectedMenuClip, setSelectedMenuClip] = useState<ClipItem | null>(null);
 
@@ -90,9 +96,11 @@ export default function ClipSelectScreen() {
   const loadClips = useCallback(async () => {
     if (!folderId) {
       setClips([]);
+      setIsLoadingClips(false);
       return;
     }
 
+    setIsLoadingClips(true);
     try {
       const records = await getMergedRecordingsByFolder(folderId);
       const items: ClipItem[] = records.map((r) => ({
@@ -108,6 +116,8 @@ export default function ClipSelectScreen() {
     } catch (error) {
       console.error('[loadClips] 로딩 실패:', error);
       setClips([]);
+    } finally {
+      setIsLoadingClips(false);
     }
   }, [folderId]);
 
@@ -403,7 +413,11 @@ export default function ClipSelectScreen() {
 
       {/* FlatList의 ListEmptyComponent는 콘텐츠 높이만큼만 차지해서 화면 중앙에 오지
           않으므로, 화면 전체를 덮는 절대 위치 오버레이로 따로 그립니다. */}
-      {clips.length === 0 && (
+      {clips.length === 0 && isLoadingClips ? (
+        <View style={styles.emptyContainer} pointerEvents="none">
+          <ActivityIndicator size="small" color={COLORS.primary} />
+        </View>
+      ) : clips.length === 0 ? (
         <View style={styles.emptyContainer} pointerEvents="none">
           <Ionicons name="videocam-outline" size={32} color={COLORS.textTertiary} />
           <Text style={styles.emptyText}>아직 촬영한 클립이 없어요</Text>
@@ -413,7 +427,7 @@ export default function ClipSelectScreen() {
               : '카메라로 촬영해서 클립을 추가해보세요.'}
           </Text>
         </View>
-      )}
+      ) : null}
 
       <View
         style={[
